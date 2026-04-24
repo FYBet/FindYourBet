@@ -11,7 +11,7 @@ Un cop ho teniu fet, haureu de tenir la carpeta amb tot el codi del repo al vost
 > [!NOTE]
 > Si us ha donat algun error haureu de revisar el Discord i repetir els passos que no us hagueu deixat res.
 
-## Comandes per iniciar (Es pot fer desde la terminal del Visual
+## Comandes per iniciar (Es pot fer desde la terminal del Visual)
 
 1. npm install (Només el primer cop)
 2. npm run dev
