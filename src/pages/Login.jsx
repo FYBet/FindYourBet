@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
+import { supabase } from '../lib/supabase'
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
@@ -12,28 +13,61 @@ const fadeUp = {
 export default function Login({ navigate, login }) {
   const [email, setEmail] = useState('')
   const [pass, setPass] = useState('')
+  const [showPass, setShowPass] = useState(false)
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!email || !pass) { setError('Rellena todos los campos'); return }
     setError('')
-    login({ name: email.split('@')[0], email })
+    setLoading(true)
+
+    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password: pass })
+
+    setLoading(false)
+
+    if (authError) { setError('Email o contraseña incorrectos'); return }
+
+    const meta = data.user?.user_metadata
+    login({
+      name: meta?.name || email.split('@')[0],
+      surname: meta?.surname || '',
+      user: meta?.username || '',
+      email: data.user.email,
+      id: data.user.id
+    })
+  }
+
+  const skipLogin = () => {
+    login({ name: 'Dev', surname: 'Test', user: 'devtest', email: 'dev@test.com', id: 'dev-skip' })
+  }
+
+  const inputStyle = {
+    width: '100%', background: 'var(--color-bg-soft)',
+    border: '0.5px solid var(--color-border)', color: 'var(--color-text)',
+    fontFamily: 'var(--font-sans)', fontSize: '14px', padding: '12px 14px',
+    borderRadius: 'var(--radius-md)', outline: 'none', boxSizing: 'border-box'
   }
 
   return (
     <div style={{ fontFamily: 'var(--font-sans)', background: 'var(--color-bg-soft)', minHeight: '100vh', color: 'var(--color-text)' }}>
 
-      {/* NAV */}
       <motion.nav
         initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
-        style={{ padding: '14px 5%', borderBottom: '0.5px solid var(--color-border)', background: 'var(--color-bg)' }}
+        style={{ padding: '14px 5%', borderBottom: '0.5px solid var(--color-border)', background: 'var(--color-bg)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
       >
-        <div onClick={() => navigate('landing')} style={{ fontSize: '17px', fontWeight: 600, color: 'var(--color-primary)', letterSpacing: '-0.3px', cursor: 'pointer', display: 'inline-block' }}>
+        <div onClick={() => navigate('landing')} style={{ fontSize: '17px', fontWeight: 600, color: 'var(--color-primary)', letterSpacing: '-0.3px', cursor: 'pointer' }}>
           FindYour<span style={{ color: 'var(--color-text)' }}>Bet</span>
         </div>
+        <motion.button
+          whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+          onClick={skipLogin}
+          style={{ fontSize: '12px', padding: '6px 14px', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer' }}
+        >
+          ⚡ Saltar (dev)
+        </motion.button>
       </motion.nav>
 
-      {/* FORM */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 53px)', padding: '24px' }}>
         <motion.div
           variants={fadeUp} initial="hidden" animate="visible"
@@ -55,23 +89,28 @@ export default function Login({ navigate, login }) {
 
           <motion.div variants={fadeUp} custom={2} style={{ marginBottom: '18px' }}>
             <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-soft)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px' }}>Email</label>
-            <input type="email" placeholder="tu@email.com" value={email} onChange={e => setEmail(e.target.value)}
-              style={{ width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '14px', padding: '12px 14px', borderRadius: 'var(--radius-md)', outline: 'none', boxSizing: 'border-box' }} />
+            <input type="email" placeholder="tu@email.com" value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} />
           </motion.div>
 
           <motion.div variants={fadeUp} custom={3} style={{ marginBottom: '18px' }}>
             <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-soft)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px' }}>Contraseña</label>
-            <input type="password" placeholder="••••••••" value={pass} onChange={e => setPass(e.target.value)}
-              style={{ width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '14px', padding: '12px 14px', borderRadius: 'var(--radius-md)', outline: 'none', boxSizing: 'border-box' }} />
+            <div style={{ position: 'relative' }}>
+              <input type={showPass ? 'text' : 'password'} placeholder="••••••••" value={pass} onChange={e => setPass(e.target.value)}
+                style={{ ...inputStyle, paddingRight: '44px' }} />
+              <button onClick={() => setShowPass(!showPass)}
+                style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: 'var(--color-text-muted)' }}>
+                {showPass ? '🙈' : '👁️'}
+              </button>
+            </div>
           </motion.div>
 
           <motion.div variants={fadeUp} custom={4}>
             <motion.button
-              whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
-              onClick={handleLogin}
-              style={{ width: '100%', background: 'var(--color-primary)', border: 'none', color: 'var(--color-primary-light)', fontFamily: 'var(--font-sans)', fontSize: '14px', fontWeight: 600, padding: '12px', borderRadius: 'var(--radius-md)', cursor: 'pointer', marginTop: '8px' }}
+              whileHover={{ scale: loading ? 1 : 1.01 }} whileTap={{ scale: loading ? 1 : 0.98 }}
+              onClick={handleLogin} disabled={loading}
+              style={{ width: '100%', background: loading ? 'var(--color-text-muted)' : 'var(--color-primary)', border: 'none', color: 'var(--color-primary-light)', fontFamily: 'var(--font-sans)', fontSize: '14px', fontWeight: 600, padding: '12px', borderRadius: 'var(--radius-md)', cursor: loading ? 'not-allowed' : 'pointer', marginTop: '8px' }}
             >
-              Iniciar sesión
+              {loading ? 'Iniciando sesión...' : 'Iniciar sesión'}
             </motion.button>
           </motion.div>
 

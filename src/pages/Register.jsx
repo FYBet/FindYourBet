@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
+import { supabase } from '../lib/supabase'
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
@@ -16,37 +17,58 @@ export default function Register({ navigate, login }) {
   })
   const [terms, setTerms] = useState(false)
   const [age, setAge] = useState(false)
+  const [showPass, setShowPass] = useState(false)
+  const [showPassConfirm, setShowPassConfirm] = useState(false)
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
   const update = (field, val) => setForm({ ...form, [field]: val })
 
-  const handleRegister = () => {
+  const skipLogin = () => {
+    login({ name: 'Dev', surname: 'Test', user: 'devtest', email: 'dev@test.com', id: 'dev-skip' })
+  }
+
+  const handleRegister = async () => {
     if (!form.name || !form.surname || !form.birthdate || !form.user || !form.email || !form.pass || !form.passConfirm) {
       setError('Rellena todos los campos obligatorios'); return
     }
-    if (form.pass !== form.passConfirm) {
-      setError('Las contraseñas no coinciden'); return
-    }
-    if (form.pass.length < 8) {
-      setError('La contraseña debe tener mínimo 8 caracteres'); return
-    }
-    if (!/[A-Z]/.test(form.pass)) {
-      setError('La contraseña debe contener al menos una mayúscula'); return
-    }
-    if (!/[!@#$%^&*(),.?":{}|<>_\-+=/\\[\]~`]/.test(form.pass)) {
-      setError('La contraseña debe contener al menos un carácter especial (!@#$%...)'); return
-    }
+    if (form.pass !== form.passConfirm) { setError('Las contraseñas no coinciden'); return }
+    if (form.pass.length < 8) { setError('La contraseña debe tener mínimo 8 caracteres'); return }
+    if (!/[A-Z]/.test(form.pass)) { setError('La contraseña debe contener al menos una mayúscula'); return }
+    if (!/[!@#$%^&*(),.?":{}|<>_\-+=/\\[\]~`]/.test(form.pass)) { setError('La contraseña debe contener al menos un carácter especial (!@#$%...)'); return }
     const birth = new Date(form.birthdate)
     const today = new Date()
-    const edad = today.getFullYear() - birth.getFullYear()
-    if (edad < 18) {
-      setError('Debes ser mayor de 18 años para registrarte'); return
-    }
-    if (!terms || !age) {
-      setError('Debes aceptar los términos y confirmar tu edad'); return
-    }
+    if (today.getFullYear() - birth.getFullYear() < 18) { setError('Debes ser mayor de 18 años'); return }
+    if (!terms || !age) { setError('Debes aceptar los términos y confirmar tu edad'); return }
+
     setError('')
-    login({ name: form.name, surname: form.surname, user: form.user, email: form.email })
+    setLoading(true)
+
+    const { data, error: authError } = await supabase.auth.signUp({
+      email: form.email,
+      password: form.pass,
+      options: {
+        data: {
+          name: form.name,
+          surname: form.surname,
+          username: form.user,
+          birthdate: form.birthdate,
+          nationality: form.nationality,
+        }
+      }
+    })
+
+    setLoading(false)
+
+    if (authError) { setError(authError.message); return }
+
+    login({
+      name: form.name,
+      surname: form.surname,
+      user: form.user,
+      email: form.email,
+      id: data.user?.id
+    })
   }
 
   const inputStyle = {
@@ -65,17 +87,22 @@ export default function Register({ navigate, login }) {
   return (
     <div style={{ fontFamily: 'var(--font-sans)', background: 'var(--color-bg-soft)', minHeight: '100vh', color: 'var(--color-text)' }}>
 
-      {/* NAV */}
       <motion.nav
         initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
-        style={{ padding: '14px 5%', borderBottom: '0.5px solid var(--color-border)', background: 'var(--color-bg)' }}
+        style={{ padding: '14px 5%', borderBottom: '0.5px solid var(--color-border)', background: 'var(--color-bg)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
       >
-        <div onClick={() => navigate('landing')} style={{ fontSize: '17px', fontWeight: 600, color: 'var(--color-primary)', letterSpacing: '-0.3px', cursor: 'pointer', display: 'inline-block' }}>
+        <div onClick={() => navigate('landing')} style={{ fontSize: '17px', fontWeight: 600, color: 'var(--color-primary)', letterSpacing: '-0.3px', cursor: 'pointer' }}>
           FindYour<span style={{ color: 'var(--color-text)' }}>Bet</span>
         </div>
+        <motion.button
+          whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+          onClick={skipLogin}
+          style={{ fontSize: '12px', padding: '6px 14px', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer' }}
+        >
+          ⚡ Saltar (dev)
+        </motion.button>
       </motion.nav>
 
-      {/* FORM */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 53px)', padding: '32px 24px' }}>
         <motion.div
           variants={fadeUp} initial="hidden" animate="visible"
@@ -95,7 +122,6 @@ export default function Register({ navigate, login }) {
             </motion.div>
           )}
 
-          {/* NOM I COGNOMS */}
           <motion.div variants={fadeUp} custom={2} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '18px' }}>
             <div>
               <label style={labelStyle}>Nombre *</label>
@@ -107,7 +133,6 @@ export default function Register({ navigate, login }) {
             </div>
           </motion.div>
 
-          {/* DATA I NACIONALITAT */}
           <motion.div variants={fadeUp} custom={3} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '18px' }}>
             <div>
               <label style={labelStyle}>Fecha de nacimiento *</label>
@@ -125,7 +150,6 @@ export default function Register({ navigate, login }) {
             </div>
           </motion.div>
 
-          {/* USUARI */}
           <motion.div variants={fadeUp} custom={4} style={{ marginBottom: '18px' }}>
             <label style={labelStyle}>Nombre de usuario *</label>
             <div style={{ position: 'relative' }}>
@@ -134,25 +158,34 @@ export default function Register({ navigate, login }) {
             </div>
           </motion.div>
 
-          {/* EMAIL */}
           <motion.div variants={fadeUp} custom={5} style={{ marginBottom: '18px' }}>
             <label style={labelStyle}>Email *</label>
             <input type="email" style={inputStyle} placeholder="tu@email.com" value={form.email} onChange={e => update('email', e.target.value)} />
           </motion.div>
 
-          {/* CONTRASENYES */}
           <motion.div variants={fadeUp} custom={6} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '18px' }}>
             <div>
               <label style={labelStyle}>Contraseña *</label>
-              <input type="password" style={inputStyle} placeholder="Mínimo 8 caracteres" value={form.pass} onChange={e => update('pass', e.target.value)} />
+              <div style={{ position: 'relative' }}>
+                <input type={showPass ? 'text' : 'password'} style={{ ...inputStyle, paddingRight: '44px' }} placeholder="Mínimo 8 caracteres" value={form.pass} onChange={e => update('pass', e.target.value)} />
+                <button onClick={() => setShowPass(!showPass)}
+                  style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: 'var(--color-text-muted)' }}>
+                  {showPass ? '🙈' : '👁️'}
+                </button>
+              </div>
             </div>
             <div>
               <label style={labelStyle}>Repetir contraseña *</label>
-              <input type="password" style={inputStyle} placeholder="Repite la contraseña" value={form.passConfirm} onChange={e => update('passConfirm', e.target.value)} />
+              <div style={{ position: 'relative' }}>
+                <input type={showPassConfirm ? 'text' : 'password'} style={{ ...inputStyle, paddingRight: '44px' }} placeholder="Repite la contraseña" value={form.passConfirm} onChange={e => update('passConfirm', e.target.value)} />
+                <button onClick={() => setShowPassConfirm(!showPassConfirm)}
+                  style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: 'var(--color-text-muted)' }}>
+                  {showPassConfirm ? '🙈' : '👁️'}
+                </button>
+              </div>
             </div>
           </motion.div>
 
-          {/* CHECKBOXES */}
           <motion.div variants={fadeUp} custom={7} style={{ display: 'flex', flexDirection: 'column', gap: '12px', margin: '20px 0' }}>
             <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer', fontSize: '13px', color: 'var(--color-text-soft)' }}>
               <input type="checkbox" checked={age} onChange={e => setAge(e.target.checked)}
@@ -168,11 +201,11 @@ export default function Register({ navigate, login }) {
 
           <motion.div variants={fadeUp} custom={8}>
             <motion.button
-              whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
-              onClick={handleRegister}
-              style={{ width: '100%', background: 'var(--color-primary)', border: 'none', color: 'var(--color-primary-light)', fontFamily: 'var(--font-sans)', fontSize: '14px', fontWeight: 600, padding: '12px', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+              whileHover={{ scale: loading ? 1 : 1.01 }} whileTap={{ scale: loading ? 1 : 0.98 }}
+              onClick={handleRegister} disabled={loading}
+              style={{ width: '100%', background: loading ? 'var(--color-text-muted)' : 'var(--color-primary)', border: 'none', color: 'var(--color-primary-light)', fontFamily: 'var(--font-sans)', fontSize: '14px', fontWeight: 600, padding: '12px', borderRadius: 'var(--radius-md)', cursor: loading ? 'not-allowed' : 'pointer' }}
             >
-              Crear cuenta
+              {loading ? 'Creando cuenta...' : 'Crear cuenta'}
             </motion.button>
           </motion.div>
 
