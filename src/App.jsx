@@ -1,18 +1,13 @@
 import { useState } from 'react'
-import './App.css'
+import { useNavigation } from './hooks/useNavigation'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 
 function App() {
-  const [page, setPage] = useState('landing')
+  const { page, navigate } = useNavigation('landing')
   const [user, setUser] = useState(null)
-
-  const navigate = (p) => {
-    setPage(p)
-    window.scrollTo(0, 0)
-  }
 
   const login = (userData) => {
     setUser(userData)
