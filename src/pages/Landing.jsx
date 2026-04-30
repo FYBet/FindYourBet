@@ -1,57 +1,129 @@
+import './Landing.css'
+
 function Landing({ navigate }) {
   return (
-    <div style={{ background: '#06080f', minHeight: '100vh', color: '#e2e8f0', fontFamily: 'Outfit, sans-serif' }}>
-      
+    <div className="landing">
+
       {/* NAV */}
-      <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '24px 48px', borderBottom: '1px solid #1e2530', background: 'rgba(6,8,15,0.8)' }}>
-        <div style={{ fontFamily: 'Syne, sans-serif', fontSize: '22px', fontWeight: 800, color: '#fff' }}>
-          FYB<span style={{ color: '#00ff87' }}>.</span>
+      <nav className="nav">
+        <div className="nav-logo">FindYour<span>Bet</span></div>
+        <div className="nav-links">
+          {['Tipsters', 'Ranking', 'Cómo funciona', 'Precios'].map(l => (
+            <a key={l} href="#">{l}</a>
+          ))}
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
-          <button onClick={() => navigate('login')} style={{ background: 'transparent', border: '1px solid #2a3140', color: '#94a3b8', padding: '10px 22px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px' }}>
-            Iniciar sessió
-          </button>
-          <button onClick={() => navigate('register')} style={{ background: '#00ff87', border: 'none', color: '#000', padding: '10px 22px', borderRadius: '6px', cursor: 'pointer', fontSize: '14px', fontWeight: 600 }}>
-            Començar gratis
-          </button>
+        <div className="nav-btns">
+          <button className="btn-ghost" onClick={() => navigate('login')}>Iniciar sesión</button>
+          <button className="btn-primary" onClick={() => navigate('register')}>Registrarse</button>
         </div>
       </nav>
 
       {/* HERO */}
-      <div style={{ textAlign: 'center', padding: '100px 24px 80px' }}>
-        <div style={{ display: 'inline-block', background: 'rgba(0,255,135,0.1)', border: '1px solid rgba(0,255,135,0.2)', padding: '6px 16px', borderRadius: '100px', fontSize: '12px', color: '#00ff87', marginBottom: '32px' }}>
-          Beta — Plataforma per a Tipsters
+      <section className="hero">
+        <div className="hero-badge">Apuestas verificadas y auditadas</div>
+        <h1>Las mejores apuestas,<br /><em>con track record real</em></h1>
+        <p>Sigue a tipsters verificados, compara su historial auditado y toma decisiones inteligentes. Sin humo, solo datos.</p>
+        <div className="hero-btns">
+          <button className="btn-lg primary" onClick={() => navigate('register')}>Explorar tipsters</button>
+          <button className="btn-lg ghost" onClick={() => navigate('register')}>¿Eres tipster?</button>
         </div>
-        <h1 style={{ fontFamily: 'Syne, sans-serif', fontSize: 'clamp(48px, 8vw, 96px)', fontWeight: 800, lineHeight: 0.95, letterSpacing: '-2px', color: '#fff', marginBottom: '24px' }}>
-          Find Your<br /><span style={{ color: '#00ff87' }}>Bet</span>
-        </h1>
-        <p style={{ fontSize: '19px', color: '#94a3b8', maxWidth: '520px', margin: '0 auto 48px', lineHeight: 1.6, fontWeight: 300 }}>
-          La primera plataforma on els tipsters competeixen per transparència. Rankings auditats, apuestas verificades, zero trampa.
-        </p>
-        <div style={{ display: 'flex', gap: '14px', justifyContent: 'center' }}>
-          <button onClick={() => navigate('register')} style={{ background: '#00ff87', border: 'none', color: '#000', padding: '14px 32px', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: 600 }}>
-            Soc Tipster — Crear canal
-          </button>
-          <button onClick={() => navigate('register')} style={{ background: 'transparent', border: '1px solid #2a3140', color: '#e2e8f0', padding: '14px 32px', borderRadius: '8px', cursor: 'pointer', fontSize: '15px' }}>
-            Buscar Tipsters
-          </button>
-        </div>
-      </div>
+      </section>
 
       {/* STATS */}
-      <div style={{ display: 'flex', justifyContent: 'center', borderTop: '1px solid #1e2530' }}>
+      <div className="stats-bar">
         {[
-          { num: '0%', label: 'Trampa permesa' },
-          { num: '100%', label: 'Historial auditable' },
-          { num: '∞', label: 'Tipsters benvinguts' },
-          { num: '24/7', label: 'Rankings en viu' },
+          { num: '1.240', label: 'Tipsters activos' },
+          { num: '98.400', label: 'Apuestas auditadas' },
+          { num: '+34%', label: 'ROI medio top 10' },
+          { num: '12 deportes', label: 'Categorías disponibles' },
         ].map((s, i) => (
-          <div key={i} style={{ flex: 1, maxWidth: '200px', padding: '28px 24px', textAlign: 'center', borderRight: i < 3 ? '1px solid #1e2530' : 'none' }}>
-            <div style={{ fontFamily: 'Syne, sans-serif', fontSize: '32px', fontWeight: 800, color: '#00ff87' }}>{s.num}</div>
-            <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '1.5px', marginTop: '4px' }}>{s.label}</div>
+          <div key={i} className="stat">
+            <div className="stat-num">{s.num}</div>
+            <div className="stat-label">{s.label}</div>
           </div>
         ))}
       </div>
+
+      {/* FEATURES */}
+      <div style={{ background: '#ffffff' }}>
+        <section className="features-section">
+          <div className="section-title">Todo lo que necesitas para apostar con cabeza</div>
+          <div className="section-sub">Sin letra pequeña, sin trampa</div>
+          <div className="features-grid">
+            {[
+              { title: 'Track record auditado', desc: 'Cada apuesta verificada y registrada. No hay forma de modificar el historial.' },
+              { title: 'Ranking transparente', desc: 'Ordenado por ROI real, racha y volumen. Los mejores arriba, siempre.' },
+              { title: 'Suscripciones VIP', desc: 'Accede a las apuestas privadas de los tipsters que más te interesan.' },
+              { title: 'Chat en tiempo real', desc: 'Los tipsters publican picks y análisis. Interactúa con la comunidad.' },
+              { title: 'Tus estadísticas', desc: 'Lleva un control de tus apuestas, ROI y evolución en el tiempo.' },
+              { title: '12 categorías', desc: 'Fútbol, baloncesto, tenis, eSports y más. Filtra por lo que te interesa.' },
+            ].map((f, i) => (
+              <div key={i} className="feature-card">
+                <div className="feature-icon"></div>
+                <h3>{f.title}</h3>
+                <p>{f.desc}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+
+      {/* RANKING */}
+      <div className="ranking-section">
+        <div className="ranking-inner">
+          <div className="ranking-header">
+            <h2>Top tipsters esta semana</h2>
+            <a href="#">Ver ranking completo →</a>
+          </div>
+          {[
+            { rank: '#1', initials: 'MG', name: 'MarcGol', sport: 'Fútbol · La Liga', roi: '+41%', acierto: '87%', picks: '312' },
+            { rank: '#2', initials: 'SR', name: 'SportRoi', sport: 'Baloncesto · NBA', roi: '+38%', acierto: '81%', picks: '198' },
+            { rank: '#3', initials: 'BK', name: 'BetKing', sport: 'Tenis · ATP', roi: '+29%', acierto: '76%', picks: '445' },
+          ].map((t, i) => (
+            <div key={i} className="tipster-card">
+              <div className="tipster-rank">{t.rank}</div>
+              <div className="tipster-avatar">{t.initials}</div>
+              <div className="tipster-info">
+                <div className="tipster-name">{t.name} <span className="verified-badge">Verificado</span></div>
+                <div className="tipster-sport">{t.sport}</div>
+              </div>
+              <div className="tipster-stats">
+                {[{ val: t.roi, label: 'ROI' }, { val: t.acierto, label: 'Acierto' }, { val: t.picks, label: 'Picks' }].map((s, j) => (
+                  <div key={j} className="tipster-stat">
+                    <div className="tipster-stat-val">{s.val}</div>
+                    <div className="tipster-stat-label">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* CTA */}
+      <div className="cta-section">
+        <div className="cta-inner">
+          <div className="cta-box">
+            <h2>Empieza gratis hoy</h2>
+            <p>Sin tarjeta de crédito. Accede al ranking completo y sigue a tipsters de forma gratuita.</p>
+            <div className="cta-btns">
+              <button className="btn-lg primary" onClick={() => navigate('register')}>Crear cuenta gratis</button>
+              <button className="btn-lg ghost" onClick={() => navigate('login')}>Ver tipsters</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* FOOTER */}
+      <footer className="footer">
+        <div className="nav-logo" style={{ fontSize: '14px' }}>FindYour<span>Bet</span></div>
+        <p>© 2025 FindYourBet. Apuesta con responsabilidad.</p>
+        <div className="footer-links">
+          {['Términos', 'Privacidad', 'Contacto'].map(l => (
+            <a key={l} href="#">{l}</a>
+          ))}
+        </div>
+      </footer>
 
     </div>
   )
