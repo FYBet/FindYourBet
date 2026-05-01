@@ -1,0 +1,80 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+.landing { font-family: 'Segoe UI', system-ui, sans-serif; background: #ffffff; color: #1a1a1a; }
+
+/* NAV */
+.nav { display: flex; align-items: center; justify-content: space-between; padding: 14px 5%; border-bottom: 0.5px solid #e0e0e0; background: #ffffff; position: sticky; top: 0; z-index: 100; }
+.nav-logo { font-size: 17px; font-weight: 600; color: #0F6E56; letter-spacing: -0.3px; }
+.nav-logo span { color: #1a1a1a; }
+.nav-links { display: flex; gap: 20px; }
+.nav-links a { font-size: 13px; color: #666; text-decoration: none; }
+.nav-links a:hover { color: #0F6E56; }
+.nav-btns { display: flex; gap: 8px; }
+.btn-ghost { font-size: 13px; padding: 6px 14px; border: 0.5px solid #ccc; border-radius: 8px; background: transparent; color: #1a1a1a; cursor: pointer; }
+.btn-ghost:hover { background: #f5f5f5; }
+.btn-primary { font-size: 13px; padding: 6px 14px; border: none; border-radius: 8px; background: #0F6E56; color: #E1F5EE; cursor: pointer; }
+.btn-primary:hover { background: #0d5f4a; }
+
+/* HERO */
+.hero { padding: 64px 5% 48px; text-align: center; max-width: 800px; margin: 0 auto; }
+.hero-badge { display: inline-block; font-size: 11px; padding: 4px 12px; border-radius: 99px; background: #E1F5EE; color: #0F6E56; margin-bottom: 20px; border: 0.5px solid #9FE1CB; }
+.hero h1 { font-size: clamp(28px, 4vw, 48px); font-weight: 600; line-height: 1.2; margin-bottom: 16px; letter-spacing: -0.5px; }
+.hero h1 em { color: #0F6E56; font-style: normal; }
+.hero p { font-size: 15px; color: #555; line-height: 1.7; margin-bottom: 28px; max-width: 480px; margin-left: auto; margin-right: auto; }
+.hero-btns { display: flex; gap: 10px; justify-content: center; margin-bottom: 48px; flex-wrap: wrap; }
+.btn-lg { font-size: 14px; padding: 10px 22px; border-radius: 8px; cursor: pointer; }
+.btn-lg.primary { background: #0F6E56; color: #E1F5EE; border: none; }
+.btn-lg.primary:hover { background: #0d5f4a; }
+.btn-lg.ghost { background: transparent; color: #1a1a1a; border: 0.5px solid #ccc; }
+.btn-lg.ghost:hover { background: #f5f5f5; }
+
+/* STATS */
+.stats-bar { display: flex; justify-content: center; gap: clamp(16px, 4vw, 48px); padding: 20px 5%; border-top: 0.5px solid #e0e0e0; border-bottom: 0.5px solid #e0e0e0; background: #f9f9f7; flex-wrap: wrap; }
+.stat { text-align: center; }
+.stat-num { font-size: clamp(16px, 2vw, 22px); font-weight: 600; color: #0F6E56; }
+.stat-label { font-size: 11px; color: #888; margin-top: 2px; }
+
+/* FEATURES */
+.features-section { padding: 56px 5%; max-width: 1400px; margin: 0 auto; }
+.section-title { font-size: clamp(18px, 2.5vw, 26px); font-weight: 600; text-align: center; margin-bottom: 8px; }
+.section-sub { font-size: 14px; color: #666; text-align: center; margin-bottom: 32px; }
+.features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.feature-card { background: #ffffff; border: 0.5px solid #e0e0e0; border-radius: 12px; padding: 20px; }
+.feature-card:hover { border-color: #9FE1CB; }
+.feature-icon { width: 34px; height: 34px; border-radius: 8px; background: #E1F5EE; margin-bottom: 12px; }
+.feature-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+.feature-card p { font-size: 12px; color: #666; line-height: 1.6; }
+
+/* RANKING */
+.ranking-section { background: #f9f9f7; padding: 48px 5%; }
+.ranking-inner { max-width: 1400px; margin: 0 auto; }
+.ranking-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px; }
+.ranking-header h2 { font-size: clamp(16px, 2vw, 22px); font-weight: 600; }
+.ranking-header a { font-size: 13px; color: #0F6E56; text-decoration: none; }
+.tipster-card { background: #ffffff; border: 0.5px solid #e0e0e0; border-radius: 12px; padding: 16px 20px; display: flex; align-items: center; gap: 16px; margin-bottom: 10px; flex-wrap: wrap; }
+.tipster-card:hover { border-color: #9FE1CB; }
+.tipster-rank { font-size: 13px; font-weight: 500; color: #aaa; width: 20px; }
+.tipster-avatar { width: 40px; height: 40px; border-radius: 50%; background: #E1F5EE; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: #0F6E56; flex-shrink: 0; }
+.tipster-info { flex: 1; min-width: 120px; }
+.tipster-name { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.tipster-sport { font-size: 11px; color: #888; margin-top: 2px; }
+.tipster-stats { display: flex; gap: clamp(10px, 2vw, 24px); flex-wrap: wrap; }
+.tipster-stat { text-align: right; }
+.tipster-stat-val { font-size: 14px; font-weight: 600; color: #0F6E56; }
+.tipster-stat-label { font-size: 10px; color: #aaa; }
+.verified-badge { font-size: 10px; padding: 2px 8px; background: #E1F5EE; color: #0F6E56; border-radius: 99px; border: 0.5px solid #9FE1CB; font-weight: 500; }
+
+/* CTA */
+.cta-section { background: #ffffff; padding: 56px 5%; }
+.cta-inner { max-width: 1400px; margin: 0 auto; }
+.cta-box { background: #f9f9f7; border: 0.5px solid #e0e0e0; border-radius: 16px; padding: 48px 32px; text-align: center; }
+.cta-box h2 { font-size: clamp(20px, 3vw, 30px); font-weight: 600; margin-bottom: 10px; }
+.cta-box p { font-size: 14px; color: #666; margin-bottom: 28px; }
+.cta-btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+/* FOOTER */
+.footer { padding: 20px 5%; border-top: 0.5px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; max-width: 1400px; margin: 0 auto; }
+.footer p { font-size: 12px; color: #aaa; }
+.footer-links { display: flex; gap: 16px; }
+.footer-links a { font-size: 12px; color: #aaa; text-decoration: none; }
+.footer-links a:hover { color: #0F6E56; }

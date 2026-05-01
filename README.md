@@ -1,22 +1,16 @@
-# FindYourBet
+# React + Vite
 
-## Guia d'inici ràpid:
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-### Requisits previs:
+Currently, two official plugins are available:
 
-S'ha de tenir instalat el Node.js, i haver fet totes les comandes necessàries per configurar el Git (i lògicament tenir instalat el Git Terminal, si no no us deixarà fer les comandes). També recordar que el git clone... i totes aquestes comandes les heu de fer des de una carpeta a la que us sigui còmode treballar, si obriu la terminal desde 'Descargas' es guardarà allà p. ex. i no és el ideal.
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
 
-Un cop ho teniu fet, haureu de tenir la carpeta amb tot el codi del repo al vostre ordinador en local. Si ho heu fet tot bé, **ho teniu tot instal·lat**.
+## React Compiler
 
-> [!NOTE]
-> Si us ha donat algun error haureu de revisar el Discord i repetir els passos que no us hagueu deixat res.
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 
-## Comandes per iniciar (Es pot fer desde la terminal del Visual)
+## Expanding the ESLint configuration
 
-1. npm install (Només el primer cop)
-2. npm run dev
-
-Aquesta última comanda us mostrarà unes línies per pantalla, amb un link `http://localhost:[VALOR]`. Això us obrirà la web de forma local (només vosaltres podeu veure la web des de aquell link). **Si feu qualsevol canvi al codi ho veureu directament des de la web.**
-
-> [!IMPORTANT]
-> Més endavant explicarem les comandes per poder fer canvis al repo de GitHub i afegir els canvis. Serà molt important que abans de penjar els canvis estigueu segurs que funciona: Si pengeu els canvis sense que funcioni després tots tindrem el codi malament (Haurem de fer rollbacks, etc.)
+If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
