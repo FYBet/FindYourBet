@@ -1,12 +1,6 @@
 import { motion } from 'framer-motion'
-
-const fadeUp = {
-  hidden: { opacity: 0, y: 24 },
-  visible: (i = 0) => ({
-    opacity: 1, y: 0,
-    transition: { duration: 0.5, delay: i * 0.1, ease: 'easeOut' }
-  })
-}
+import { fadeUp, stagger } from '../../lib/animations'
+import './dashboard.css'
 
 const RANKING = [
   { name: 'ElTipster10', user: '@tipster10', bets: 312, yield: 18.4, wl: '198/114', odds: 1.92 },
@@ -16,36 +10,39 @@ const RANKING = [
   { name: 'SharpBets', user: '@sharpbets', bets: 98, yield: 7.3, wl: '60/38', odds: 2.88 },
 ]
 
+const MEDALS = ['🥇', '🥈', '🥉']
+
 export default function Ranking() {
   return (
-    <motion.div key="ranking" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.3 }}>
-      <div style={{ marginBottom: '28px' }}>
-        <h2 style={{ fontSize: 'clamp(20px, 2.5vw, 28px)', fontWeight: 700, marginBottom: '4px' }}>Ranking Global</h2>
-        <p style={{ color: 'var(--color-text-muted)', fontSize: '14px' }}>Clasificación por Yield. Mínimo 5 apuestas resueltas para aparecer.</p>
+    <motion.div key="ranking"
+      initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.3 }}>
+
+      <div className="page-header">
+        <h2>Ranking Global</h2>
+        <p>Clasificación por Yield. Mínimo 5 apuestas resueltas para aparecer.</p>
       </div>
-      <motion.div initial="hidden" animate="visible" variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
-        style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+
+      <motion.div className="ranking-list" initial="hidden" animate="visible" variants={stagger}>
         {RANKING.map((t, i) => (
-          <motion.div key={i} variants={fadeUp} whileHover={{ x: 4, transition: { duration: 0.2 } }}
-            style={{ display: 'grid', gridTemplateColumns: '48px 1fr 100px 100px 100px', alignItems: 'center', gap: '16px', padding: '16px 20px', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)' }}>
-            <div style={{ fontSize: '20px', fontWeight: 700, textAlign: 'center', color: i === 0 ? 'var(--color-warning)' : i === 1 ? 'var(--color-text-muted)' : i === 2 ? '#cd7c3c' : 'var(--color-text-muted)' }}>
-              {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
+          <motion.div key={i} className="ranking-item" variants={fadeUp}
+            whileHover={{ x: 4, transition: { duration: 0.2 } }}>
+            <div className="rank-pos">{i < 3 ? MEDALS[i] : `#${i + 1}`}</div>
+            <div className="tipster-info-rank">
+              <div className="tipster-name-rank">{t.name}</div>
+              <div className="tipster-user-rank">{t.user} · {t.bets} apuestas</div>
             </div>
-            <div>
-              <div style={{ fontWeight: 600, fontSize: '14px' }}>{t.name}</div>
-              <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{t.user} · {t.bets} apuestas</div>
+            <div className="rank-metric">
+              <div className="rank-metric-val">+{t.yield}%</div>
+              <div className="rank-metric-label">Yield</div>
             </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)' }}>+{t.yield}%</div>
-              <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>Yield</div>
+            <div className="rank-metric">
+              <div className="rank-metric-val neutral">{t.wl}</div>
+              <div className="rank-metric-label">W/L</div>
             </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '16px', fontWeight: 700 }}>{t.wl}</div>
-              <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>W/L</div>
-            </div>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '16px', fontWeight: 700 }}>{t.odds}</div>
-              <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>Cuota media</div>
+            <div className="rank-metric">
+              <div className="rank-metric-val neutral">{t.odds}</div>
+              <div className="rank-metric-label">Cuota media</div>
             </div>
           </motion.div>
         ))}

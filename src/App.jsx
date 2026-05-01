@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useNavigation } from './hooks/useNavigation'
-import Landing from './pages/Landing'
-import Login from './pages/Login'
-import Register from './pages/Register'
-import Dashboard from './pages/Dashboard'
+import Landing from './features/landing/Landing'
+import Login from './features/auth/Login'
+import Register from './features/auth/Register'
+import Dashboard from './features/dashboard/Dashboard'
 
 function App() {
   const { page, navigate } = useNavigation('landing')
