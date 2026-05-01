@@ -9,7 +9,7 @@ import Canales from './Canales'
 import './dashboard.css'
 
 const TABS = [
-  { id: 'perfil', label: 'Mi Perfil' },
+  { id: 'perfil', label: 'Perfil' },
   { id: 'canales', label: 'Canales' },
   { id: 'ranking', label: 'Ranking' },
 ]
@@ -92,7 +92,7 @@ export default function Dashboard({ user, logout }) {
 
           {tab === 'canales' && <Canales user={user} />}
 
-          {tab === 'ranking' && <Ranking />}
+          {tab === 'ranking' && <Ranking user={user} />}
 
         </AnimatePresence>
       </div>
