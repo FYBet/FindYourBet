@@ -75,7 +75,7 @@ export default function Landing({ navigate }) {
 
         <motion.h1 variants={fadeUp} initial="hidden" animate="visible" custom={1}
           style={{ fontSize: 'clamp(32px, 5vw, 56px)', fontWeight: 700, lineHeight: 1.1, marginBottom: '16px', letterSpacing: '-1px' }}>
-          Las mejores apuestas,<br />
+          Las mejoresapuestas,<br />
           <span style={{ color: 'var(--color-primary)' }}>con track record real</span>
         </motion.h1>
 

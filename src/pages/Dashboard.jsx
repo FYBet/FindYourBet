@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { supabase } from '../lib/supabase'
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
@@ -26,22 +27,77 @@ const TABS = [
 export default function Dashboard({ user, logout }) {
   const [tab, setTab] = useState('apuestas')
   const [bets, setBets] = useState([])
+  const [loadingBets, setLoadingBets] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState({
     event: '', pick: '', odds: '', stake: 5,
     date: '', sport: 'Fútbol', market: '1X2', analysis: ''
   })
 
-  const submitBet = () => {
+  // Carrega les apostes de Supabase quan s'inicia el dashboard
+  useEffect(() => {
+    if (!user?.id || user.id === 'dev-skip') {
+      setLoadingBets(false)
+      return
+    }
+    fetchBets()
+  }, [user])
+
+  const fetchBets = async () => {
+    setLoadingBets(true)
+    const { data, error } = await supabase
+      .from('bets')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+
+    if (!error) setBets(data || [])
+    setLoadingBets(false)
+  }
+
+  const submitBet = async () => {
     if (!form.event || !form.pick || !form.odds || !form.date) {
       alert('Rellena todos los campos obligatorios'); return
     }
-    setBets([{ ...form, id: Date.now(), odds: parseFloat(form.odds), status: 'pending' }, ...bets])
+
+    const newBet = {
+      user_id: user.id,
+      event: form.event,
+      pick: form.pick,
+      odds: parseFloat(form.odds),
+      stake: form.stake,
+      date: form.date,
+      sport: form.sport,
+      market: form.market,
+      analysis: form.analysis,
+      status: 'pending'
+    }
+
+    // Si és mode dev, no guardem a Supabase
+    if (user.id === 'dev-skip') {
+      setBets([{ ...newBet, id: Date.now().toString(), created_at: new Date().toISOString() }, ...bets])
+    } else {
+      const { data, error } = await supabase.from('bets').insert(newBet).select()
+      if (!error) setBets([data[0], ...bets])
+    }
+
     setShowModal(false)
     setForm({ event: '', pick: '', odds: '', stake: 5, date: '', sport: 'Fútbol', market: '1X2', analysis: '' })
   }
 
-  const resolveBet = (id, result) => setBets(bets.map(b => b.id === id ? { ...b, status: result } : b))
+  const resolveBet = async (id, result) => {
+    if (user.id === 'dev-skip') {
+      setBets(bets.map(b => b.id === id ? { ...b, status: result } : b))
+      return
+    }
+
+    const { error } = await supabase
+      .from('bets')
+      .update({ status: result })
+      .eq('id', id)
+
+    if (!error) setBets(bets.map(b => b.id === id ? { ...b, status: result } : b))
+  }
 
   const resolved = bets.filter(b => b.status !== 'pending')
   const won = bets.filter(b => b.status === 'won')
@@ -169,18 +225,8 @@ export default function Dashboard({ user, logout }) {
           </div>
           <div style={{ display: 'flex', gap: '4px' }}>
             {TABS.map(t => (
-              <motion.button
-                key={t.id}
-                whileTap={{ scale: 0.97 }}
-                onClick={() => setTab(t.id)}
-                style={{
-                  padding: '7px 16px', fontSize: '13px', fontWeight: 500,
-                  color: tab === t.id ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                  background: tab === t.id ? 'var(--color-primary-light)' : 'transparent',
-                  borderRadius: 'var(--radius-md)', cursor: 'pointer', border: 'none',
-                  transition: 'all 0.15s'
-                }}
-              >
+              <motion.button key={t.id} whileTap={{ scale: 0.97 }} onClick={() => setTab(t.id)}
+                style={{ padding: '7px 16px', fontSize: '13px', fontWeight: 500, color: tab === t.id ? 'var(--color-primary)' : 'var(--color-text-muted)', background: tab === t.id ? 'var(--color-primary-light)' : 'transparent', borderRadius: 'var(--radius-md)', cursor: 'pointer', border: 'none', transition: 'all 0.15s' }}>
                 {t.label}
               </motion.button>
             ))}
@@ -193,11 +239,8 @@ export default function Dashboard({ user, logout }) {
             </div>
             <span>{user?.name || 'Usuario'}</span>
           </div>
-          <motion.button
-            whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-            onClick={logout}
-            style={{ fontSize: '12px', padding: '7px 14px', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer' }}
-          >
+          <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={logout}
+            style={{ fontSize: '12px', padding: '7px 14px', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer' }}>
             Salir
           </motion.button>
         </div>
@@ -205,7 +248,6 @@ export default function Dashboard({ user, logout }) {
 
       {/* BODY */}
       <div style={{ padding: '32px 5%', maxWidth: '1400px', margin: '0 auto' }}>
-
         <AnimatePresence mode="wait">
 
           {/* TAB: APUESTAS */}
@@ -217,19 +259,15 @@ export default function Dashboard({ user, logout }) {
               </div>
 
               {/* KPIs */}
-              <motion.div
-                initial="hidden" animate="visible"
-                variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
-                style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', marginBottom: '28px' }}
-              >
+              <motion.div initial="hidden" animate="visible" variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
+                style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', marginBottom: '28px' }}>
                 {[
                   { label: 'Yield', value: yieldVal.toFixed(2) + '%', color: yieldVal >= 0 ? 'var(--color-primary)' : 'var(--color-error)', sub: 'Beneficio sobre lo apostado' },
                   { label: 'W / L', value: `${won.length} / ${lost.length}`, color: 'var(--color-text)', sub: 'Ganadas / Perdidas' },
                   { label: 'Total Apuestas', value: bets.length, color: 'var(--color-text)', sub: 'Historial completo' },
                   { label: 'Cuota Media', value: avgOdds, color: 'var(--color-warning)', sub: 'Promedio de cuotas' },
                 ].map((k, i) => (
-                  <motion.div key={i} variants={fadeUp}
-                    whileHover={{ y: -2, transition: { duration: 0.2 } }}
+                  <motion.div key={i} variants={fadeUp} whileHover={{ y: -2, transition: { duration: 0.2 } }}
                     style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', padding: '20px 24px', borderRadius: 'var(--radius-lg)' }}>
                     <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '10px', fontWeight: 600 }}>{k.label}</div>
                     <div style={{ fontSize: 'clamp(24px, 3vw, 32px)', fontWeight: 700, lineHeight: 1, color: k.color }}>{k.value}</div>
@@ -241,17 +279,19 @@ export default function Dashboard({ user, logout }) {
               {/* TABLE */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <div style={{ fontSize: '18px', fontWeight: 600 }}>Historial de Apuestas</div>
-                <motion.button
-                  whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                  onClick={() => setShowModal(true)}
-                  style={{ background: 'var(--color-primary)', border: 'none', color: 'var(--color-primary-light)', padding: '7px 14px', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}
-                >
+                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => setShowModal(true)}
+                  style={{ background: 'var(--color-primary)', border: 'none', color: 'var(--color-primary-light)', padding: '7px 14px', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}>
                   + Nueva Apuesta
                 </motion.button>
               </div>
 
               <div style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
-                {bets.length === 0 ? (
+                {loadingBets ? (
+                  <div style={{ textAlign: 'center', padding: '60px 24px', color: 'var(--color-text-muted)' }}>
+                    <div style={{ fontSize: '32px', marginBottom: '12px' }}>⏳</div>
+                    <div style={{ fontSize: '14px' }}>Cargando apuestas...</div>
+                  </div>
+                ) : bets.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '60px 24px', color: 'var(--color-text-muted)' }}>
                     <div style={{ fontSize: '48px', marginBottom: '16px' }}>📋</div>
                     <div style={{ fontSize: '18px', fontWeight: 600, color: 'var(--color-text-soft)', marginBottom: '8px' }}>Sin apuestas todavía</div>
@@ -268,14 +308,13 @@ export default function Dashboard({ user, logout }) {
                     </div>
                     <AnimatePresence>
                       {bets.map(b => (
-                        <motion.div key={b.id}
-                          initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }}
+                        <motion.div key={b.id} initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }}
                           style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', padding: '14px 20px', borderBottom: '0.5px solid var(--color-border)', alignItems: 'center' }}>
                           <div>
                             <div style={{ fontWeight: 500, fontSize: '14px' }}>{b.event}</div>
                             <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '2px' }}>{b.sport} · {b.market} · <strong>{b.pick}</strong></div>
                           </div>
-                          <span style={{ fontWeight: 600 }}>{b.odds.toFixed(2)}</span>
+                          <span style={{ fontWeight: 600 }}>{parseFloat(b.odds).toFixed(2)}</span>
                           <span style={{ color: 'var(--color-text-muted)', fontSize: '13px' }}>S{b.stake}</span>
                           <span>
                             {b.status === 'won' && <span style={{ background: 'var(--color-primary-light)', color: 'var(--color-primary)', border: '0.5px solid var(--color-primary-border)', padding: '3px 10px', borderRadius: 'var(--radius-full)', fontSize: '11px', fontWeight: 600 }}>Ganada ✓</span>}
@@ -308,14 +347,10 @@ export default function Dashboard({ user, logout }) {
                 <h2 style={{ fontSize: 'clamp(20px, 2.5vw, 28px)', fontWeight: 700, marginBottom: '4px' }}>Ranking Global</h2>
                 <p style={{ color: 'var(--color-text-muted)', fontSize: '14px' }}>Clasificación por Yield. Mínimo 5 apuestas resueltas para aparecer.</p>
               </div>
-              <motion.div
-                initial="hidden" animate="visible"
-                variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
-                style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}
-              >
+              <motion.div initial="hidden" animate="visible" variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
+                style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {RANKING.map((t, i) => (
-                  <motion.div key={i} variants={fadeUp}
-                    whileHover={{ x: 4, transition: { duration: 0.2 } }}
+                  <motion.div key={i} variants={fadeUp} whileHover={{ x: 4, transition: { duration: 0.2 } }}
                     style={{ display: 'grid', gridTemplateColumns: '48px 1fr 100px 100px 100px', alignItems: 'center', gap: '16px', padding: '16px 20px', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)' }}>
                     <div style={{ fontSize: '20px', fontWeight: 700, textAlign: 'center', color: i === 0 ? 'var(--color-warning)' : i === 1 ? 'var(--color-text-muted)' : i === 2 ? '#cd7c3c' : 'var(--color-text-muted)' }}>
                       {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
@@ -349,9 +384,7 @@ export default function Dashboard({ user, logout }) {
                 <h2 style={{ fontSize: 'clamp(20px, 2.5vw, 28px)', fontWeight: 700, marginBottom: '4px' }}>Ingresos y Comisiones</h2>
                 <p style={{ color: 'var(--color-text-muted)', fontSize: '14px' }}>Seguimiento de lo que ganas en FindYourBet.</p>
               </div>
-
-              <motion.div
-                style={{ background: 'var(--color-primary-light)', border: '0.5px solid var(--color-primary-border)', borderRadius: 'var(--radius-lg)', padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}
+              <motion.div style={{ background: 'var(--color-primary-light)', border: '0.5px solid var(--color-primary-border)', borderRadius: 'var(--radius-lg)', padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}
                 initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
                 <div>
                   <div style={{ fontSize: '16px', fontWeight: 600, marginBottom: '4px' }}>Comisión FYB este mes</div>
@@ -359,20 +392,15 @@ export default function Dashboard({ user, logout }) {
                 </div>
                 <div style={{ fontSize: '32px', fontWeight: 700, color: 'var(--color-primary)' }}>€0.00</div>
               </motion.div>
-
-              <motion.div
-                initial="hidden" animate="visible"
-                variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
-                style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px' }}
-              >
+              <motion.div initial="hidden" animate="visible" variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
+                style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px' }}>
                 {[
                   { label: 'Suscriptores', value: '0', color: 'var(--color-text)', sub: 'Clientes activos' },
                   { label: 'Ingresos Brutos', value: '€0.00', color: 'var(--color-primary)', sub: 'Antes de comisión' },
                   { label: 'Ingresos Netos', value: '€0.00', color: 'var(--color-primary)', sub: 'Después de comisión' },
                   { label: 'Próximo Tier', value: '50', color: 'var(--color-warning)', sub: 'Apuestas necesarias' },
                 ].map((k, i) => (
-                  <motion.div key={i} variants={fadeUp}
-                    whileHover={{ y: -2, transition: { duration: 0.2 } }}
+                  <motion.div key={i} variants={fadeUp} whileHover={{ y: -2, transition: { duration: 0.2 } }}
                     style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', padding: '20px 24px', borderRadius: 'var(--radius-lg)' }}>
                     <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '10px', fontWeight: 600 }}>{k.label}</div>
                     <div style={{ fontSize: 'clamp(24px, 3vw, 32px)', fontWeight: 700, lineHeight: 1, color: k.color }}>{k.value}</div>
