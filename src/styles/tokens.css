@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+:root {
+  /* Colors principals */
+  --color-primary: #0F6E56;
+  --color-primary-hover: #0d5f4a;
+  --color-primary-light: #E1F5EE;
+  --color-primary-border: #9FE1CB;
+
+  /* Colors neutres */
+  --color-bg: #ffffff;
+  --color-bg-soft: #f9f9f7;
+  --color-text: #1a1a1a;
+  --color-text-muted: #888888;
+  --color-text-soft: #555555;
+  --color-border: #e0e0e0;
+  --color-border-strong: #cccccc;
+
+  /* Colors semàntics */
+  --color-error: #e53e3e;
+  --color-error-light: #FEE2E2;
+  --color-error-border: #FCA5A5;
+  --color-warning: #d97706;
+  --color-success: #0F6E56;
+
+  /* Tipografia */
+  --font-sans: 'Segoe UI', system-ui, sans-serif;
+
+  /* Radis */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* Ombres */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+@theme inline {
+  --color-primary: var(--color-primary);
+  --color-primary-light: var(--color-primary-light);
+  --color-bg: var(--color-bg);
+  --color-bg-soft: var(--color-bg-soft);
+  --color-text: var(--color-text);
+  --color-text-muted: var(--color-text-muted);
+  --color-border: var(--color-border);
+}
