@@ -5,10 +5,12 @@ import { BetModal } from './BetModal'
 import MisApuestas from './MisApuestas'
 import Ingresos from './Ingresos'
 import Ranking from './Ranking'
+import Canales from './Canales'
 import './dashboard.css'
 
 const TABS = [
   { id: 'perfil', label: 'Mi Perfil' },
+  { id: 'canales', label: 'Canales' },
   { id: 'ranking', label: 'Ranking' },
 ]
 
@@ -87,6 +89,8 @@ export default function Dashboard({ user, logout }) {
               </AnimatePresence>
             </motion.div>
           )}
+
+          {tab === 'canales' && <Canales user={user} />}
 
           {tab === 'ranking' && <Ranking />}
 
