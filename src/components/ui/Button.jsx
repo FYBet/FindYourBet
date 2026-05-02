@@ -10,8 +10,7 @@ export function Button({ children, onClick, variant = 'primary', disabled = fals
       className={classes}
       onClick={onClick}
       disabled={disabled}
-      whileHover={{ scale: disabled ? 1 : 1.01 }}
-      whileTap={{ scale: disabled ? 1 : 0.98 }}
+      whileTap={{ scale: disabled ? 1 : 0.97 }}
       {...props}
     >
       {children}
