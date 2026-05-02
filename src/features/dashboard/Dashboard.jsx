@@ -5,7 +5,7 @@ import { BetModal } from './BetModal'
 import MisApuestas from './MisApuestas'
 import Ingresos from './Ingresos'
 import Ranking from './Ranking'
-import Canales from './Canales'
+import Canales from './canales'
 import './dashboard.css'
 
 const TABS = [
