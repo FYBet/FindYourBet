@@ -4,6 +4,11 @@ import { supabase } from '../../../../lib/supabase'
 const MAX_OWN_CHANNELS = 5
 const MAX_JOINED_CHANNELS = 30
 
+// Genera un codi d'invitació aleatori de 8 caràcters
+function generateInviteCode() {
+  return Math.random().toString(36).substring(2, 10).toUpperCase()
+}
+
 export function useChannels(user) {
   const [myChannels, setMyChannels] = useState([])
   const [joinedChannels, setJoinedChannels] = useState([])
@@ -43,12 +48,22 @@ export function useChannels(user) {
     setLoading(false)
   }
 
-  const createChannel = async (name, description) => {
+  const createChannel = async (name, description, isPrivate = false) => {
     if (!name.trim()) return { error: 'El nombre es obligatorio' }
     if (myChannels.length >= MAX_OWN_CHANNELS) return { error: `Límite de ${MAX_OWN_CHANNELS} canales propios alcanzado` }
+
+    const invite_code = generateInviteCode()
+
     const { data, error } = await supabase
-      .from('channels').insert({ owner_id: user.id, name: name.trim(), description: description.trim() })
+      .from('channels').insert({
+        owner_id: user.id,
+        name: name.trim(),
+        description: description.trim(),
+        is_private: isPrivate,
+        invite_code
+      })
       .select().single()
+
     if (!error) {
       setMyChannels(prev => [data, ...prev])
       setMemberCounts(prev => ({ ...prev, [data.id]: 1 }))
@@ -63,11 +78,23 @@ export function useChannels(user) {
     setMyChannels(prev => prev.filter(c => c.id !== channelId))
   }
 
+  // La cerca només retorna canals públics
   const searchChannels = async (query) => {
     if (!query.trim()) return []
     const { data } = await supabase.from('channels').select('*')
-      .ilike('name', `%${query}%`).limit(10)
+      .ilike('name', `%${query}%`)
+      .eq('is_private', false)
+      .limit(10)
     return data || []
+  }
+
+  // Busca un canal pel codi d'invitació (per canals privats)
+  const findChannelByCode = async (code) => {
+    if (!code.trim()) return null
+    const { data } = await supabase.from('channels').select('*')
+      .eq('invite_code', code.trim().toUpperCase())
+      .single()
+    return data || null
   }
 
   const joinChannel = async (channelId) => {
@@ -89,8 +116,8 @@ export function useChannels(user) {
 
   return {
     myChannels, joinedChannels, memberCounts, loading,
-    createChannel, deleteChannel, searchChannels, joinChannel, leaveChannel,
-    refetch: fetchChannels,
+    createChannel, deleteChannel, searchChannels, findChannelByCode,
+    joinChannel, leaveChannel, refetch: fetchChannels,
     MAX_OWN_CHANNELS, MAX_JOINED_CHANNELS
   }
 }

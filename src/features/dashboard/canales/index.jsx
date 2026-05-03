@@ -9,8 +9,11 @@ import ChatView from './ChatView'
 import PreviewView from './PreviewView'
 import '../dashboard.css'
 
+const inputStyle = { width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '14px', padding: '12px 14px', borderRadius: 'var(--radius-md)', outline: 'none', boxSizing: 'border-box' }
+const labelStyle = { display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-soft)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px' }
+
 export default function Canales({ user }) {
-  const { myChannels, joinedChannels, memberCounts, loading, createChannel, deleteChannel, searchChannels, joinChannel, leaveChannel, refetch, MAX_OWN_CHANNELS, MAX_JOINED_CHANNELS } = useChannels(user)
+  const { myChannels, joinedChannels, memberCounts, loading, createChannel, deleteChannel, searchChannels, findChannelByCode, joinChannel, leaveChannel, refetch, MAX_OWN_CHANNELS, MAX_JOINED_CHANNELS } = useChannels(user)
   const [activeChannel, setActiveChannel] = useState(null)
   const [activeMemberCount, setActiveMemberCount] = useState(0)
   const [previewChannel, setPreviewChannel] = useState(null)
@@ -18,12 +21,16 @@ export default function Canales({ user }) {
   const [joiningPreview, setJoiningPreview] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
-  const [createForm, setCreateForm] = useState({ name: '', description: '' })
+  const [createForm, setCreateForm] = useState({ name: '', description: '', isPrivate: false })
   const [createError, setCreateError] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState([])
   const [searching, setSearching] = useState(false)
   const [joinError, setJoinError] = useState('')
+  const [inviteCode, setInviteCode] = useState('')
+  const [inviteError, setInviteError] = useState('')
+  const [inviteLoading, setInviteLoading] = useState(false)
+  const [copiedCode, setCopiedCode] = useState(null)
 
   const handleOpenChannel = (channel) => {
     setActiveMemberCount(memberCounts[channel.id] || 1)
@@ -55,9 +62,9 @@ export default function Canales({ user }) {
 
   const handleCreate = async () => {
     setCreateError('')
-    const result = await createChannel(createForm.name, createForm.description)
+    const result = await createChannel(createForm.name, createForm.description, createForm.isPrivate)
     if (result?.error) { setCreateError(result.error); return }
-    setCreateForm({ name: '', description: '' })
+    setCreateForm({ name: '', description: '', isPrivate: false })
     setShowCreate(false)
   }
 
@@ -69,6 +76,39 @@ export default function Canales({ user }) {
     const results = await searchChannels(q)
     setSearchResults(results)
     setSearching(false)
+  }
+
+  // Unir-se per codi d'invitació
+  const handleJoinByCode = async () => {
+    if (!inviteCode.trim()) return
+    setInviteError('')
+    setInviteLoading(true)
+    const channel = await findChannelByCode(inviteCode)
+    if (!channel) {
+      setInviteError('Código de invitación no válido')
+      setInviteLoading(false)
+      return
+    }
+    const isAlreadyMember = joinedChannels.some(j => j.id === channel.id) || myChannels.some(m => m.id === channel.id)
+    if (isAlreadyMember) {
+      // Si ja és membre, obre el canal directament
+      setInviteLoading(false)
+      setInviteCode('')
+      setShowSearch(false)
+      handleOpenChannel(channel)
+      return
+    }
+    await handlePreviewChannel(channel)
+    setInviteLoading(false)
+    setInviteCode('')
+  }
+
+  // Copiar l'enllaç d'invitació
+  const handleCopyInvite = (channel) => {
+    const link = `fyourbet.com/canal/${channel.invite_code}`
+    navigator.clipboard.writeText(link)
+    setCopiedCode(channel.id)
+    setTimeout(() => setCopiedCode(null), 2000)
   }
 
   if (previewChannel) {
@@ -102,6 +142,7 @@ export default function Canales({ user }) {
         </div>
       </div>
 
+      {/* CREAR CANAL */}
       <AnimatePresence>
         {showCreate && (
           <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
@@ -113,17 +154,34 @@ export default function Canales({ user }) {
               </div>
             )}
             <div style={{ marginBottom: '14px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-soft)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px' }}>Nombre *</label>
+              <label style={labelStyle}>Nombre *</label>
               <input type="text" placeholder="ej. MarcGol Tips" value={createForm.name}
                 onChange={e => setCreateForm({ ...createForm, name: e.target.value })}
-                style={{ width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '14px', padding: '12px 14px', borderRadius: 'var(--radius-md)', outline: 'none', boxSizing: 'border-box' }} />
+                style={inputStyle} />
             </div>
-            <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-soft)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px' }}>Descripción (opcional)</label>
+            <div style={{ marginBottom: '16px' }}>
+              <label style={labelStyle}>Descripción (opcional)</label>
               <input type="text" placeholder="De qué va tu canal..." value={createForm.description}
                 onChange={e => setCreateForm({ ...createForm, description: e.target.value })}
-                style={{ width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '14px', padding: '12px 14px', borderRadius: 'var(--radius-md)', outline: 'none', boxSizing: 'border-box' }} />
+                style={inputStyle} />
             </div>
+
+            {/* TOGGLE PRIVAT */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px', padding: '14px', background: 'var(--color-bg-soft)', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-border)', cursor: 'pointer' }}
+              onClick={() => setCreateForm({ ...createForm, isPrivate: !createForm.isPrivate })}>
+              <div style={{ width: '40px', height: '22px', borderRadius: '999px', background: createForm.isPrivate ? 'var(--color-primary)' : 'var(--color-border)', transition: 'background 0.2s', position: 'relative', flexShrink: 0 }}>
+                <div style={{ position: 'absolute', top: '3px', left: createForm.isPrivate ? '21px' : '3px', width: '16px', height: '16px', borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }} />
+              </div>
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>
+                  🔒 Canal privado
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                  Solo accesible con enlace de invitación. No aparece en la búsqueda.
+                </div>
+              </div>
+            </div>
+
             <div style={{ display: 'flex', gap: '8px' }}>
               <Button onClick={handleCreate} disabled={!createForm.name.trim()}>Crear canal</Button>
               <Button variant="ghost" onClick={() => { setShowCreate(false); setCreateError('') }}>Cancelar</Button>
@@ -132,14 +190,34 @@ export default function Canales({ user }) {
         )}
       </AnimatePresence>
 
+      {/* BUSCAR CANAL */}
       <AnimatePresence>
         {showSearch && (
           <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
             style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '24px', marginBottom: '24px' }}>
             <div style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>Buscar canales</div>
+
+            {/* CERCA NORMAL */}
             <input type="text" placeholder="Busca por nombre del canal..."
               value={searchQuery} onChange={e => handleSearch(e.target.value)}
-              style={{ width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '14px', padding: '12px 14px', borderRadius: 'var(--radius-md)', outline: 'none', boxSizing: 'border-box', marginBottom: '16px' }} />
+              style={{ ...inputStyle, marginBottom: '16px' }} />
+
+            {/* CODI D'INVITACIÓ */}
+            <div style={{ marginBottom: '16px' }}>
+              <label style={labelStyle}>🔒 Código de invitación (canal privado)</label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input type="text" placeholder="Ej. ABC12345" value={inviteCode}
+                  onChange={e => { setInviteCode(e.target.value.toUpperCase()); setInviteError('') }}
+                  style={{ ...inputStyle, width: 'auto', flex: 1 }} />
+                <Button size="sm" disabled={!inviteCode.trim() || inviteLoading} onClick={handleJoinByCode}>
+                  {inviteLoading ? '...' : 'Acceder'}
+                </Button>
+              </div>
+              {inviteError && (
+                <div style={{ color: 'var(--color-error)', fontSize: '12px', marginTop: '6px' }}>{inviteError}</div>
+              )}
+            </div>
+
             {joinError && (
               <div style={{ background: 'var(--color-error-light)', color: 'var(--color-error)', padding: '8px 14px', borderRadius: 'var(--radius-md)', fontSize: '13px', marginBottom: '12px' }}>
                 {joinError}
@@ -168,12 +246,13 @@ export default function Canales({ user }) {
               )
             })}
             {searchQuery && !searching && searchResults.length === 0 && (
-              <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '13px', paddingTop: '8px' }}>No se encontraron canales</div>
+              <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '13px', paddingTop: '8px' }}>No se encontraron canales públicos</div>
             )}
           </motion.div>
         )}
       </AnimatePresence>
 
+      {/* MIS CANALES */}
       {myChannels.length > 0 && (
         <div style={{ marginBottom: '28px' }}>
           <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px' }}>
@@ -181,16 +260,29 @@ export default function Canales({ user }) {
           </div>
           <motion.div initial="hidden" animate="visible" variants={stagger} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {myChannels.map(c => (
-              <ChannelCard key={c.id} channel={c} isOwner={true}
-                memberCount={memberCounts[c.id]}
-                onClick={() => handleOpenChannel(c)}
-                onDelete={deleteChannel}
-              />
+              <div key={c.id}>
+                <ChannelCard channel={c} isOwner={true}
+                  memberCount={memberCounts[c.id]}
+                  onClick={() => handleOpenChannel(c)}
+                  onDelete={deleteChannel}
+                />
+                {/* Botó copiar enllaç si és privat */}
+                {c.is_private && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'var(--color-bg-soft)', borderRadius: '0 0 var(--radius-lg) var(--radius-lg)', border: '0.5px solid var(--color-border)', borderTop: 'none', marginTop: '-4px' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>🔒 Canal privado · Código: <strong style={{ color: 'var(--color-text)' }}>{c.invite_code}</strong></span>
+                    <button onClick={() => handleCopyInvite(c)}
+                      style={{ fontSize: '11px', padding: '3px 10px', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-sm)', background: 'transparent', color: copiedCode === c.id ? 'var(--color-primary)' : 'var(--color-text-muted)', cursor: 'pointer', marginLeft: 'auto' }}>
+                      {copiedCode === c.id ? '✓ Copiado' : '📋 Copiar enlace'}
+                    </button>
+                  </div>
+                )}
+              </div>
             ))}
           </motion.div>
         </div>
       )}
 
+      {/* CANALS UNITS */}
       {joinedChannels.length > 0 && (
         <div>
           <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px' }}>
@@ -208,6 +300,7 @@ export default function Canales({ user }) {
         </div>
       )}
 
+      {/* BUIT */}
       {!loading && myChannels.length === 0 && joinedChannels.length === 0 && !showCreate && !showSearch && (
         <div className="empty-state">
           <div className="empty-icon">📡</div>
