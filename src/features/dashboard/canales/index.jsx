@@ -30,22 +30,22 @@ export default function Canales({ user, initialCanalCode }) {
   const [inviteCode, setInviteCode] = useState('')
   const [inviteError, setInviteError] = useState('')
   const [inviteLoading, setInviteLoading] = useState(false)
-  const [copiedCode, setCopiedCode] = useState(null)
 
   useEffect(() => {
     if (!initialCanalCode || loading) return
-    const fetchAndOpen = async () => {
-      const channel = await findChannelByCode(initialCanalCode)
-      if (!channel) return
-      const isMember = joinedChannels.some(j => j.id === channel.id) || myChannels.some(m => m.id === channel.id)
-      if (isMember) {
-        handleOpenChannel(channel)
-      } else {
-        await handlePreviewChannel(channel)
-      }
-    }
-    fetchAndOpen()
+    handleOpenByCode(initialCanalCode)
   }, [initialCanalCode, loading])
+
+  const handleOpenByCode = async (code) => {
+    const channel = await findChannelByCode(code)
+    if (!channel) return
+    const isMember = joinedChannels.some(j => j.id === channel.id) || myChannels.some(m => m.id === channel.id)
+    if (isMember) {
+      handleOpenChannel(channel)
+    } else {
+      await handlePreviewChannel(channel)
+    }
+  }
 
   const handleOpenChannel = (channel) => {
     setActiveMemberCount(memberCounts[channel.id] || 1)
@@ -116,23 +116,23 @@ export default function Canales({ user, initialCanalCode }) {
     setInviteCode('')
   }
 
-  const handleCopyInvite = (channel) => {
-    const link = `https://fyourbet.com/canal/${channel.invite_code}`
-    navigator.clipboard.writeText(link)
-    setCopiedCode(channel.id)
-    setTimeout(() => setCopiedCode(null), 2000)
-  }
-
   if (previewChannel) {
     const isAlreadyMember = joinedChannels.some(j => j.id === previewChannel.id) || myChannels.some(m => m.id === previewChannel.id)
     if (isAlreadyMember) {
-      return <ChatView channel={previewChannel} user={user} onBack={() => setPreviewChannel(null)} memberCount={previewMemberCount} />
+      return <ChatView channel={previewChannel} user={user} onBack={() => setPreviewChannel(null)} memberCount={previewMemberCount} onOpenCanal={handleOpenByCode} />
     }
     return <PreviewView channel={previewChannel} user={user} onBack={() => setPreviewChannel(null)} onJoin={handleJoinFromPreview} joining={joiningPreview} memberCount={previewMemberCount} />
   }
 
   if (activeChannel) {
-    return <ChatView channel={activeChannel} user={user} onBack={() => setActiveChannel(null)} memberCount={activeMemberCount} />
+    return <ChatView
+      channel={activeChannel}
+      user={user}
+      onBack={() => setActiveChannel(null)}
+      memberCount={activeMemberCount}
+      onLeave={() => { leaveChannel(activeChannel.id); setActiveChannel(null) }}
+      onOpenCanal={handleOpenByCode}
+    />
   }
 
   const canCreateMore = myChannels.length < MAX_OWN_CHANNELS
@@ -176,7 +176,6 @@ export default function Canales({ user, initialCanalCode }) {
                 onChange={e => setCreateForm({ ...createForm, description: e.target.value })}
                 style={inputStyle} />
             </div>
-
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px', padding: '14px', background: 'var(--color-bg-soft)', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-border)', cursor: 'pointer' }}
               onClick={() => setCreateForm({ ...createForm, isPrivate: !createForm.isPrivate })}>
               <div style={{ width: '40px', height: '22px', borderRadius: '999px', background: createForm.isPrivate ? 'var(--color-primary)' : 'var(--color-border)', transition: 'background 0.2s', position: 'relative', flexShrink: 0 }}>
@@ -189,7 +188,6 @@ export default function Canales({ user, initialCanalCode }) {
                 </div>
               </div>
             </div>
-
             <div style={{ display: 'flex', gap: '8px' }}>
               <Button onClick={handleCreate} disabled={!createForm.name.trim()}>Crear canal</Button>
               <Button variant="ghost" onClick={() => { setShowCreate(false); setCreateError('') }}>Cancelar</Button>
@@ -203,11 +201,9 @@ export default function Canales({ user, initialCanalCode }) {
           <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
             style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '24px', marginBottom: '24px' }}>
             <div style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>Buscar canales</div>
-
             <input type="text" placeholder="Busca por nombre del canal..."
               value={searchQuery} onChange={e => handleSearch(e.target.value)}
               style={{ ...inputStyle, marginBottom: '16px' }} />
-
             <div style={{ marginBottom: '16px' }}>
               <label style={labelStyle}>🔒 Código de invitación (canal privado)</label>
               <div style={{ display: 'flex', gap: '8px' }}>
@@ -218,11 +214,8 @@ export default function Canales({ user, initialCanalCode }) {
                   {inviteLoading ? '...' : 'Acceder'}
                 </Button>
               </div>
-              {inviteError && (
-                <div style={{ color: 'var(--color-error)', fontSize: '12px', marginTop: '6px' }}>{inviteError}</div>
-              )}
+              {inviteError && <div style={{ color: 'var(--color-error)', fontSize: '12px', marginTop: '6px' }}>{inviteError}</div>}
             </div>
-
             {joinError && (
               <div style={{ background: 'var(--color-error-light)', color: 'var(--color-error)', padding: '8px 14px', borderRadius: 'var(--radius-md)', fontSize: '13px', marginBottom: '12px' }}>
                 {joinError}
@@ -264,21 +257,11 @@ export default function Canales({ user, initialCanalCode }) {
           </div>
           <motion.div initial="hidden" animate="visible" variants={stagger} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {myChannels.map(c => (
-              <div key={c.id}>
-                <ChannelCard channel={c} isOwner={true}
-                  memberCount={memberCounts[c.id]}
-                  onClick={() => handleOpenChannel(c)}
-                  onDelete={deleteChannel}
-                />
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'var(--color-bg-soft)', borderRadius: '0 0 var(--radius-lg) var(--radius-lg)', border: '0.5px solid var(--color-border)', borderTop: 'none', marginTop: '-4px' }}>
-                  {c.is_private && <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>🔒 Privado · </span>}
-                  <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Código: <strong style={{ color: 'var(--color-text)' }}>{c.invite_code}</strong></span>
-                  <button onClick={() => handleCopyInvite(c)}
-                    style={{ fontSize: '11px', padding: '3px 10px', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-sm)', background: 'transparent', color: copiedCode === c.id ? 'var(--color-primary)' : 'var(--color-text-muted)', cursor: 'pointer', marginLeft: 'auto' }}>
-                    {copiedCode === c.id ? '✓ Copiado' : '📋 Copiar enlace'}
-                  </button>
-                </div>
-              </div>
+              <ChannelCard key={c.id} channel={c} isOwner={true}
+                memberCount={memberCounts[c.id]}
+                onClick={() => handleOpenChannel(c)}
+                onDelete={deleteChannel}
+              />
             ))}
           </motion.div>
         </div>
