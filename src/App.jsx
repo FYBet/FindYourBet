@@ -4,6 +4,7 @@ import Landing from './features/landing/Landing'
 import Login from './features/auth/Login'
 import Register from './features/auth/Register'
 import Dashboard from './features/dashboard/Dashboard'
+import CanalPage from './features/canales/CanalPage'
 
 function AppRoutes() {
   const [user, setUser] = useState(null)
@@ -11,7 +12,9 @@ function AppRoutes() {
 
   const login = (userData) => {
     setUser(userData)
-    navigate('/dashboard')
+    const params = new URLSearchParams(window.location.search)
+    const redirect = params.get('redirect')
+    navigate(redirect || '/dashboard')
   }
 
   const logout = () => {
@@ -25,6 +28,7 @@ function AppRoutes() {
       <Route path="/login" element={<Login navigate={(page) => navigate(`/${page === 'landing' ? '' : page}`)} login={login} />} />
       <Route path="/register" element={<Register navigate={(page) => navigate(`/${page === 'landing' ? '' : page}`)} login={login} />} />
       <Route path="/dashboard" element={user ? <Dashboard navigate={(page) => navigate(`/${page === 'landing' ? '' : page}`)} user={user} logout={logout} /> : <Navigate to="/" />} />
+      <Route path="/canal/:code" element={<CanalPage />} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   )

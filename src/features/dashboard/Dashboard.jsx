@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useSearchParams } from 'react-router-dom'
 import { useBets } from './hooks/useBets'
 import { BetModal } from './BetModal'
 import MisApuestas from './MisApuestas'
@@ -22,11 +23,20 @@ const PERFIL_TABS = [
 export default function Dashboard({ user, logout }) {
   const [tab, setTab] = useState('perfil')
   const [perfilTab, setPerfilTab] = useState('apuestas')
+  const [searchParams] = useSearchParams()
   const {
     bets, loadingBets, showModal, setShowModal,
     form, setForm, submitBet, resolveBet,
     won, lost, yieldVal, avgOdds
   } = useBets(user)
+
+  // Si ve d'un enllaç de canal, obre la pestanya canales automàticament
+  useEffect(() => {
+    const canalCode = searchParams.get('canal')
+    if (canalCode) setTab('canales')
+  }, [searchParams])
+
+  const canalCode = searchParams.get('canal')
 
   return (
     <div className="dashboard">
@@ -90,7 +100,7 @@ export default function Dashboard({ user, logout }) {
             </motion.div>
           )}
 
-          {tab === 'canales' && <Canales user={user} />}
+          {tab === 'canales' && <Canales user={user} initialCanalCode={canalCode} />}
 
           {tab === 'ranking' && <Ranking user={user} />}
 
