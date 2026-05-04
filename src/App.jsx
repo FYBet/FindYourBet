@@ -1,14 +1,45 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import Landing from './features/landing/Landing'
 import Login from './features/auth/Login'
 import Register from './features/auth/Register'
 import Dashboard from './features/dashboard/Dashboard'
-import CanalPage from './features/canales/CanalPage'
+import CanalPage from './features/dashboard/canales/CanalPage'
+import { supabase } from './lib/supabase'
 
 function AppRoutes() {
   const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
+
+  // Carrega la sessió automàticament al iniciar
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser({
+          id: session.user.id,
+          name: session.user.user_metadata?.name || session.user.email,
+          email: session.user.email,
+        })
+      }
+      setLoading(false)
+    })
+
+    // Escolta canvis de sessió
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setUser({
+          id: session.user.id,
+          name: session.user.user_metadata?.name || session.user.email,
+          email: session.user.email,
+        })
+      } else {
+        setUser(null)
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
 
   const login = (userData) => {
     setUser(userData)
@@ -17,10 +48,17 @@ function AppRoutes() {
     navigate(redirect || '/dashboard')
   }
 
-  const logout = () => {
+  const logout = async () => {
+    await supabase.auth.signOut()
     setUser(null)
     navigate('/')
   }
+
+  if (loading) return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--color-bg)', color: 'var(--color-text)' }}>
+      <div style={{ fontSize: '32px' }}>⏳</div>
+    </div>
+  )
 
   return (
     <Routes>

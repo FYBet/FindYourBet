@@ -6,7 +6,7 @@ const MAX_JOINED_CHANNELS = 30
 
 // Genera un codi d'invitació aleatori de 8 caràcters
 function generateInviteCode() {
-  return Math.random().toString(36).substring(2, 10).toUpperCase()
+  return Math.random().toString(36).substring(2, 10).toLowerCase()
 }
 
 export function useChannels(user) {
@@ -92,7 +92,7 @@ export function useChannels(user) {
   const findChannelByCode = async (code) => {
     if (!code.trim()) return null
     const { data } = await supabase.from('channels').select('*')
-      .eq('invite_code', code.trim().toUpperCase())
+      .eq('invite_code', code.trim().toLowerCase())
       .single()
     return data || null
   }
