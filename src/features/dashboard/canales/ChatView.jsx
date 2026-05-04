@@ -4,8 +4,6 @@ import { supabase } from '../../../lib/supabase'
 import { Button } from '../../../components/ui/Button'
 import { useMessages } from './hooks/useMessages'
 
-const URL_REGEX = /(https?:\/\/[^\s]+)/g
-
 function renderMessage(content, onInternalLink) {
   if (content.startsWith('[IMAGE]:')) {
     const url = content.replace('[IMAGE]:', '')
@@ -20,18 +18,25 @@ function renderMessage(content, onInternalLink) {
     )
   }
 
-  const parts = content.split(URL_REGEX)
+  const urlRegex = /(https?:\/\/[^\s]+)/g
+  const parts = content.split(urlRegex)
   if (parts.length > 1) {
     return (
       <span>
         {parts.map((part, i) => {
-          if (!URL_REGEX.test(part)) return part
+          if (!/^https?:\/\//.test(part)) return part
           const isCanalLink = part.includes('fyourbet.com/canal/')
           if (isCanalLink) {
             const code = part.split('/canal/')[1]?.split(/[?#\s]/)[0]
             return (
-              <span key={i} onClick={() => onInternalLink?.(code)}
-                style={{ color: 'var(--color-primary)', textDecoration: 'underline', cursor: 'pointer', wordBreak: 'break-all' }}>
+              <span key={i}
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  console.log('clic link intern:', code)
+                  onInternalLink?.(code)
+                }}
+                style={{ color: 'var(--color-primary)', textDecoration: 'underline', cursor: 'pointer', wordBreak: 'break-all', userSelect: 'none' }}>
                 📡 {part}
               </span>
             )
@@ -190,6 +195,11 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
     setTimeout(() => setCopiedLink(false), 2000)
   }
 
+  const handleInternalLink = (code) => {
+    console.log('Obrint canal intern:', code)
+    onOpenCanal?.(code)
+  }
+
   const menuItems = [
     { icon: 'ℹ️', label: 'Info del canal', action: () => { setShowInfo(true); setShowMenu(false) } },
     { icon: muted ? '🔔' : '🔕', label: muted ? 'Activar notificaciones' : 'Silenciar', action: () => { setMuted(!muted); setShowMenu(false) } },
@@ -250,7 +260,7 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
               padding: '10px 14px', borderRadius: 'var(--radius-lg)', fontSize: '14px', lineHeight: 1.5,
               border: m.user_id === user.id ? 'none' : '0.5px solid var(--color-border)'
             }}>
-              {renderMessage(m.content, onOpenCanal)}
+              {renderMessage(m.content, handleInternalLink)}
             </div>
             <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '4px', textAlign: m.user_id === user.id ? 'right' : 'left' }}>
               {new Date(m.created_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
