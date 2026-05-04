@@ -3,7 +3,15 @@ import { fadeUp, stagger } from '../../lib/animations'
 import { Button } from '../../components/ui/Button'
 import './dashboard.css'
 
-export default function MisApuestas({ bets, loadingBets, won, lost, yieldVal, avgOdds, onNewBet, onResolveBet }) {
+const PERIODS = [
+  { id: 'setmanal', label: 'Semanal' },
+  { id: 'mensual', label: 'Mensual' },
+  { id: 'anual', label: 'Anual' },
+  { id: 'total', label: 'Total' },
+  { id: 'trimestral', label: 'Ranking' },
+]
+
+export default function MisApuestas({ bets, loadingBets, won, lost, yieldVal, avgOdds, onNewBet, onResolveBet, period, onPeriodChange }) {
   const KPIs = [
     { label: 'Yield', value: `${yieldVal.toFixed(2)}%`, colorClass: yieldVal >= 0 ? 'green' : 'red', sub: 'Beneficio sobre lo apostado' },
     { label: 'W / L', value: `${won.length} / ${lost.length}`, colorClass: '', sub: 'Ganadas / Perdidas' },
@@ -19,6 +27,24 @@ export default function MisApuestas({ bets, loadingBets, won, lost, yieldVal, av
       <div className="page-header">
         <h2>Panel de Tipster</h2>
         <p>Gestiona y publica tus apuestas. Tu historial es público y auditable.</p>
+      </div>
+
+      <div style={{ marginBottom: '24px' }}>
+        <select value={period} onChange={e => onPeriodChange(e.target.value)}
+          style={{ background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '14px', fontWeight: 600, padding: '10px 14px', borderRadius: 'var(--radius-md)', outline: 'none', cursor: 'pointer', width: 'fit-content' }}>
+          {PERIODS.map(p => (
+            <option key={p.id} value={p.id}>{p.label}</option>
+          ))}
+        </select>
+
+        <AnimatePresence>
+          {period === 'trimestral' && (
+            <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+              style={{ marginTop: '10px', padding: '10px 14px', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-primary-border)', borderRadius: 'var(--radius-md)', fontSize: '13px', color: 'var(--color-text-muted)', maxWidth: '420px' }}>
+              💡 El modo <strong style={{ color: 'var(--color-text)' }}>Ranking</strong> refleja tu rendimiento de los últimos 3 meses. Es exactamente la puntuación que aparece en el ranking público y la que otros usuarios ven al evaluar tu historial como tipster.
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       <motion.div className="kpi-grid" initial="hidden" animate="visible" variants={stagger}>
@@ -46,9 +72,8 @@ export default function MisApuestas({ bets, loadingBets, won, lost, yieldVal, av
         ) : bets.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">📋</div>
-            <div className="empty-title">Sin apuestas todavía</div>
-            <div className="empty-sub">Publica tu primera apuesta para empezar a construir tu historial auditable.</div>
-            <Button onClick={onNewBet}>+ Publicar apuesta</Button>
+            <div className="empty-title">Sin apuestas en este período</div>
+            <div className="empty-sub">No hay apuestas registradas para el período seleccionado.</div>
           </div>
         ) : (
           <>
