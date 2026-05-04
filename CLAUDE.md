@@ -85,3 +85,36 @@ src/
 - **Decoupled logic:** Business logic never lives inside visual components. Use custom hooks for state and side effects.
 - **Clean patterns:** Apply early returns, optional chaining, and avoid prop drilling — use Context or Zustand instead.
 - **Comments:** Never comment *what* the code does. Only comment *why* a technical decision was made.
+## Projecte: FindYourBet (FYB)
+
+Xarxa social d'apostes esportives. Tipsters creen canals i venen picks/subscripcions VIP als apostadors.
+
+### Stack
+- React + Vite (JavaScript, NO TypeScript)
+- CSS per feature + variables CSS en src/styles/tokens.css
+- Framer Motion per animacions
+- Supabase (auth + PostgreSQL, RLS desactivat)
+- React Router DOM
+- Deploy: Vercel → fyourbet.com (Cloudflare)
+- Repo: tulsaproyectoxbet/FindYourBet (branca master)
+
+### Supabase
+URL: https://slfgvgvguwavvbkpsngf.supabase.co
+Taules: bets, channels, channel_members, channel_messages, profiles
+- channels: id, owner_id, name, description, is_private, invite_code (lowercase), link_public, created_at
+- channel_members: id, channel_id, user_id, joined_at
+- channel_messages: id, channel_id, user_id, content, created_at
+- profiles: id, username, name, created_at
+- bets: id, user_id, event, pick, odds, stake, sport, market, analysis, status, date, created_at
+
+### Decisions tècniques
+- Polling cada 2s missatges, cada 10s ranking (no Realtime)
+- invite_code sempre en lowercase
+- App.jsx carrega sessió Supabase amb onAuthStateChange
+- Dashboard detecta ?canal=CODE a la URL per obrir canal automàticament
+- Git: git push upstream master → Sync fork FYBet/FindYourBet → Vercel redesplega
+
+### Pendent
+- Perfil públic del tipster
+- Sistema ranking complet (score 0-100, tiers estrictes)
+- Subscripcions VIP de pagament
