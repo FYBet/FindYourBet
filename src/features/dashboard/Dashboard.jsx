@@ -3,29 +3,30 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useSearchParams } from 'react-router-dom'
 import { useBets } from './hooks/useBets'
 import { BetModal } from './BetModal'
-import MisApuestas from './MisApuestas'
-import Ingresos from './Ingresos'
+import Estadisticas from './Estadisticas'
+import Historial from './MisApuestas'
 import Ranking from './Ranking'
 import Canales from './canales'
+import Contacto from './Contacto'
 import './dashboard.css'
 
-const TABS = [
-  { id: 'perfil', label: 'Perfil' },
-  { id: 'canales', label: 'Canales' },
-  { id: 'ranking', label: 'Ranking' },
+const NAV_TABS = [
+  { id: 'estadisticas', label: 'Perfil', icon: '👤' },
+  { id: 'canales', label: 'Canales', icon: '📡' },
+  { id: 'ranking', label: 'Ranking', icon: '🏆' },
 ]
 
-const PERFIL_TABS = [
-  { id: 'apuestas', label: 'Mis Apuestas' },
-  { id: 'ingresos', label: 'Ingresos' },
+const SIDEBAR_ITEMS = [
+  { id: 'estadisticas', label: 'Estadísticas personales', icon: '📊' },
+  { id: 'historial', label: 'Historial', icon: '📋' },
+  { id: 'contacto', label: 'Contáctenos', icon: '✉️' },
 ]
 
 export default function Dashboard({ user, logout }) {
-  const [tab, setTab] = useState('perfil')
-  const [perfilTab, setPerfilTab] = useState('apuestas')
+  const [tab, setTab] = useState('estadisticas')
   const [searchParams] = useSearchParams()
   const {
-    bets, loadingBets, showModal, setShowModal,
+    bets, allBets, loadingBets, showModal, setShowModal,
     form, setForm, submitBet, resolveBet,
     won, lost, yieldVal, avgOdds,
     period, setPeriod
@@ -37,6 +38,7 @@ export default function Dashboard({ user, logout }) {
   }, [searchParams])
 
   const canalCode = searchParams.get('canal')
+  const isPerfilTab = ['estadisticas', 'historial', 'contacto'].includes(tab)
 
   return (
     <div className="dashboard">
@@ -48,12 +50,13 @@ export default function Dashboard({ user, logout }) {
         onSubmit={submitBet}
       />
 
+      {/* NAV */}
       <motion.nav className="dash-nav"
         initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
         <div className="dash-nav-left">
           <div className="dash-logo">FindYour<span>Bet</span></div>
           <div className="dash-nav-tabs">
-            {TABS.map(t => (
+            {NAV_TABS.map(t => (
               <motion.button key={t.id} className={`dash-tab ${tab === t.id ? 'active' : ''}`}
                 whileTap={{ scale: 0.97 }} onClick={() => setTab(t.id)}>
                 {t.label}
@@ -72,40 +75,56 @@ export default function Dashboard({ user, logout }) {
         </div>
       </motion.nav>
 
-      <div className="dash-body">
-        <AnimatePresence mode="wait">
+      {/* LAYOUT */}
+      <div className="dash-layout">
 
-          {tab === 'perfil' && (
-            <motion.div key="perfil"
-              initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.3 }}>
-              <div className="profile-tabs">
-                {PERFIL_TABS.map(t => (
-                  <motion.button key={t.id} className={`profile-tab ${perfilTab === t.id ? 'active' : ''}`}
-                    whileTap={{ scale: 0.97 }} onClick={() => setPerfilTab(t.id)}>
-                    {t.label}
-                  </motion.button>
-                ))}
+        {/* SIDEBAR — només visible quan estem a les tabs de perfil */}
+        {isPerfilTab && (
+          <aside className="dash-sidebar">
+            <div className="sidebar-label">Mi perfil</div>
+            {SIDEBAR_ITEMS.map(item => (
+              <div key={item.id} className="sidebar-section">
+                <button
+                  className={`sidebar-item ${tab === item.id ? 'active' : ''}`}
+                  onClick={() => setTab(item.id)}>
+                  <span className="sidebar-icon">{item.icon}</span>
+                  {item.label}
+                </button>
               </div>
-              <AnimatePresence mode="wait">
-                {perfilTab === 'apuestas' && (
-                  <MisApuestas
-                    bets={bets} loadingBets={loadingBets}
-                    won={won} lost={lost} yieldVal={yieldVal} avgOdds={avgOdds}
-                    onNewBet={() => setShowModal(true)} onResolveBet={resolveBet}
-                    period={period} onPeriodChange={setPeriod}
-                  />
-                )}
-                {perfilTab === 'ingresos' && <Ingresos />}
-              </AnimatePresence>
-            </motion.div>
-          )}
+            ))}
+          </aside>
+        )}
 
-          {tab === 'canales' && <Canales user={user} initialCanalCode={canalCode} />}
+        {/* CONTINGUT */}
+        <div className="dash-content">
+          <AnimatePresence mode="wait">
 
-          {tab === 'ranking' && <Ranking user={user} />}
+            {tab === 'estadisticas' && (
+              <Estadisticas
+                bets={bets} loadingBets={loadingBets}
+                won={won} lost={lost} yieldVal={yieldVal} avgOdds={avgOdds}
+                onNewBet={() => setShowModal(true)}
+                period={period} onPeriodChange={setPeriod}
+              />
+            )}
 
-        </AnimatePresence>
+            {tab === 'historial' && (
+              <Historial
+                bets={bets} loadingBets={loadingBets}
+                won={won} lost={lost} yieldVal={yieldVal} avgOdds={avgOdds}
+                onNewBet={() => setShowModal(true)} onResolveBet={resolveBet}
+                period={period} onPeriodChange={setPeriod}
+              />
+            )}
+
+            {tab === 'contacto' && <Contacto />}
+
+            {tab === 'canales' && <Canales user={user} initialCanalCode={canalCode} />}
+
+            {tab === 'ranking' && <Ranking user={user} />}
+
+          </AnimatePresence>
+        </div>
       </div>
     </div>
   )
