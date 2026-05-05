@@ -4,7 +4,7 @@ import { Input } from '../../components/ui/Input'
 import { FormLabel } from '../../components/ui/FormLabel'
 import './dashboard.css'
 
-const SPORTS = ['Fútbol', 'Baloncesto', 'Tenis', 'MMA / Boxeo', 'Otro']
+const SPORTS = ['Fútbol', 'Baloncesto', 'Tenis', 'Béisbol', 'Fútbol Americano', 'eSports', 'MMA', 'Otros']
 const MARKETS = ['1X2', 'Hándicap', 'Over/Under', 'Ambos marcan', 'Otro']
 
 export function BetModal({ open, onClose, form, setForm, onSubmit }) {

@@ -86,7 +86,7 @@ export default function MisApuestas({ bets, loadingBets, won, lost, yieldVal, av
                   initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }}>
                   <div>
                     <div className="event-name">{b.event}</div>
-                    <div className="event-meta">{b.sport} · {b.market} · <strong>{b.pick}</strong></div>
+                    <div className="event-meta">{b.sport} · {b.market} · <strong>{b.pick}</strong> · {new Date(b.date).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
                   </div>
                   <span style={{ fontWeight: 600 }}>{parseFloat(b.odds).toFixed(2)}</span>
                   <span style={{ color: 'var(--color-text-muted)', fontSize: '13px' }}>S{b.stake}</span>
