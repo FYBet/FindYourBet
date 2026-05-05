@@ -59,6 +59,11 @@
   30%            { opacity: 1; transform: translateY(-3px); }
 }
 
+@keyframes dot-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 255, 138, 0.5); }
+  50%       { box-shadow: 0 0 0 5px rgba(0, 255, 138, 0); }
+}
+
 /* ═══════════════════════════════════════════════════════
    NAVBAR — más grande, drop-in al cargar
 ═══════════════════════════════════════════════════════ */
@@ -93,6 +98,14 @@
   letter-spacing: -0.5px;
   text-shadow: 0 0 14px rgba(0, 255, 138, 0.45);
   white-space: nowrap;
+  cursor: pointer;
+  transition: text-shadow 0.18s ease, opacity 0.18s ease;
+}
+.nav-logo:hover {
+  text-shadow:
+    0 0 20px rgba(0, 255, 138, 0.8),
+    0 0 40px rgba(0, 255, 138, 0.3);
+  opacity: 0.9;
 }
 .nav-logo span { color: rgba(224, 245, 235, 0.65); text-shadow: none; }
 
@@ -114,7 +127,48 @@
   text-shadow: 0 0 12px rgba(0, 255, 138, 0.45);
 }
 
-.nav-btns { display: flex; gap: 8px; flex-shrink: 0; }
+.nav-btns { display: flex; gap: 8px; flex-shrink: 0; align-items: center; }
+
+/* ═══════════════════════════════════════════════════════
+   NAVBAR — estat autenticat
+═══════════════════════════════════════════════════════ */
+.nav-user-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 255, 138, 0.2);
+  background: rgba(0, 255, 138, 0.05);
+  cursor: default;
+  transition: border-color 0.18s, background 0.18s;
+}
+.nav-user-chip:hover {
+  border-color: rgba(0, 255, 138, 0.35);
+  background: rgba(0, 255, 138, 0.09);
+}
+
+.nav-user-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #00ff8a;
+  /* Pulsació subtil per indicar sessió activa */
+  box-shadow: 0 0 0 0 rgba(0, 255, 138, 0.5);
+  animation: dot-pulse 2.4s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.nav-user-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(224, 245, 235, 0.85);
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* ═══════════════════════════════════════════════════════
    HERO — spotlight que sigue al cursor
@@ -202,7 +256,6 @@
   inset: 0;
   overflow: hidden;
   pointer-events: none;
-  /* fade arriba y abajo para integrarla con el panel */
   -webkit-mask-image: linear-gradient(180deg, transparent 0%, black 12%, black 88%, transparent 100%);
           mask-image: linear-gradient(180deg, transparent 0%, black 12%, black 88%, transparent 100%);
 }
@@ -320,15 +373,13 @@
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(0, 255, 138, 0.08);
 }
 
-/* layout bento — Track record (4) + Ranking (2) / VIP (2) + Chat (2) + Stats (2) / Categorías (6) */
-.feature-card:nth-child(1) { grid-column: span 4; }  /* Track record — grande */
-.feature-card:nth-child(2) { grid-column: span 2; }  /* Ranking */
-.feature-card:nth-child(3) { grid-column: span 2; }  /* VIP */
-.feature-card:nth-child(4) { grid-column: span 2; }  /* Chat */
-.feature-card:nth-child(5) { grid-column: span 2; }  /* Stats */
-.feature-card:nth-child(6) { grid-column: span 6; }  /* Categorías — full */
+.feature-card:nth-child(1) { grid-column: span 4; }
+.feature-card:nth-child(2) { grid-column: span 2; }
+.feature-card:nth-child(3) { grid-column: span 2; }
+.feature-card:nth-child(4) { grid-column: span 2; }
+.feature-card:nth-child(5) { grid-column: span 2; }
+.feature-card:nth-child(6) { grid-column: span 6; }
 
-/* La card 1 (Track) y la 6 (Categorías) son horizontales: texto a un lado, mock al otro */
 .feature-card:nth-child(1),
 .feature-card:nth-child(6) {
   flex-direction: row;
@@ -757,7 +808,6 @@
   .footer-cols { grid-template-columns: 1fr; }
 }
 
-/* Wordmark gigante decorativo */
 .footer-wordmark {
   text-align: center;
   font-size: clamp(70px, 18vw, 220px);
