@@ -27,10 +27,10 @@ export default function Dashboard({ user, logout }) {
   const {
     bets, loadingBets, showModal, setShowModal,
     form, setForm, submitBet, resolveBet,
-    won, lost, yieldVal, avgOdds
+    won, lost, yieldVal, avgOdds,
+    period, setPeriod
   } = useBets(user)
 
-  // Si ve d'un enllaç de canal, obre la pestanya canales automàticament
   useEffect(() => {
     const canalCode = searchParams.get('canal')
     if (canalCode) setTab('canales')
@@ -93,6 +93,7 @@ export default function Dashboard({ user, logout }) {
                     bets={bets} loadingBets={loadingBets}
                     won={won} lost={lost} yieldVal={yieldVal} avgOdds={avgOdds}
                     onNewBet={() => setShowModal(true)} onResolveBet={resolveBet}
+                    period={period} onPeriodChange={setPeriod}
                   />
                 )}
                 {perfilTab === 'ingresos' && <Ingresos />}

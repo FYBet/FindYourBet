@@ -6,11 +6,87 @@ const EMPTY_FORM = {
   date: '', sport: 'Fútbol', market: '1X2', analysis: ''
 }
 
+// Retorna l'inici i fi del període seleccionat
+function getPeriodRange(period) {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = now.getMonth()
+
+  if (period === 'setmanal') {
+    const day = now.getDay() === 0 ? 6 : now.getDay() - 1 // dilluns = 0
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - day)
+    monday.setHours(0, 0, 0, 0)
+    const sunday = new Date(monday)
+    sunday.setDate(monday.getDate() + 6)
+    sunday.setHours(23, 59, 59, 999)
+    return { start: monday, end: sunday }
+  }
+
+  if (period === 'mensual') {
+    return {
+      start: new Date(year, month, 1, 0, 0, 0),
+      end: new Date(year, month + 1, 0, 23, 59, 59)
+    }
+  }
+
+  if (period === 'anual') {
+    return {
+      start: new Date(year, 0, 1, 0, 0, 0),
+      end: new Date(year, 11, 31, 23, 59, 59)
+    }
+  }
+
+  if (period === 'trimestral') {
+    const threeMonthsAgo = new Date(now)
+    threeMonthsAgo.setMonth(now.getMonth() - 3)
+    threeMonthsAgo.setHours(0, 0, 0, 0)
+    return { start: threeMonthsAgo, end: now }
+  }
+
+  return null // total
+}
+
+function filterBetsByPeriod(bets, period) {
+  if (period === 'total') return bets
+  const range = getPeriodRange(period)
+  if (!range) return bets
+  return bets.filter(b => {
+    const betDate = new Date(b.date)
+    return betDate >= range.start && betDate <= range.end
+  })
+}
+
+function calcStats(bets) {
+  const resolved = bets.filter(b => b.status !== 'pending')
+  const won = bets.filter(b => b.status === 'won')
+  const lost = bets.filter(b => b.status === 'lost')
+
+  let yieldVal = 0
+  if (resolved.length > 0) {
+    const totals = resolved.reduce(
+      (acc, b) => ({
+        stakeSum: acc.stakeSum + b.stake,
+        profit: acc.profit + (b.status === 'won' ? b.stake * (b.odds - 1) : -b.stake)
+      }),
+      { profit: 0, stakeSum: 0 }
+    )
+    yieldVal = totals.stakeSum > 0 ? (totals.profit / totals.stakeSum) * 100 : 0
+  }
+
+  const avgOdds = bets.length > 0
+    ? (bets.reduce((s, b) => s + b.odds, 0) / bets.length).toFixed(2)
+    : '—'
+
+  return { won, lost, yieldVal, avgOdds }
+}
+
 export function useBets(user) {
   const [bets, setBets] = useState([])
   const [loadingBets, setLoadingBets] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
+  const [period, setPeriod] = useState('total')
 
   useEffect(() => {
     if (!user?.id || user.id === 'dev-skip') { setLoadingBets(false); return }
@@ -37,47 +113,24 @@ export function useBets(user) {
       sport: form.sport, market: form.market, analysis: form.analysis,
       status: 'pending'
     }
-    if (user.id === 'dev-skip') {
-      setBets(prev => [{ ...newBet, id: Date.now().toString(), created_at: new Date().toISOString() }, ...prev])
-    } else {
-      const { data, error } = await supabase.from('bets').insert(newBet).select()
-      if (!error) setBets(prev => [data[0], ...prev])
-    }
+    const { data, error } = await supabase.from('bets').insert(newBet).select()
+    if (!error) setBets(prev => [data[0], ...prev])
     setShowModal(false)
     setForm(EMPTY_FORM)
   }
 
   const resolveBet = async (id, result) => {
-    if (user.id === 'dev-skip') {
-      setBets(prev => prev.map(b => b.id === id ? { ...b, status: result } : b)); return
-    }
     const { error } = await supabase.from('bets').update({ status: result }).eq('id', id)
     if (!error) setBets(prev => prev.map(b => b.id === id ? { ...b, status: result } : b))
   }
 
-  const resolved = bets.filter(b => b.status !== 'pending')
-  const won = bets.filter(b => b.status === 'won')
-  const lost = bets.filter(b => b.status === 'lost')
-
-  let yieldVal = 0
-  if (resolved.length > 0) {
-    const totals = resolved.reduce(
-      (acc, b) => ({
-        stakeSum: acc.stakeSum + b.stake,
-        profit: acc.profit + (b.status === 'won' ? b.stake * (b.odds - 1) : -b.stake)
-      }),
-      { profit: 0, stakeSum: 0 }
-    )
-    yieldVal = totals.stakeSum > 0 ? (totals.profit / totals.stakeSum) * 100 : 0
-  }
-
-  const avgOdds = bets.length > 0
-    ? (bets.reduce((s, b) => s + b.odds, 0) / bets.length).toFixed(2)
-    : '—'
+  const filteredBets = filterBetsByPeriod(bets, period)
+  const { won, lost, yieldVal, avgOdds } = calcStats(filteredBets)
 
   return {
-    bets, loadingBets, showModal, setShowModal,
+    bets: filteredBets, allBets: bets, loadingBets, showModal, setShowModal,
     form, setForm, submitBet, resolveBet,
-    won, lost, yieldVal, avgOdds
+    won, lost, yieldVal, avgOdds,
+    period, setPeriod
   }
 }
