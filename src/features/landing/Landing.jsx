@@ -324,11 +324,41 @@ export default function Landing({ navigate, user }) {
           scale: { type: 'spring', stiffness: 300, damping: 24, delay: 0.15 },
         }}
       >
-        <div className="nav-logo">FindYour<span>Bet</span></div>
+        {/* Logo — sempre navega a '/' independentment de si hi ha sessió o no */}
+        <div
+          className="nav-logo"
+          onClick={() => navigate('landing')}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === 'Enter' && navigate('landing')}
+        >
+          FindYour<span>Bet</span>
+        </div>
+
         <NavLinks />
+
         <div className="nav-btns">
-          <Button variant="ghost" size="sm" onClick={() => navigate('login')}>Iniciar sesión</Button>
-          <Button size="sm" onClick={() => navigate('register')}>Registrarse</Button>
+          {user ? (
+            <>
+              {/* Sessió activa: botó al dashboard + chip d'identitat */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate('dashboard')}
+              >
+                Ir al Dashboard
+              </Button>
+              <div className="nav-user-chip">
+                <span className="nav-user-dot" />
+                <span className="nav-user-name">{user.name}</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <Button variant="ghost" size="sm" onClick={() => navigate('login')}>Iniciar sesión</Button>
+              <Button size="sm" onClick={() => navigate('register')}>Registrarse</Button>
+            </>
+          )}
         </div>
       </motion.nav>
 
