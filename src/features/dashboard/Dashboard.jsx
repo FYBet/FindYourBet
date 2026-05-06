@@ -2,24 +2,32 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSearchParams } from 'react-router-dom'
 import { useBets } from './hooks/useBets'
+import { useDMs } from './social/hooks/useDMs'
 import { BetModal } from './BetModal'
 import Estadisticas from './Estadisticas'
 import Historial from './MisApuestas'
 import Ranking from './Ranking'
 import Canales from './canales'
 import Contacto from './Contacto'
+import Social from './social'
 import './dashboard.css'
 
 const NAV_TABS = [
-  { id: 'estadisticas', label: 'Perfil', icon: '👤' },
-  { id: 'canales', label: 'Canales', icon: '📡' },
-  { id: 'ranking', label: 'Ranking', icon: '🏆' },
+  { id: 'estadisticas', label: 'Perfil' },
+  { id: 'social', label: 'Social' },
+  { id: 'canales', label: 'Canales' },
+  { id: 'ranking', label: 'Ranking' },
 ]
 
-const SIDEBAR_ITEMS = [
+const PERFIL_SIDEBAR = [
   { id: 'estadisticas', label: 'Estadísticas personales', icon: '📊' },
   { id: 'historial', label: 'Historial', icon: '📋' },
   { id: 'contacto', label: 'Contáctenos', icon: '✉️' },
+]
+
+const SOCIAL_SIDEBAR = [
+  { id: 'social', label: 'Mensajes directos', icon: '💬' },
+  { id: 'canales', label: 'Canales', icon: '📡' },
 ]
 
 export default function Dashboard({ user, logout }) {
@@ -33,6 +41,8 @@ export default function Dashboard({ user, logout }) {
     period, setPeriod
   } = useBets(user)
 
+  const { unreadCount } = useDMs(user?.id)
+
   useEffect(() => {
     const canalCode = searchParams.get('canal')
     if (canalCode) setTab('canales')
@@ -40,6 +50,7 @@ export default function Dashboard({ user, logout }) {
 
   const canalCode = searchParams.get('canal')
   const isPerfilTab = ['estadisticas', 'historial', 'contacto'].includes(tab)
+  const isSocialTab = ['social', 'canales'].includes(tab)
 
   const handleAddBetFromCanal = (channelId) => {
     setPreselectedChannelId(channelId)
@@ -50,6 +61,8 @@ export default function Dashboard({ user, logout }) {
     setShowModal(false)
     setPreselectedChannelId(null)
   }
+
+  const sidebarItems = isPerfilTab ? PERFIL_SIDEBAR : isSocialTab ? SOCIAL_SIDEBAR : null
 
   return (
     <div className="dashboard">
@@ -69,9 +82,14 @@ export default function Dashboard({ user, logout }) {
           <div className="dash-logo">FindYour<span>Bet</span></div>
           <div className="dash-nav-tabs">
             {NAV_TABS.map(t => (
-              <motion.button key={t.id} className={`dash-tab ${tab === t.id ? 'active' : ''}`}
+              <motion.button key={t.id} className={`dash-tab ${tab === t.id || (t.id === 'social' && isSocialTab) ? 'active' : ''}`}
                 whileTap={{ scale: 0.97 }} onClick={() => setTab(t.id)}>
                 {t.label}
+                {t.id === 'social' && unreadCount > 0 && (
+                  <span style={{ marginLeft: '6px', background: 'var(--color-error)', color: '#fff', borderRadius: '999px', fontSize: '10px', fontWeight: 700, padding: '1px 6px' }}>
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
               </motion.button>
             ))}
           </div>
@@ -89,16 +107,22 @@ export default function Dashboard({ user, logout }) {
 
       <div className="dash-layout">
 
-        {isPerfilTab && (
+        {sidebarItems && (
           <aside className="dash-sidebar">
-            <div className="sidebar-label">Mi perfil</div>
-            {SIDEBAR_ITEMS.map(item => (
+            {isPerfilTab && <div className="sidebar-label">Mi perfil</div>}
+            {isSocialTab && <div className="sidebar-label">Social</div>}
+            {sidebarItems.map(item => (
               <div key={item.id} className="sidebar-section">
                 <button
                   className={`sidebar-item ${tab === item.id ? 'active' : ''}`}
                   onClick={() => setTab(item.id)}>
                   <span className="sidebar-icon">{item.icon}</span>
                   {item.label}
+                  {item.id === 'social' && unreadCount > 0 && (
+                    <span style={{ marginLeft: 'auto', background: 'var(--color-error)', color: '#fff', borderRadius: '999px', fontSize: '10px', fontWeight: 700, padding: '1px 6px' }}>
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
                 </button>
               </div>
             ))}
@@ -128,6 +152,8 @@ export default function Dashboard({ user, logout }) {
             )}
 
             {tab === 'contacto' && <Contacto />}
+
+            {tab === 'social' && <Social user={user} />}
 
             {tab === 'canales' && (
               <Canales
