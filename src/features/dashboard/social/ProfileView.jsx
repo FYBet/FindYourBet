@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
-import { fadeUp } from '../../../lib/animations'
 
 export default function ProfileView({ userId, currentUser, onBack, onStartDM, isFollowing, isFollower, onFollow, onUnfollow }) {
   const [profile, setProfile] = useState(null)
   const [bets, setBets] = useState([])
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({ total: 0, won: 0, lost: 0, yieldVal: 0, avgOdds: '—' })
+  const [followersCount, setFollowersCount] = useState(0)
+  const [followingCount, setFollowingCount] = useState(0)
 
   useEffect(() => {
     if (!userId) return
@@ -16,11 +17,15 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
 
   const fetchProfile = async () => {
     setLoading(true)
-    const [{ data: profile }, { data: bets }] = await Promise.all([
+    const [{ data: profile }, { data: bets }, { count: fersCount }, { count: fingCount }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', userId).single(),
-      supabase.from('bets').select('*').eq('user_id', userId).neq('status', 'pending')
+      supabase.from('bets').select('*').eq('user_id', userId).neq('status', 'pending'),
+      supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', userId),
+      supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId),
     ])
     setProfile(profile)
+    setFollowersCount(fersCount || 0)
+    setFollowingCount(fingCount || 0)
 
     if (bets && bets.length > 0) {
       const won = bets.filter(b => b.status === 'won').length
@@ -49,12 +54,10 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
   )
 
   const isOwnProfile = userId === currentUser?.id
-  const mutual = isFollowing && isFollower
 
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
 
-      {/* HEADER */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', color: 'var(--color-text-muted)' }}>←</button>
         <div style={{ fontWeight: 700, fontSize: '18px' }}>Perfil</div>
@@ -62,15 +65,22 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
 
       {/* PERFIL */}
       <div style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '28px', marginBottom: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px', flexWrap: 'wrap' }}>
+
+        {/* AVATAR + NOM + BOTONS */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px', flexWrap: 'wrap', marginBottom: '20px' }}>
           <div style={{ width: '72px', height: '72px', background: 'var(--color-primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, border: '2px solid var(--color-primary-border)' }}>
             {(profile.username || profile.name || '?')[0].toUpperCase()}
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 700, fontSize: '20px', marginBottom: '2px' }}>
-              {profile.name || profile.username}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '2px' }}>
+              <div style={{ fontWeight: 700, fontSize: '20px' }}>{profile.name || profile.username}</div>
+              {isFollower && !isOwnProfile && (
+                <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', background: 'var(--color-bg-soft)', padding: '2px 8px', borderRadius: 'var(--radius-full)', border: '0.5px solid var(--color-border)' }}>
+                  Te sigue
+                </span>
+              )}
             </div>
-            <div style={{ fontSize: '14px', color: 'var(--color-text-muted)', marginBottom: '12px' }}>
+            <div style={{ fontSize: '14px', color: 'var(--color-text-muted)', marginBottom: '14px' }}>
               @{profile.username}
             </div>
             {!isOwnProfile && (
@@ -79,27 +89,37 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
                   onClick={() => isFollowing ? onUnfollow(userId) : onFollow(userId)}
                   style={{
                     padding: '8px 20px', borderRadius: 'var(--radius-md)', fontSize: '13px', fontWeight: 700,
-                    cursor: 'pointer', fontFamily: 'var(--font-sans)', border: 'none',
+                    cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                    border: isFollowing ? '0.5px solid var(--color-border)' : 'none',
                     background: isFollowing ? 'var(--color-bg-soft)' : 'var(--color-primary)',
                     color: isFollowing ? 'var(--color-text)' : '#010906',
-                    outline: isFollowing ? '0.5px solid var(--color-border)' : 'none'
                   }}>
                   {isFollowing ? 'Siguiendo ✓' : 'Seguir'}
                 </button>
-                {(mutual || !isFollowing) && (
-                  <button onClick={() => onStartDM(userId)}
-                    style={{ padding: '8px 20px', borderRadius: 'var(--radius-md)', fontSize: '13px', fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-sans)', border: '0.5px solid var(--color-border)', background: 'var(--color-bg-soft)', color: 'var(--color-text)' }}>
-                    💬 Mensaje
-                  </button>
-                )}
+                {/* Botó missatge SEMPRE visible si no és el teu perfil */}
+                <button onClick={() => onStartDM(userId)}
+                  style={{ padding: '8px 20px', borderRadius: 'var(--radius-md)', fontSize: '13px', fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-sans)', border: '0.5px solid var(--color-border)', background: 'var(--color-bg-soft)', color: 'var(--color-text)' }}>
+                  💬 Mensaje
+                </button>
               </div>
             )}
           </div>
-          {isFollower && !isOwnProfile && (
-            <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', background: 'var(--color-bg-soft)', padding: '3px 10px', borderRadius: 'var(--radius-full)', border: '0.5px solid var(--color-border)' }}>
-              Te sigue
-            </span>
-          )}
+        </div>
+
+        {/* SEGUIDORS / SEGUITS */}
+        <div style={{ display: 'flex', gap: '24px', paddingTop: '16px', borderTop: '0.5px solid var(--color-border)' }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontWeight: 700, fontSize: '18px' }}>{followersCount}</div>
+            <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Seguidores</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontWeight: 700, fontSize: '18px' }}>{followingCount}</div>
+            <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Siguiendo</div>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontWeight: 700, fontSize: '18px' }}>{stats.total}</div>
+            <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Picks</div>
+          </div>
         </div>
       </div>
 
