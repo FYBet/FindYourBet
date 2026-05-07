@@ -143,10 +143,12 @@ export default function MiPerfil({ user, onNavigate }) {
     // Puja la foto si n'hi ha una nova
     if (avatarFile) {
   // Esborra totes les fotos antigues d'aquest usuari abans de pujar la nova
-  const { data: existingFiles } = await supabase.storage
+  const { data: existingFiles, error: listError } = await supabase.storage
     .from('avatars')
     .list(user.id)
-  
+
+  console.log('existingFiles:', existingFiles, 'listError:', listError)
+
   if (existingFiles && existingFiles.length > 0) {
     const filesToDelete = existingFiles.map(f => `${user.id}/${f.name}`)
     await supabase.storage.from('avatars').remove(filesToDelete)
@@ -159,6 +161,7 @@ export default function MiPerfil({ user, onNavigate }) {
     .upload(path, avatarFile, { upsert: true })
 
       if (uploadError) {
+        console.log('uploadError:', uploadError)
         setSaveError('Error al subir la foto')
         setSaving(false)
         return
