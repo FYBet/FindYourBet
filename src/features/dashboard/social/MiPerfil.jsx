@@ -172,6 +172,8 @@ export default function MiPerfil({ user, onNavigate }) {
       return
     }
 
+    await supabase.auth.updateUser({ data: { name: editForm.name.trim() } })
+
     await fetchAll()
     setShowEditModal(false)
     setAvatarFile(null)
