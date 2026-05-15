@@ -15,18 +15,18 @@ const NAV_SCROLL = {
 
 const STATS = [
   { num: '1.240',  label: 'Tipsters activos' },
-  { num: '98.400', label: 'Apuestas auditadas' },
+  { num: '98.400', label: 'Picks auditados' },
   { num: '+34%',   label: 'ROI medio top 10' },
-  { num: '12',     label: 'Categorías disponibles' },
+  { num: '12',     label: 'Deportes disponibles' },
 ]
 
 const FEATURES = [
-  { title: 'Track record auditado',  desc: 'Cada apuesta verificada y registrada. No hay forma de modificar el historial.' },
+  { title: 'Track record auditado',  desc: 'Cada pick se registra antes del partido. Sin ediciones, sin trampa. El historial habla por sí solo.' },
   { title: 'Ranking transparente',   desc: 'Ordenado por ROI real, racha y volumen. Los mejores arriba, siempre.' },
-  { title: 'Suscripciones VIP',      desc: 'Accede a las apuestas privadas de los tipsters que más te interesan.' },
-  { title: 'Chat en tiempo real',    desc: 'Los tipsters publican picks y análisis. Interactúa con la comunidad.' },
-  { title: 'Tus estadísticas',       desc: 'Lleva un control de tus apuestas, ROI y evolución en el tiempo.' },
-  { title: '12 categorías',          desc: 'Fútbol, baloncesto, tenis, eSports y más. Filtra por lo que te interesa.' },
+  { title: 'Canales VIP',            desc: 'Suscríbete a los canales privados de los tipsters que más te interesan y recibe sus picks antes que nadie.' },
+  { title: 'Canales en directo',     desc: 'Cada tipster tiene su canal. Picks, análisis y debate en tiempo real con toda la comunidad.' },
+  { title: 'Tus estadísticas',       desc: 'Lleva el control de tus apuestas, ROI y evolución. Compara tu rendimiento con el ranking.' },
+  { title: '12 deportes',            desc: 'Fútbol, baloncesto, tenis, eSports y más. Encuentra al tipster experto en lo que apuestas.' },
 ]
 
 const TIPSTERS = [
@@ -267,17 +267,17 @@ function Hero({ navigate }) {
     <section className="hero" ref={ref} onMouseMove={onMove}>
       <TipsterRain />
       <motion.h1 variants={fadeUp} initial="hidden" animate="visible" custom={0}>
-        Las mejores apuestas,<br />
-        <em>con track record real</em>
+        La red social<br />
+        <em>de las apuestas deportivas</em>
       </motion.h1>
 
       <motion.p className="hero-sub" variants={fadeUp} initial="hidden" animate="visible" custom={1}>
-        Sigue a tipsters verificados, compara su historial auditado y toma decisiones inteligentes.
+        Sigue canales de tipsters con track record verificado, interactúa con la comunidad y toma decisiones con datos reales — no con fe.
       </motion.p>
 
       <motion.div className="hero-btns" variants={fadeUp} initial="hidden" animate="visible" custom={2}>
-        <Button onClick={() => navigate('register')}>Explorar tipsters</Button>
-        <Button variant="ghost" onClick={() => navigate('register')}>¿Eres tipster?</Button>
+        <Button onClick={() => navigate('register')}>Unirte gratis</Button>
+        <Button variant="ghost" onClick={() => navigate('register')}>Crear mi canal</Button>
       </motion.div>
 
       <motion.div
@@ -376,7 +376,7 @@ export default function Landing({ navigate, user }) {
       <section className="features-section" id="section-features">
         <div className="features-inner">
           <motion.div variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }}>
-            <div className="section-title">Todo lo que necesitas<br />para apostar con cabeza</div>
+            <div className="section-title">Todo en un solo sitio<br />para apostar con cabeza</div>
           </motion.div>
 
           <motion.div
@@ -471,11 +471,11 @@ export default function Landing({ navigate, user }) {
       <section className="cta-section" id="section-cta">
         <div className="cta-inner">
           <motion.div className="cta-content" variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }}>
-            <h2>Empieza gratis hoy</h2>
-            <p>Sin tarjeta de crédito. Accede al ranking completo y sigue a tipsters de forma gratuita.</p>
+            <h2>Únete a la comunidad</h2>
+            <p>Gratis, sin tarjeta. Accede al ranking completo, sigue canales de tipsters verificados y empieza a apostar con datos reales.</p>
             <div className="cta-btns">
               <Button onClick={() => navigate('register')}>Crear cuenta gratis</Button>
-              <Button variant="ghost" onClick={() => navigate('login')}>Ver tipsters</Button>
+              <Button variant="ghost" onClick={() => navigate('login')}>Iniciar sesión</Button>
             </div>
           </motion.div>
         </div>

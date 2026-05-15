@@ -35,7 +35,7 @@ function Avatar({ url, name, size = 80, fontSize = 32 }) {
   )
 }
 
-export default function MiPerfil({ user, onNavigate }) {
+export default function MiPerfil({ user, onNavigate, onAvatarUpdated }) {
   const [profile, setProfile] = useState(null)
   const [stats, setStats] = useState({ total: 0, won: 0, lost: 0, yieldVal: 0, avgOdds: '—' })
   const [followersCount, setFollowersCount] = useState(0)
@@ -177,7 +177,7 @@ export default function MiPerfil({ user, onNavigate }) {
       }
 
       const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path)
-      // Afegim timestamp per forçar reload de la imatge
+      // Timestamp para forzar reload de la imagen
       avatarUrl = `${urlData.publicUrl}?t=${Date.now()}`
     }
 
@@ -202,6 +202,7 @@ export default function MiPerfil({ user, onNavigate }) {
     await supabase.auth.updateUser({ data: { name: editForm.name.trim() } })
 
     await fetchAll()
+    onAvatarUpdated?.(avatarUrl)
     setShowEditModal(false)
     setAvatarFile(null)
     setAvatarPreview(null)
@@ -341,7 +342,7 @@ export default function MiPerfil({ user, onNavigate }) {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 500, fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.event}</div>
                       <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-                        {b.sport} · <strong>{b.pick}</strong> · @{parseFloat(b.odds).toFixed(2)} · S{b.stake}
+                        {b.sport} · <strong>{b.pick}</strong> · @{parseFloat(b.odds).toFixed(2)} · {b.stake}
                       </div>
                     </div>
                     <div style={{ textAlign: 'right', flexShrink: 0 }}>

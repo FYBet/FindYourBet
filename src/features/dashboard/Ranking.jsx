@@ -7,7 +7,9 @@ import './dashboard.css'
 const MEDALS = ['🥇', '🥈', '🥉']
 const MIN_BETS = 10
 
-const SPORTS_LIST = ['Fútbol', 'Baloncesto', 'Tenis', 'Béisbol', 'Fútbol Americano', 'eSports', 'MMA', 'Otros']
+const MAIN_SPORTS = ['Fútbol', 'Baloncesto', 'Tenis', 'eSports']
+const SPORTS_LIST = [...MAIN_SPORTS, 'Otros']
+const SPORT_ICONS = { 'Fútbol': '⚽', 'Baloncesto': '🏀', 'Tenis': '🎾', 'eSports': '🎮', 'Otros': '🏅' }
 
 const PERIODS = [
   { id: 'trimestral', label: 'Ranking' },
@@ -74,19 +76,24 @@ function getCombinations(arr) {
   return result
 }
 
+function matchesSport(bet, sport) {
+  if (sport === 'Otros') return !MAIN_SPORTS.includes(bet.sport)
+  return bet.sport === sport
+}
+
 function getBestCombination(userBets, selectedSports) {
   const validSports = selectedSports.filter(sport => {
-    const sportBets = userBets.filter(b => b.sport === sport && b.status !== 'pending')
+    const sportBets = userBets.filter(b => matchesSport(b, sport) && b.status !== 'pending')
     return sportBets.length >= MIN_BETS
   })
   if (validSports.length === 0) return null
   const combos = getCombinations(validSports)
   let best = null
   for (const combo of combos) {
-    const comboBets = userBets.filter(b => combo.includes(b.sport))
+    const comboBets = userBets.filter(b => combo.some(s => matchesSport(b, s)))
     const y = calcYieldFromBets(comboBets)
     if (y !== null && (best === null || y > best.yieldVal)) {
-      best = { yieldVal: y, bets: comboBets }
+      best = { yieldVal: y, bets: comboBets, sports: combo }
     }
   }
   return best
@@ -119,15 +126,17 @@ function useRanking(period, selectedSports) {
 
     const entries = Object.entries(byUser)
       .map(([userId, userBets]) => {
-        let finalBets
+        let finalBets, usedSports
         if (isTodos) {
           const resolved = userBets.filter(b => b.status !== 'pending')
           if (resolved.length < MIN_BETS) return null
           finalBets = userBets
+          usedSports = null
         } else {
           const best = getBestCombination(userBets, selectedSports)
           if (!best) return null
           finalBets = best.bets
+          usedSports = best.sports
         }
 
         const resolved = finalBets.filter(b => b.status !== 'pending')
@@ -140,12 +149,18 @@ function useRanking(period, selectedSports) {
           ? (finalBets.reduce((s, b) => s + b.odds, 0) / finalBets.length).toFixed(2)
           : '—'
 
+        const stakeFreq = {}
+        finalBets.forEach(b => { stakeFreq[b.stake] = (stakeFreq[b.stake] || 0) + 1 })
+        const habitualStake = finalBets.length > 0
+          ? Object.entries(stakeFreq).sort((a, b) => b[1] - a[1])[0][0]
+          : '—'
+
         const tier = resolved.length >= 150 && yieldVal >= 15 ? 'elite'
           : resolved.length >= 80 && yieldVal >= 10 ? 'gold'
           : resolved.length >= 30 && yieldVal >= 5 ? 'silver'
           : 'bronze'
 
-        return { userId, bets: resolved.length, won, lost, yieldVal, avgOdds, tier }
+        return { userId, bets: resolved.length, won, lost, yieldVal, avgOdds, habitualStake, tier, usedSports }
       })
       .filter(Boolean)
       .sort((a, b) => b.yieldVal - a.yieldVal)
@@ -371,24 +386,35 @@ export default function Ranking({ user }) {
                         {tier.label}
                       </span>
                     </div>
-                    <div className="tipster-user-rank">{t.bets} apuestas resueltas</div>
-                  </div>
-
-                  <div className="rank-metric">
-                    <div className={`rank-metric-val ${t.yieldVal >= 0 ? '' : 'red'}`}>
-                      {t.yieldVal >= 0 ? '+' : ''}{t.yieldVal.toFixed(1)}%
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+                      <span className="tipster-user-rank" style={{ margin: 0 }}>{t.bets} apuestas resueltas</span>
+                      {t.usedSports?.map(s => (
+                        <span key={s} style={{ fontSize: '10px', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-full)', padding: '1px 7px', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+                          {SPORT_ICONS[s]} {s}
+                        </span>
+                      ))}
                     </div>
-                    <div className="rank-metric-label">Yield</div>
                   </div>
 
-                  <div className="rank-metric">
-                    <div className="rank-metric-val neutral">{t.won}/{t.lost}</div>
-                    <div className="rank-metric-label">W/L</div>
-                  </div>
-
-                  <div className="rank-metric">
-                    <div className="rank-metric-val neutral">{t.avgOdds}</div>
-                    <div className="rank-metric-label">Cuota media</div>
+                  <div className="rank-metrics">
+                    <div className="rank-metric">
+                      <div className={`rank-metric-val ${t.yieldVal >= 0 ? '' : 'red'}`}>
+                        {t.yieldVal >= 0 ? '+' : ''}{t.yieldVal.toFixed(1)}%
+                      </div>
+                      <div className="rank-metric-label">Yield</div>
+                    </div>
+                    <div className="rank-metric">
+                      <div className="rank-metric-val neutral">{t.won}/{t.lost}</div>
+                      <div className="rank-metric-label">W/L</div>
+                    </div>
+                    <div className="rank-metric">
+                      <div className="rank-metric-val neutral">{t.avgOdds}</div>
+                      <div className="rank-metric-label">Cuota</div>
+                    </div>
+                    <div className="rank-metric">
+                      <div className="rank-metric-val neutral">{t.habitualStake}</div>
+                      <div className="rank-metric-label">Stake<br/>usual</div>
+                    </div>
                   </div>
 
                 </motion.div>
