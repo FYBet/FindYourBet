@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
 import { Button } from '../../../components/ui/Button'
 import { useMessages } from './hooks/useMessages'
+import { StickerPicker } from '../StickerPicker'
 
 function parseBetMessage(content) {
   try {
@@ -11,9 +12,17 @@ function parseBetMessage(content) {
 }
 
 function BetCard({ bet }) {
-  const statusColor = bet.status === 'won' ? 'var(--color-primary)' : bet.status === 'lost' ? 'var(--color-error)' : 'var(--color-text-muted)'
-  const statusLabel = bet.status === 'won' ? '✓ Ganada' : bet.status === 'lost' ? '✗ Perdida' : '⏳ Pendiente'
-  const statusBg = bet.status === 'won' ? 'var(--color-primary-light)' : bet.status === 'lost' ? 'var(--color-error-light)' : 'var(--color-bg-soft)'
+  const [liveStatus, setLiveStatus] = useState(bet.status)
+
+  useEffect(() => {
+    if (!bet.id) return
+    supabase.from('bets').select('status').eq('id', bet.id).single()
+      .then(({ data }) => { if (data?.status) setLiveStatus(data.status) })
+  }, [bet.id])
+
+  const statusColor = liveStatus === 'won' ? 'var(--color-primary)' : liveStatus === 'lost' ? 'var(--color-error)' : 'var(--color-text-muted)'
+  const statusLabel = liveStatus === 'won' ? '✓ Ganada' : liveStatus === 'lost' ? '✗ Perdida' : '⏳ Pendiente'
+  const statusBg = liveStatus === 'won' ? 'var(--color-primary-light)' : liveStatus === 'lost' ? 'var(--color-error-light)' : 'var(--color-bg-soft)'
 
   return (
     <div style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-primary-border)', borderRadius: 'var(--radius-lg)', padding: '14px 16px', minWidth: '240px', maxWidth: '300px' }}>
@@ -31,7 +40,7 @@ function BetCard({ bet }) {
         {[
           { label: 'Pick', value: bet.pick },
           { label: 'Cuota', value: parseFloat(bet.odds).toFixed(2) },
-          { label: 'Stake', value: `S${bet.stake}` },
+          { label: 'Stake', value: `${bet.stake}` },
         ].map((s, i) => (
           <div key={i} style={{ background: 'var(--color-bg-soft)', borderRadius: 'var(--radius-sm)', padding: '6px 8px', textAlign: 'center' }}>
             <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>{s.label}</div>
@@ -49,6 +58,9 @@ function BetCard({ bet }) {
 function renderMessage(content, onInternalLink, isOwnerMsg = false) {
   const linkColor = isOwnerMsg ? '#010906' : 'var(--color-primary)'
 
+  if (content.startsWith('[STICKER]:')) {
+    return <span style={{ fontSize: '56px', lineHeight: 1.1 }}>{content.replace('[STICKER]:', '')}</span>
+  }
   if (content.startsWith('[BET]:')) {
     const bet = parseBetMessage(content)
     if (bet) return <BetCard bet={bet} />
@@ -99,6 +111,7 @@ function renderMessage(content, onInternalLink, isOwnerMsg = false) {
 function isImageMessage(content) { return content.startsWith('[IMAGE]:') }
 function isLinkMessage(content) { return content.startsWith('http://') || content.startsWith('https://') }
 function isBetMessage(content) { return content.startsWith('[BET]:') }
+function isStickerMessage(content) { return content.startsWith('[STICKER]:') }
 
 function formatMsgTime(created_at) {
   if (!created_at) return ''
@@ -526,6 +539,7 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
   const [uploadError, setUploadError] = useState('')
   const [showMenu, setShowMenu] = useState(false)
   const [showInfo, setShowInfo] = useState(false)
+  const [showStickers, setShowStickers] = useState(false)
   const [muted, setMuted] = useState(false)
   const fileInputRef = useRef(null)
   const scrollRef = useRef(null)
@@ -564,8 +578,15 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
     await sendMessage(content, user.id)
   }
 
+  const handleSendSticker = (sticker) => {
+    setText(prev => prev + sticker)
+    setShowStickers(false)
+  }
+
   const handleKey = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    if (e.ctrlKey) { setText(prev => prev + '\n') } else { handleSend() }
   }
 
   const handleFile = async (e) => {
@@ -650,7 +671,9 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
           </div>
         ) : messages.map((m, i) => {
           const isBet = isBetMessage(m.content)
-          const isOwnerMsg = m.user_id === user.id && !isBet
+          const isSticker = isStickerMessage(m.content)
+          const isSpecial = isBet || isSticker
+          const isOwnerMsg = m.user_id === user.id && !isSpecial
           const timeStr = formatMsgTime(m.created_at)
           const prev = messages[i - 1]
           const showDaySep = !prev || getDayLabel(m.created_at) !== getDayLabel(prev.created_at)
@@ -658,17 +681,17 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
             <div key={m.id}>
               {showDaySep && <DaySeparator label={getDayLabel(m.created_at) ?? ''} />}
               <div style={{ display: 'flex', justifyContent: isBet ? 'flex-start' : m.user_id === user.id ? 'flex-end' : 'flex-start' }}>
-                <div style={{ maxWidth: isBet ? '320px' : '70%' }}>
+                <div style={{ maxWidth: isBet ? '320px' : isSticker ? 'fit-content' : '70%' }}>
                   <div style={{
                     position: 'relative',
-                    background: isBet ? 'transparent' : m.user_id === user.id ? 'var(--color-primary)' : 'var(--color-bg-soft)',
+                    background: isSpecial ? 'transparent' : m.user_id === user.id ? 'var(--color-primary)' : 'var(--color-bg-soft)',
                     color: isOwnerMsg ? '#010906' : 'var(--color-text)',
-                    padding: isBet ? '0' : '10px 14px 22px 14px',
-                    borderRadius: 'var(--radius-lg)', fontSize: '14px', lineHeight: 1.5,
-                    border: isBet ? 'none' : m.user_id === user.id ? 'none' : '0.5px solid var(--color-border)'
+                    padding: isSpecial ? '0' : '10px 14px 22px 14px',
+                    borderRadius: 'var(--radius-lg)', fontSize: '14px', lineHeight: 1.5, whiteSpace: 'pre-wrap',
+                    border: isSpecial ? 'none' : m.user_id === user.id ? 'none' : '0.5px solid var(--color-border)'
                   }}>
                     {renderMessage(m.content, handleInternalLink, isOwnerMsg)}
-                    {!isBet && timeStr && (
+                    {!isSpecial && timeStr && (
                       <span style={{
                         position: 'absolute', bottom: '6px', right: '10px',
                         fontSize: '10px',
@@ -679,7 +702,7 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
                       </span>
                     )}
                   </div>
-                  {isBet && timeStr && (
+                  {isSpecial && timeStr && (
                     <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '4px', opacity: 0.6 }}>
                       {timeStr}
                     </div>
@@ -706,8 +729,17 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
             {uploading ? '⏳' : '📎'}
           </button>
           <textarea value={text} onChange={e => setText(e.target.value)} onKeyDown={handleKey}
-            placeholder="Escribe un mensaje... (Enter para enviar)" rows={2}
+            placeholder="Envía un mensaje" rows={2}
             style={{ flex: 1, background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '14px', padding: '12px 14px', borderRadius: 'var(--radius-md)', outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <button onClick={() => setShowStickers(v => !v)}
+              style={{ background: showStickers ? 'var(--color-primary-light)' : 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '11px 14px', cursor: 'pointer', fontSize: '16px', color: showStickers ? 'var(--color-primary)' : 'var(--color-text-muted)' }}>
+              😊
+            </button>
+            <AnimatePresence>
+              {showStickers && <StickerPicker onSelect={handleSendSticker} onClose={() => setShowStickers(false)} />}
+            </AnimatePresence>
+          </div>
           <button onClick={() => onAddBet?.(channel.id)}
             style={{ background: 'var(--color-primary-light)', border: '0.5px solid var(--color-primary-border)', borderRadius: 'var(--radius-md)', padding: '11px 14px', cursor: 'pointer', fontSize: '13px', color: 'var(--color-primary)', fontWeight: 700, flexShrink: 0, fontFamily: 'var(--font-sans)', whiteSpace: 'nowrap' }}>
             📊 Añadir apuesta

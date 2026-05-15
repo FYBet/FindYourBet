@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
+import { StickerPicker } from '../StickerPicker'
 
 function formatTime(ts) {
   if (!ts) return ''
@@ -11,6 +12,9 @@ function formatTime(ts) {
 
 function renderContent(content, isOwn) {
   if (!content) return null
+  if (content.startsWith('[STICKER]:')) {
+    return <span style={{ fontSize: '56px', lineHeight: 1.1 }}>{content.replace('[STICKER]:', '')}</span>
+  }
   if (content.startsWith('[IMAGE]:')) {
     const url = content.replace('[IMAGE]:', '')
     return <img src={url} alt="img" style={{ display: 'block', minWidth: '160px', minHeight: '120px', maxWidth: '100%', maxHeight: '340px', borderRadius: 'var(--radius-md)' }} />
@@ -27,11 +31,12 @@ function renderContent(content, isOwn) {
   return content
 }
 
-export default function DMView({ conversation, currentUser, onBack, onSend, onFetchMessages, onBlock, onReport, onMute }) {
+export default function DMView({ conversation, currentUser, onBack, onSend, onFetchMessages, onBlock, onReport, onMute, onViewProfile }) {
   const [messages, setMessages] = useState([])
   const [text, setText] = useState('')
   const [loading, setLoading] = useState(true)
   const [showMenu, setShowMenu] = useState(false)
+  const [showStickers, setShowStickers] = useState(false)
   const [muted, setMuted] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
@@ -66,8 +71,15 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
     await loadMessages()
   }
 
+  const handleSendSticker = (sticker) => {
+    setText(prev => prev + sticker)
+    setShowStickers(false)
+  }
+
   const handleKey = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    if (e.ctrlKey) { setText(prev => prev + '\n') } else { handleSend() }
   }
 
   const handleFile = async (e) => {
@@ -109,12 +121,17 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
       {/* HEADER */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', color: 'var(--color-text-muted)' }}>←</button>
-        <div style={{ width: '36px', height: '36px', background: 'var(--color-primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0 }}>
-          {(conversation.otherUsername || '?')[0].toUpperCase()}
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 700, fontSize: '15px' }}>@{conversation.otherUsername}</div>
-          {conversation.otherName && <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{conversation.otherName}</div>}
+        <div onClick={() => onViewProfile?.(conversation.otherId)}
+          style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, cursor: 'pointer' }}>
+          <div style={{ width: '36px', height: '36px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 700, color: 'var(--color-primary)' }}>
+            {conversation.otherAvatarUrl
+              ? <img src={conversation.otherAvatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : (conversation.otherUsername || '?')[0].toUpperCase()}
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: '15px' }}>{conversation.otherName || conversation.otherUsername}</div>
+            <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{conversation.otherUsername}</div>
+          </div>
         </div>
         <div style={{ position: 'relative' }}>
           <button onClick={() => setShowMenu(!showMenu)}
@@ -150,19 +167,20 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
         ) : messages.map(m => {
           const isOwn = m.sender_id === currentUser.id
           const isImage = m.content?.startsWith('[IMAGE]:')
+          const isSticker = m.content?.startsWith('[STICKER]:')
           return (
             <div key={m.id} style={{ display: 'flex', justifyContent: isOwn ? 'flex-end' : 'flex-start' }}>
-              <div style={{ maxWidth: '70%' }}>
+              <div style={{ maxWidth: isSticker ? 'fit-content' : '70%' }}>
                 <div style={{
                   position: 'relative',
-                  background: isOwn ? 'var(--color-primary)' : 'var(--color-bg-soft)',
+                  background: isSticker ? 'transparent' : isOwn ? 'var(--color-primary)' : 'var(--color-bg-soft)',
                   color: isOwn ? '#010906' : 'var(--color-text)',
-                  padding: isImage ? '6px' : '10px 14px 22px 14px',
-                  borderRadius: 'var(--radius-lg)', fontSize: '14px', lineHeight: 1.5,
-                  border: isOwn ? 'none' : '0.5px solid var(--color-border)'
+                  padding: isImage ? '6px' : isSticker ? '0' : '10px 14px 22px 14px',
+                  borderRadius: 'var(--radius-lg)', fontSize: '14px', lineHeight: 1.5, whiteSpace: 'pre-wrap',
+                  border: isOwn || isSticker ? 'none' : '0.5px solid var(--color-border)'
                 }}>
                   {renderContent(m.content, isOwn)}
-                  {!isImage && (
+                  {!isImage && !isSticker && (
                     <span style={{
                       position: 'absolute', bottom: '5px', right: '10px',
                       fontSize: '10px',
@@ -173,7 +191,7 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
                     </span>
                   )}
                 </div>
-                {isImage && (
+                {(isImage || isSticker) && (
                   <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '3px', textAlign: isOwn ? 'right' : 'left' }}>
                     {formatTime(m.created_at)}
                   </div>
@@ -226,8 +244,17 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
               {uploading ? '⏳' : '📎'}
             </button>
             <textarea value={text} onChange={e => setText(e.target.value)} onKeyDown={handleKey}
-              placeholder="Escribe un mensaje... (Enter para enviar)" rows={2}
+              placeholder="Envía un mensaje" rows={2}
               style={{ flex: 1, background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '14px', padding: '12px 14px', borderRadius: 'var(--radius-md)', outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              <button onClick={() => setShowStickers(v => !v)}
+                style={{ background: showStickers ? 'var(--color-primary-light)' : 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '11px 14px', cursor: 'pointer', fontSize: '16px', color: showStickers ? 'var(--color-primary)' : 'var(--color-text-muted)' }}>
+                😊
+              </button>
+              <AnimatePresence>
+                {showStickers && <StickerPicker onSelect={handleSendSticker} onClose={() => setShowStickers(false)} />}
+              </AnimatePresence>
+            </div>
             <button onClick={handleSend} disabled={!text.trim()}
               style={{ background: text.trim() ? 'var(--color-primary)' : 'var(--color-bg-soft)', color: text.trim() ? '#010906' : 'var(--color-text-muted)', border: 'none', padding: '12px 18px', borderRadius: 'var(--radius-md)', cursor: text.trim() ? 'pointer' : 'default', fontWeight: 700, fontSize: '13px', fontFamily: 'var(--font-sans)', flexShrink: 0 }}>
               Enviar

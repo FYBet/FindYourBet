@@ -146,7 +146,7 @@ export default function FeedCard({ post, currentUserId, onLike, onComment, onNav
               </div>
               <div>
                 <div style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '2px' }}>Stake</div>
-                <div style={{ fontWeight: 700, fontSize: '15px' }}>S{bet?.stake}</div>
+                <div style={{ fontWeight: 700, fontSize: '15px' }}>{bet?.stake}</div>
               </div>
               <div>
                 <div style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '2px' }}>Fecha</div>

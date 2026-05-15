@@ -4,7 +4,7 @@ import { supabase } from '../../../../lib/supabase'
 const MAX_OWN_CHANNELS = 5
 const MAX_JOINED_CHANNELS = 30
 
-// Genera un codi d'invitació aleatori de 8 caràcters
+// Genera un código de invitación aleatorio de 8 caracteres
 function generateInviteCode() {
   return Math.random().toString(36).substring(2, 10).toLowerCase()
 }
@@ -136,7 +136,7 @@ export function useChannels(user) {
     })
   }
 
-  // Busca un canal pel codi d'invitació (per canals privats)
+  // Busca un canal por código de invitación (para canales privados)
   const findChannelByCode = async (code) => {
     if (!code.trim()) return null
     const { data } = await supabase.from('channels').select('*')

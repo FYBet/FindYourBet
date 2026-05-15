@@ -131,7 +131,8 @@ export function useBets(user) {
 
     const newBet = {
       user_id: user.id, event: form.event, pick: form.pick,
-      odds: parseFloat(form.odds), stake: form.stake, date: form.date,
+      odds: parseFloat(form.odds), stake: form.stake,
+      date: new Date(form.date).toISOString(),
       sport: form.sport, market: form.market, analysis: form.analysis,
       status: 'pending', channel_ids: channelIds
     }
@@ -154,12 +155,18 @@ export function useBets(user) {
     if (!error) setBets(prev => prev.filter(b => b.id !== id))
   }
 
+  const updateBet = async (id, updates) => {
+    const { error } = await supabase.from('bets').update(updates).eq('id', id)
+    if (!error) setBets(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b))
+    return { error }
+  }
+
   const filteredBets = filterBetsByPeriod(bets, period)
   const { won, lost, yieldVal, avgOdds } = calcStats(filteredBets)
 
   return {
     bets: filteredBets, allBets: bets, loadingBets, showModal, setShowModal,
-    form, setForm, submitBet, resolveBet, deleteBet,
+    form, setForm, submitBet, resolveBet, deleteBet, updateBet,
     won, lost, yieldVal, avgOdds,
     period, setPeriod
   }

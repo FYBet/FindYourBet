@@ -63,6 +63,7 @@ export default function Social({ user }) {
         onFetchMessages={fetchMessages}
         onBlock={(id) => { blockUser(id); setView('list') }}
         onReport={() => alert('Conversación reportada.')}
+        onViewProfile={(userId) => { setActiveProfile(userId); setView('profile') }}
       />
     )
   }
@@ -132,7 +133,7 @@ export default function Social({ user }) {
         </AnimatePresence>
       </div>
 
-      {/* SOL·LICITUDS PENDENTS */}
+      {/* SOLICITUDES PENDIENTES */}
       {pending.length > 0 && (
         <div style={{ marginBottom: '24px' }}>
           <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px' }}>
@@ -141,8 +142,10 @@ export default function Social({ user }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {pending.map(c => (
               <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px', background: 'var(--color-bg)', border: '0.5px solid var(--color-primary-border)', borderRadius: 'var(--radius-lg)' }}>
-                <div style={{ width: '40px', height: '40px', background: 'var(--color-primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0 }}>
-                  {(c.otherUsername || '?')[0].toUpperCase()}
+                <div style={{ width: '40px', height: '40px', background: 'var(--color-primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden' }}>
+                  {c.otherAvatarUrl
+                    ? <img src={c.otherAvatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : (c.otherUsername || '?')[0].toUpperCase()}
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600, fontSize: '14px' }}>@{c.otherUsername}</div>
@@ -189,8 +192,10 @@ export default function Social({ user }) {
                   onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--color-border)'}>
                   <div onClick={() => handleOpenConv(c)} style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, cursor: 'pointer', minWidth: 0 }}>
                     <div style={{ position: 'relative', flexShrink: 0 }}>
-                      <div style={{ width: '44px', height: '44px', background: 'var(--color-primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '17px', fontWeight: 700, color: 'var(--color-primary)', opacity: muted ? 0.5 : 1 }}>
-                        {(c.otherUsername || '?')[0].toUpperCase()}
+                      <div style={{ width: '44px', height: '44px', background: 'var(--color-primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '17px', fontWeight: 700, color: 'var(--color-primary)', opacity: muted ? 0.5 : 1, overflow: 'hidden' }}>
+                        {c.otherAvatarUrl
+                          ? <img src={c.otherAvatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : (c.otherUsername || '?')[0].toUpperCase()}
                       </div>
                       {c.unread > 0 && !muted && (
                         <div style={{ position: 'absolute', top: '-2px', right: '-2px', width: '18px', height: '18px', background: 'var(--color-error)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 700, color: '#fff' }}>

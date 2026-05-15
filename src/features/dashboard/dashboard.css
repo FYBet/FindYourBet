@@ -159,6 +159,19 @@
 }
 .btn-loss:hover { background: var(--color-error); color: #fff; }
 
+/* HISTORIAL 2-COLUMN LAYOUT */
+.historial-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 960px) {
+  .historial-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* EMPTY STATE */
 .empty-state { text-align: center; padding: 60px 24px; color: var(--color-text-muted); }
 .empty-icon { font-size: 48px; margin-bottom: 16px; }
@@ -168,20 +181,38 @@
 /* RANKING */
 .ranking-list { display: flex; flex-direction: column; gap: 8px; }
 .ranking-item {
-  display: grid; grid-template-columns: 48px 1fr 100px 100px 100px;
+  display: grid; grid-template-columns: 48px 1fr auto;
   align-items: center; gap: 16px; padding: 16px 20px;
   background: var(--color-bg); border: 0.5px solid var(--color-border);
   border-radius: var(--radius-lg); transition: border-color 0.2s;
 }
 .ranking-item:hover { border-color: var(--color-primary-border); }
-.rank-pos { font-size: 20px; font-weight: 700; color: var(--color-text-muted); text-align: center; }
-.tipster-info-rank { }
+.rank-pos { font-size: 20px; font-weight: 700; color: var(--color-text-muted); text-align: center; flex-shrink: 0; }
+.tipster-info-rank { min-width: 0; }
 .tipster-name-rank { font-weight: 600; font-size: 14px; }
 .tipster-user-rank { font-size: 12px; color: var(--color-text-muted); margin-top: 2px; }
-.rank-metric { text-align: center; }
-.rank-metric-val { font-size: 16px; font-weight: 700; color: var(--color-primary); }
+.rank-metrics { display: flex; gap: 4px; }
+.rank-metric { text-align: center; min-width: 68px; padding: 0 8px; }
+.rank-metric + .rank-metric { border-left: 0.5px solid var(--color-border); }
+.rank-metric-val { font-size: 15px; font-weight: 700; color: var(--color-primary); }
 .rank-metric-val.neutral { color: var(--color-text); }
 .rank-metric-label { font-size: 10px; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
+
+@media (max-width: 620px) {
+  .ranking-item {
+    grid-template-columns: 36px 1fr;
+    grid-template-rows: auto auto;
+    gap: 10px 10px;
+    padding: 12px 14px;
+  }
+  .rank-metrics {
+    grid-column: 1 / -1;
+    justify-content: space-around;
+  }
+  .rank-metric { min-width: 0; flex: 1; padding: 0 4px; }
+  .rank-pos { font-size: 16px; align-self: center; }
+  .tipster-name-rank { font-size: 13px; }
+}
 
 /* MODAL */
 .modal-overlay {

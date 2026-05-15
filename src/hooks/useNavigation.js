@@ -1,6 +1,6 @@
-// Centralitzem la navegació aquí perquè si canviem
-// de sistema de routing (React Router, etc.) només
-// cal tocar aquest fitxer i no tots els components
+// Centralizamos la navegación aquí para que si cambiamos
+// de sistema de routing (React Router, etc.) solo
+// haga falta tocar este fichero y no todos los componentes
 import { useState } from 'react'
 
 export function useNavigation(initial = 'landing') {

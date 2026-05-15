@@ -74,25 +74,35 @@ function AppRoutes() {
   const [unlocked, setUnlocked] = useState(() => localStorage.getItem('fyb_unlocked') === '1')
   const navigate = useNavigate()
 
-useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setUser({
-          id: session.user.id,
-          name: session.user.user_metadata?.name || session.user.email,
-          email: session.user.email,
-        })
+  const buildUser = async (authUser) => {
+    const { data: profile } = await supabase.from('profiles').select('avatar_url, username, name').eq('id', authUser.id).single()
+    return {
+      id: authUser.id,
+      name: profile?.name || authUser.user_metadata?.name || authUser.email,
+      email: authUser.email,
+      avatar_url: profile?.avatar_url || null,
+    }
+  }
+
+  const refreshUser = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session?.user) setUser(await buildUser(session.user))
+  }
+
+  useEffect(() => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      try {
+        if (session?.user) setUser(await buildUser(session.user))
+      } catch {
+        if (session?.user) setUser({ id: session.user.id, name: session.user.user_metadata?.name || session.user.email, email: session.user.email, avatar_url: null })
+      } finally {
+        setLoading(false)
       }
-      setLoading(false)
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
-        setUser({
-          id: session.user.id,
-          name: session.user.user_metadata?.name || session.user.email,
-          email: session.user.email,
-        })
+        try { setUser(await buildUser(session.user)) } catch { setUser({ id: session.user.id, name: session.user.user_metadata?.name || session.user.email, email: session.user.email, avatar_url: null }) }
       } else {
         setUser(null)
       }
@@ -120,7 +130,7 @@ useEffect(() => {
     </div>
   )
 
-  // Si no està desbloquejat, mostra la pantalla de codi
+  // Si no está desbloqueado, muestra la pantalla de código
   if (!unlocked) return <GateScreen onUnlock={() => setUnlocked(true)} />
 
   return (
@@ -128,7 +138,7 @@ useEffect(() => {
       <Route path="/" element={<Landing navigate={(page) => navigate(`/${page === 'landing' ? '' : page}`)} user={user} />} />
       <Route path="/login" element={<Login navigate={(page) => navigate(`/${page === 'landing' ? '' : page}`)} login={login} />} />
       <Route path="/register" element={<Register navigate={(page) => navigate(`/${page === 'landing' ? '' : page}`)} login={login} />} />
-      <Route path="/dashboard" element={user ? <Dashboard navigate={(page) => navigate(`/${page === 'landing' ? '' : page}`)} user={user} logout={logout} /> : <Navigate to="/" />} />
+      <Route path="/dashboard" element={user ? <Dashboard navigate={(page) => navigate(`/${page === 'landing' ? '' : page}`)} user={user} logout={logout} onRefreshUser={refreshUser} /> : <Navigate to="/" />} />
       <Route path="/canal/:code" element={<CanalPage />} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>

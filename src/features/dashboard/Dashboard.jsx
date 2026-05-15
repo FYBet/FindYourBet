@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSearchParams, useNavigate } from 'react-router-dom'
+import { supabase } from '../../lib/supabase'
 import { useBets } from './hooks/useBets'
 import { useDMs } from './social/hooks/useDMs'
 import { BetModal } from './BetModal'
@@ -17,12 +18,20 @@ import NotificationsPanel from './notifications/NotificationsPanel'
 import Configuracion from './Configuracion'
 import './dashboard.css'
 
-const NAV_TABS = [
-  { id: 'estadisticas', label: 'Perfil' },
-  { id: 'social', label: 'Social' },
-  { id: 'ranking', label: 'Ranking' },
-  { id: 'contacto', label: 'Contacto' },
+const SHORTCUT_OPTIONS = [
+  { id: 'miperfil',     label: 'Perfil',           icon: '👤' },
+  { id: 'estadisticas', label: 'Estadísticas',      icon: '📊' },
+  { id: 'historial',    label: 'Historial',         icon: '📋' },
+  { id: 'feed',         label: 'Descubre',          icon: '🔥' },
+  { id: 'canales',      label: 'Canales',           icon: '📡' },
+  { id: 'social',       label: 'Mensajes',          icon: '💬' },
+  { id: 'ranking',      label: 'Ranking',           icon: '🏆' },
+  { id: 'contacto',     label: 'Contacto',          icon: '📱' },
+  { id: 'sugerencias',  label: 'Sugerencias',       icon: '💡' },
 ]
+
+const DEFAULT_SHORTCUTS = ['estadisticas', 'social', 'ranking', 'contacto']
+const MAX_SHORTCUTS = 5
 
 const SIDEBAR = [
   {
@@ -56,14 +65,141 @@ const SIDEBAR = [
   },
 ]
 
-export default function Dashboard({ user, logout }) {
+function ShortcutConfigModal({ shortcuts, onSave, onClose }) {
+  const [selected, setSelected] = useState([...shortcuts])
+
+  const toggle = (id) => {
+    if (selected.includes(id)) {
+      setSelected(selected.filter(s => s !== id))
+    } else {
+      if (selected.length >= MAX_SHORTCUTS) return
+      setSelected([...selected, id])
+    }
+  }
+
+  const move = (index, dir) => {
+    const next = [...selected]
+    const to = index + dir
+    if (to < 0 || to >= next.length) return
+    ;[next[index], next[to]] = [next[to], next[index]]
+    setSelected(next)
+  }
+
+  const handleSave = () => { onSave(selected); onClose() }
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+      onClick={onClose}>
+      <motion.div initial={{ opacity: 0, y: 20, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.97 }}
+        onClick={e => e.stopPropagation()}
+        style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-xl)', padding: '28px', width: '100%', maxWidth: '460px', boxShadow: 'var(--shadow-md)' }}>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+          <div style={{ fontWeight: 700, fontSize: '16px' }}>Atajos de navegación</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', color: 'var(--color-text-muted)' }}>×</button>
+        </div>
+        <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '20px' }}>
+          Máximo {MAX_SHORTCUTS} atajos. Reordénalos con las flechas.
+        </div>
+
+        {/* Seleccionados */}
+        <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>
+          Seleccionados ({selected.length}/{MAX_SHORTCUTS})
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '20px', minHeight: '48px' }}>
+          {selected.length === 0 && (
+            <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', padding: '12px', textAlign: 'center', border: '0.5px dashed var(--color-border)', borderRadius: 'var(--radius-md)' }}>
+              Ningún atajo seleccionado
+            </div>
+          )}
+          {selected.map((id, i) => {
+            const opt = SHORTCUT_OPTIONS.find(o => o.id === id)
+            if (!opt) return null
+            return (
+              <div key={id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', background: 'var(--color-primary-light)', border: '0.5px solid var(--color-primary-border)', borderRadius: 'var(--radius-md)' }}>
+                <span style={{ fontSize: '15px' }}>{opt.icon}</span>
+                <span style={{ flex: 1, fontSize: '13px', fontWeight: 600, color: 'var(--color-primary)' }}>{opt.label}</span>
+                <div style={{ display: 'flex', gap: '2px' }}>
+                  <button onClick={() => move(i, -1)} disabled={i === 0}
+                    style={{ background: 'none', border: 'none', cursor: i === 0 ? 'default' : 'pointer', fontSize: '14px', color: i === 0 ? 'var(--color-border)' : 'var(--color-primary)', padding: '2px 4px', fontFamily: 'var(--font-sans)' }}>←</button>
+                  <button onClick={() => move(i, 1)} disabled={i === selected.length - 1}
+                    style={{ background: 'none', border: 'none', cursor: i === selected.length - 1 ? 'default' : 'pointer', fontSize: '14px', color: i === selected.length - 1 ? 'var(--color-border)' : 'var(--color-primary)', padding: '2px 4px', fontFamily: 'var(--font-sans)' }}>→</button>
+                  <button onClick={() => toggle(id)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', color: 'var(--color-error)', padding: '2px 4px' }}>×</button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Disponibles */}
+        <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>
+          Añadir
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', marginBottom: '24px' }}>
+          {SHORTCUT_OPTIONS.filter(o => !selected.includes(o.id)).map(opt => {
+            const disabled = selected.length >= MAX_SHORTCUTS
+            return (
+              <button key={opt.id} onClick={() => toggle(opt.id)} disabled={disabled}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 12px', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.4 : 1, fontFamily: 'var(--font-sans)', transition: 'all 0.15s' }}>
+                <span style={{ fontSize: '14px' }}>{opt.icon}</span>
+                <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--color-text)' }}>{opt.label}</span>
+              </button>
+            )
+          })}
+          {SHORTCUT_OPTIONS.filter(o => !selected.includes(o.id)).length === 0 && (
+            <div style={{ gridColumn: '1/-1', fontSize: '13px', color: 'var(--color-text-muted)', textAlign: 'center', padding: '8px' }}>
+              Todas las opciones están seleccionadas
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={handleSave}
+            style={{ flex: 1, background: 'var(--color-primary)', color: '#010906', border: 'none', padding: '11px', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 700, fontSize: '13px', fontFamily: 'var(--font-sans)' }}>
+            Guardar
+          </button>
+          <button onClick={onClose}
+            style={{ padding: '11px 20px', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 600, fontSize: '13px', fontFamily: 'var(--font-sans)', color: 'var(--color-text)' }}>
+            Cancelar
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+export default function Dashboard({ user, logout, onRefreshUser }) {
   const [tab, setTab] = useState('estadisticas')
+  const [navAvatar, setNavAvatar] = useState(user?.avatar_url || null)
+  const [showShortcutConfig, setShowShortcutConfig] = useState(false)
+
+  const shortcutKey = `fyb_shortcuts_${user?.id}`
+  const [shortcuts, setShortcuts] = useState(() => {
+    try {
+      const saved = localStorage.getItem(shortcutKey)
+      return saved ? JSON.parse(saved) : DEFAULT_SHORTCUTS
+    } catch { return DEFAULT_SHORTCUTS }
+  })
+
+  const saveShortcuts = (next) => {
+    setShortcuts(next)
+    localStorage.setItem(shortcutKey, JSON.stringify(next))
+  }
+
+  useEffect(() => {
+    if (!user?.id) return
+    supabase.from('profiles').select('avatar_url').eq('id', user.id).single()
+      .then(({ data }) => { if (data?.avatar_url) setNavAvatar(data.avatar_url) })
+  }, [user?.id])
+
   const [preselectedChannelId, setPreselectedChannelId] = useState(null)
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const {
     bets, allBets, loadingBets, showModal, setShowModal,
-    form, setForm, submitBet, resolveBet, deleteBet,
+    form, setForm, submitBet, resolveBet, deleteBet, updateBet,
     won, lost, yieldVal, avgOdds,
     period, setPeriod
   } = useBets(user)
@@ -89,11 +225,6 @@ export default function Dashboard({ user, logout }) {
     setPreselectedChannelId(null)
   }
 
-  const activeNavTab = ['social', 'canales', 'feed'].includes(tab) ? 'social'
-    : ['contacto', 'sugerencias'].includes(tab) ? 'contacto'
-    : ['miperfil', 'historial', 'configuracion'].includes(tab) ? 'estadisticas'
-    : tab
-
   const handleNavigateToChannel = (channel) => {
     navigate(`/dashboard?canal=${channel.invite_code}`)
     setTab('canales')
@@ -111,25 +242,47 @@ export default function Dashboard({ user, logout }) {
         preselectedChannelId={preselectedChannelId}
       />
 
+      <AnimatePresence>
+        {showShortcutConfig && (
+          <ShortcutConfigModal
+            shortcuts={shortcuts}
+            onSave={saveShortcuts}
+            onClose={() => setShowShortcutConfig(false)}
+          />
+        )}
+      </AnimatePresence>
+
       {/* NAV */}
       <motion.nav className="dash-nav"
         initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
         <div className="dash-nav-left">
           <div className="dash-logo" style={{ cursor: 'pointer' }} onClick={() => navigate('/')}>FindYour<span>Bet</span></div>
           <div className="dash-nav-tabs">
-            {NAV_TABS.map(t => (
-              <motion.button key={t.id}
-                className={`dash-tab ${activeNavTab === t.id ? 'active' : ''}`}
-                whileTap={{ scale: 0.97 }}
-                onClick={() => setTab(t.id)}>
-                {t.label}
-                {t.id === 'social' && unreadCount > 0 && (
-                  <span style={{ marginLeft: '6px', background: 'var(--color-error)', color: '#fff', borderRadius: '999px', fontSize: '10px', fontWeight: 700, padding: '1px 6px' }}>
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </span>
-                )}
-              </motion.button>
-            ))}
+            {shortcuts.map(id => {
+              const opt = SHORTCUT_OPTIONS.find(o => o.id === id)
+              if (!opt) return null
+              return (
+                <motion.button key={id}
+                  className={`dash-tab ${tab === id ? 'active' : ''}`}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => setTab(id)}>
+                  {opt.label}
+                  {id === 'social' && unreadCount > 0 && (
+                    <span style={{ marginLeft: '6px', background: 'var(--color-error)', color: '#fff', borderRadius: '999px', fontSize: '10px', fontWeight: 700, padding: '1px 6px' }}>
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </motion.button>
+              )
+            })}
+            <motion.button whileTap={{ scale: 0.97 }}
+              onClick={() => setShowShortcutConfig(true)}
+              title="Personalizar atajos"
+              style={{ padding: '7px 10px', fontSize: '13px', fontWeight: 500, color: 'var(--color-text-muted)', background: 'transparent', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', opacity: 0.5, transition: 'opacity 0.15s' }}
+              onMouseEnter={e => e.currentTarget.style.opacity = 1}
+              onMouseLeave={e => e.currentTarget.style.opacity = 0.5}>
+              ✏️
+            </motion.button>
           </div>
         </div>
         <div className="dash-nav-right">
@@ -156,7 +309,11 @@ export default function Dashboard({ user, logout }) {
 
           <div className="user-chip" style={{ cursor: 'pointer' }}
             onClick={() => setTab('miperfil')}>
-            <div className="user-avatar">{(user?.name || 'U')[0].toUpperCase()}</div>
+            <div className="user-avatar" style={{ overflow: 'hidden', padding: 0 }}>
+              {navAvatar
+                ? <img src={navAvatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                : (user?.name || 'U')[0].toUpperCase()}
+            </div>
             <span>{user?.name || 'Usuario'}</span>
           </div>
           <motion.button className="dash-tab" whileTap={{ scale: 0.98 }} onClick={logout}>
@@ -167,7 +324,7 @@ export default function Dashboard({ user, logout }) {
 
       <div className="dash-layout">
 
-        {/* SIDEBAR SEMPRE VISIBLE */}
+        {/* SIDEBAR */}
         <aside className="dash-sidebar">
           {SIDEBAR.map(section => (
             <div key={section.label} style={{ marginBottom: '8px' }}>
@@ -206,11 +363,9 @@ export default function Dashboard({ user, logout }) {
 
             {tab === 'historial' && (
               <Historial key="historial"
-                bets={bets} loadingBets={loadingBets}
-                won={won} lost={lost} yieldVal={yieldVal} avgOdds={avgOdds}
+                bets={allBets} loadingBets={loadingBets}
                 onNewBet={() => setShowModal(true)} onResolveBet={resolveBet}
-                onDeleteBet={deleteBet}
-                period={period} onPeriodChange={setPeriod}
+                onDeleteBet={deleteBet} onUpdateBet={updateBet}
               />
             )}
 
@@ -239,7 +394,7 @@ export default function Dashboard({ user, logout }) {
             )}
 
             {tab === 'miperfil' && (
-              <MiPerfil key="miperfil" user={user} onNavigate={setTab} />
+              <MiPerfil key="miperfil" user={user} onNavigate={setTab} onAvatarUpdated={(url) => { setNavAvatar(url); onRefreshUser?.() }} />
             )}
 
             {tab === 'configuracion' && (

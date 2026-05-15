@@ -29,7 +29,7 @@ export function useDMs(currentUserId) {
       const otherAccepted = conv.user1_id === currentUserId ? conv.user2_accepted : conv.user1_accepted
 
       const [{ data: profile }, { data: lastMsg }, { count: unread }] = await Promise.all([
-        supabase.from('profiles').select('username, name').eq('id', otherId).single(),
+        supabase.from('profiles').select('username, name, avatar_url').eq('id', otherId).single(),
         supabase.from('direct_messages').select('content, created_at, sender_id')
           .eq('conversation_id', conv.id).order('created_at', { ascending: false }).limit(1).single(),
         supabase.from('direct_messages').select('*', { count: 'exact', head: true })
@@ -41,6 +41,7 @@ export function useDMs(currentUserId) {
         otherId,
         otherUsername: profile?.username || otherId.slice(0, 6),
         otherName: profile?.name || '',
+        otherAvatarUrl: profile?.avatar_url || null,
         lastMessage: lastMsg?.content || '',
         lastMessageAt: lastMsg?.created_at || conv.created_at,
         lastMessageIsOwn: lastMsg?.sender_id === currentUserId,
