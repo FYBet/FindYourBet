@@ -5,6 +5,8 @@ import Login from './features/auth/Login'
 import Register from './features/auth/Register'
 import Dashboard from './features/dashboard/Dashboard'
 import CanalPage from './features/dashboard/canales/CanalPage'
+import OfferPage from './features/dashboard/payments/OfferPage'
+import PaymentSuccess from './features/dashboard/payments/PaymentSuccess'
 import { supabase } from './lib/supabase'
 
 const SECRET_CODE = 'FYBM67'
@@ -101,6 +103,8 @@ function AppRoutes() {
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      // INITIAL_SESSION is already handled by the getSession call above
+      if (_event === 'INITIAL_SESSION') return
       if (session?.user) {
         try { setUser(await buildUser(session.user)) } catch { setUser({ id: session.user.id, name: session.user.user_metadata?.name || session.user.email, email: session.user.email, avatar_url: null }) }
       } else {
@@ -140,6 +144,8 @@ function AppRoutes() {
       <Route path="/register" element={<Register navigate={(page) => navigate(`/${page === 'landing' ? '' : page}`)} login={login} />} />
       <Route path="/dashboard" element={user ? <Dashboard navigate={(page) => navigate(`/${page === 'landing' ? '' : page}`)} user={user} logout={logout} onRefreshUser={refreshUser} /> : <Navigate to="/" />} />
       <Route path="/canal/:code" element={<CanalPage />} />
+      <Route path="/oferta/:id" element={<OfferPage user={user} />} />
+      <Route path="/payment/success" element={<PaymentSuccess user={user} />} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   )

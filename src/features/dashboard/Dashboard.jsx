@@ -11,11 +11,13 @@ import Ranking from './Ranking'
 import Canales from './canales'
 import Contacto from './Contacto'
 import Social from './social'
+import Tipsters from './tipsters'
 import MiPerfil from './social/MiPerfil'
 import Feed from './feed'
 import { useNotifications } from './notifications/useNotifications'
 import NotificationsPanel from './notifications/NotificationsPanel'
 import Configuracion from './Configuracion'
+import Faqs from './Faqs'
 import './dashboard.css'
 
 const SHORTCUT_OPTIONS = [
@@ -24,8 +26,10 @@ const SHORTCUT_OPTIONS = [
   { id: 'historial',    label: 'Historial',         icon: '📋' },
   { id: 'feed',         label: 'Descubre',          icon: '🔥' },
   { id: 'canales',      label: 'Canales',           icon: '📡' },
+  { id: 'tipsters',     label: 'Tipsters',          icon: '🎯' },
   { id: 'social',       label: 'Mensajes',          icon: '💬' },
   { id: 'ranking',      label: 'Ranking',           icon: '🏆' },
+  { id: 'faqs',         label: 'FAQs',              icon: '❓' },
   { id: 'contacto',     label: 'Contacto',          icon: '📱' },
   { id: 'sugerencias',  label: 'Sugerencias',       icon: '💡' },
 ]
@@ -47,6 +51,7 @@ const SIDEBAR = [
     items: [
       { id: 'feed', label: 'Descubre', icon: '🔥' },
       { id: 'canales', label: 'Canales', icon: '📡' },
+      { id: 'tipsters', label: 'Tipsters', icon: '🎯' },
       { id: 'social', label: 'Mensajes directos', icon: '💬' },
     ]
   },
@@ -57,8 +62,9 @@ const SIDEBAR = [
     ]
   },
   {
-    label: 'Contáctenos',
+    label: 'Ayuda',
     items: [
+      { id: 'faqs', label: 'FAQs', icon: '❓' },
       { id: 'contacto', label: 'Redes sociales & Soporte', icon: '📱' },
       { id: 'sugerencias', label: 'Ayúdanos a mejorar', icon: '💡' },
     ]
@@ -171,7 +177,12 @@ function ShortcutConfigModal({ shortcuts, onSave, onClose }) {
 }
 
 export default function Dashboard({ user, logout, onRefreshUser }) {
-  const [tab, setTab] = useState('estadisticas')
+  const [tab, setTabRaw] = useState('estadisticas')
+  const [visited, setVisited] = useState(() => new Set(['estadisticas']))
+  const setTab = (id) => {
+    setVisited(prev => new Set([...prev, id]))
+    setTabRaw(id)
+  }
   const [navAvatar, setNavAvatar] = useState(user?.avatar_url || null)
   const [showShortcutConfig, setShowShortcutConfig] = useState(false)
 
@@ -208,12 +219,16 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
   const { notifications, unreadCount: notifCount, markRead, markAllRead } = useNotifications(user?.id)
   const [showNotifs, setShowNotifs] = useState(false)
 
+  const [pendingCanalCode, setPendingCanalCode] = useState(null)
+
   useEffect(() => {
     const canalCode = searchParams.get('canal')
-    if (canalCode) setTab('canales')
+    if (canalCode) {
+      setPendingCanalCode(canalCode)
+      setTab('canales')
+      navigate('/dashboard', { replace: true })
+    }
   }, [searchParams])
-
-  const canalCode = searchParams.get('canal')
 
   const handleAddBetFromCanal = (channelId) => {
     setPreselectedChannelId(channelId)
@@ -226,7 +241,7 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
   }
 
   const handleNavigateToChannel = (channel) => {
-    navigate(`/dashboard?canal=${channel.invite_code}`)
+    setPendingCanalCode(channel.invite_code)
     setTab('canales')
   }
 
@@ -326,6 +341,12 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
 
         {/* SIDEBAR */}
         <aside className="dash-sidebar">
+          <div className="sidebar-section">
+            <button className="sidebar-item" onClick={() => setShowModal(true)}>
+              <span className="sidebar-icon">✏️</span>
+              Nueva Apuesta
+            </button>
+          </div>
           {SIDEBAR.map(section => (
             <div key={section.label} style={{ marginBottom: '8px' }}>
               <div className="sidebar-label">{section.label}</div>
@@ -350,58 +371,88 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
 
         {/* CONTINGUT */}
         <div className="dash-content">
-          <AnimatePresence mode="wait">
 
-            {tab === 'estadisticas' && (
-              <Estadisticas key="estadisticas"
-                bets={bets} loadingBets={loadingBets}
+          {visited.has('estadisticas') && (
+            <div style={{ display: tab === 'estadisticas' ? 'block' : 'none' }}>
+              <Estadisticas
+                bets={bets} allBets={allBets} loadingBets={loadingBets}
                 won={won} lost={lost} yieldVal={yieldVal} avgOdds={avgOdds}
                 onNewBet={() => setShowModal(true)}
                 period={period} onPeriodChange={setPeriod}
+                onNavigateToHistorial={() => setTab('historial')}
               />
-            )}
+            </div>
+          )}
 
-            {tab === 'historial' && (
-              <Historial key="historial"
+          {visited.has('historial') && (
+            <div style={{ display: tab === 'historial' ? 'block' : 'none' }}>
+              <Historial
                 bets={allBets} loadingBets={loadingBets}
                 onNewBet={() => setShowModal(true)} onResolveBet={resolveBet}
                 onDeleteBet={deleteBet} onUpdateBet={updateBet}
               />
-            )}
+            </div>
+          )}
 
-            {tab === 'canales' && (
-              <Canales key="canales"
+          {visited.has('canales') && (
+            <div style={{ display: tab === 'canales' ? 'block' : 'none' }}>
+              <Canales
                 user={user}
-                initialCanalCode={canalCode}
+                initialCanalCode={pendingCanalCode}
+                onCanalCodeUsed={() => setPendingCanalCode(null)}
                 onAddBet={handleAddBetFromCanal}
               />
-            )}
+            </div>
+          )}
 
-            {tab === 'feed' && (
-              <Feed key="feed" user={user} onNavigateToChannel={handleNavigateToChannel} />
-            )}
+          {visited.has('feed') && (
+            <div style={{ display: tab === 'feed' ? 'block' : 'none' }}>
+              <Feed user={user} onNavigateToChannel={handleNavigateToChannel} />
+            </div>
+          )}
 
-            {tab === 'social' && (
-              <Social key="social" user={user} />
-            )}
+          {visited.has('tipsters') && (
+            <div style={{ display: tab === 'tipsters' ? 'block' : 'none' }}>
+              <Tipsters user={user} onNavigateToChannel={handleNavigateToChannel} onStartDM={() => setTab('social')} />
+            </div>
+          )}
 
-            {tab === 'ranking' && (
-              <Ranking key="ranking" user={user} />
-            )}
+          {visited.has('social') && (
+            <div style={{ display: tab === 'social' ? 'block' : 'none' }}>
+              <Social user={user} />
+            </div>
+          )}
 
-            {(tab === 'contacto' || tab === 'sugerencias') && (
-              <Contacto key={tab} initialTab={tab} />
-            )}
+          {visited.has('ranking') && (
+            <div style={{ display: tab === 'ranking' ? 'block' : 'none' }}>
+              <Ranking user={user} />
+            </div>
+          )}
 
-            {tab === 'miperfil' && (
-              <MiPerfil key="miperfil" user={user} onNavigate={setTab} onAvatarUpdated={(url) => { setNavAvatar(url); onRefreshUser?.() }} />
-            )}
+          {visited.has('faqs') && (
+            <div style={{ display: tab === 'faqs' ? 'block' : 'none' }}>
+              <Faqs />
+            </div>
+          )}
 
-            {tab === 'configuracion' && (
-              <Configuracion key="configuracion" user={user} logout={logout} />
-            )}
+          {(visited.has('contacto') || visited.has('sugerencias')) && (
+            <div style={{ display: (tab === 'contacto' || tab === 'sugerencias') ? 'block' : 'none' }}>
+              <Contacto initialTab={tab} />
+            </div>
+          )}
 
-          </AnimatePresence>
+          {visited.has('miperfil') && (
+            <div style={{ display: tab === 'miperfil' ? 'block' : 'none' }}>
+              <MiPerfil user={user} onNavigate={setTab} onAvatarUpdated={(url) => { setNavAvatar(url); onRefreshUser?.() }} onNavigateToChannel={handleNavigateToChannel} />
+            </div>
+          )}
+
+          {visited.has('configuracion') && (
+            <div style={{ display: tab === 'configuracion' ? 'block' : 'none' }}>
+              <Configuracion user={user} logout={logout} />
+            </div>
+          )}
+
         </div>
       </div>
     </div>

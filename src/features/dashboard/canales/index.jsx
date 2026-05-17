@@ -12,7 +12,7 @@ import '../dashboard.css'
 const inputStyle = { width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '14px', padding: '12px 14px', borderRadius: 'var(--radius-md)', outline: 'none', boxSizing: 'border-box' }
 const labelStyle = { display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-soft)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px' }
 
-export default function Canales({ user, initialCanalCode, onAddBet }) {
+export default function Canales({ user, initialCanalCode, onCanalCodeUsed, onAddBet }) {
   const { myChannels, joinedChannels, memberCounts, loading, createChannel, deleteChannel, updateChannel, searchChannels, findChannelByCode, joinChannel, leaveChannel, refetch, MAX_OWN_CHANNELS, MAX_JOINED_CHANNELS } = useChannels(user)
   const [activeChannel, setActiveChannel] = useState(null)
   const [activeMemberCount, setActiveMemberCount] = useState(0)
@@ -31,9 +31,13 @@ export default function Canales({ user, initialCanalCode, onAddBet }) {
   const [inviteCode, setInviteCode] = useState('')
   const [inviteError, setInviteError] = useState('')
   const [inviteLoading, setInviteLoading] = useState(false)
+  const [filterSport, setFilterSport] = useState('')
+  const [filterLanguage, setFilterLanguage] = useState('')
+  const [sortBy, setSortBy] = useState('score')
 
   useEffect(() => {
     if (!initialCanalCode || loading) return
+    onCanalCodeUsed?.()
     handleOpenByCode(initialCanalCode)
   }, [initialCanalCode, loading])
 
@@ -41,8 +45,13 @@ export default function Canales({ user, initialCanalCode, onAddBet }) {
     const channel = await findChannelByCode(code)
     if (!channel) return
     const isMember = joinedChannels.some(j => j.id === channel.id) || myChannels.some(m => m.id === channel.id)
-    if (isMember) handleOpenChannel(channel)
-    else await handlePreviewChannel(channel)
+    if (isMember) { handleOpenChannel(channel); return }
+    if (channel.is_private) {
+      const result = await joinChannel(channel.id)
+      if (!result?.error) { await refetch(); handleOpenChannel(channel) }
+      return
+    }
+    await handlePreviewChannel(channel)
   }
 
   const handleOpenChannel = (channel) => {
@@ -81,24 +90,46 @@ export default function Canales({ user, initialCanalCode, onAddBet }) {
     setShowCreate(false)
   }
 
+  const runSearch = async ({ query = searchQuery, sport = filterSport, language = filterLanguage, sort = sortBy } = {}) => {
+    setSearching(true)
+    const results = await searchChannels(query, { sport, language, sortBy: sort })
+    if (query.trim() || sport || language) {
+      setSearchResults(results)
+    } else {
+      setSuggestedChannels(results)
+      setSearchResults([])
+    }
+    setSearching(false)
+  }
+
   const handleOpenSearch = async () => {
     setShowSearch(true)
     setShowCreate(false)
-    if (!suggestedChannels.length) {
-      setSearching(true)
-      const results = await searchChannels('')
-      setSuggestedChannels(results)
-      setSearching(false)
-    }
+    setSearching(true)
+    const results = await searchChannels('', { sport: filterSport, language: filterLanguage, sortBy: sortBy })
+    setSuggestedChannels(results)
+    setSearching(false)
   }
 
   const handleSearch = async (q) => {
     setSearchQuery(q)
     setJoinError('')
-    setSearching(true)
-    const results = await searchChannels(q)
-    setSearchResults(results)
-    setSearching(false)
+    await runSearch({ query: q })
+  }
+
+  const handleFilterSport = async (sport) => {
+    setFilterSport(sport)
+    await runSearch({ sport })
+  }
+
+  const handleFilterLanguage = async (language) => {
+    setFilterLanguage(language)
+    await runSearch({ language })
+  }
+
+  const handleSortBy = async (sort) => {
+    setSortBy(sort)
+    await runSearch({ sort })
   }
 
   const handleJoinByCode = async () => {
@@ -119,6 +150,18 @@ export default function Canales({ user, initialCanalCode, onAddBet }) {
       handleOpenChannel(channel)
       return
     }
+    // Canal privat → unir directament sense preview
+    if (channel.is_private) {
+      const result = await joinChannel(channel.id)
+      setInviteLoading(false)
+      setInviteCode('')
+      setShowSearch(false)
+      if (result?.error) { setInviteError(result.error); return }
+      await refetch()
+      handleOpenChannel(channel)
+      return
+    }
+    // Canal públic → mostrar preview
     await handlePreviewChannel(channel)
     setInviteLoading(false)
     setInviteCode('')
@@ -211,9 +254,56 @@ export default function Canales({ user, initialCanalCode, onAddBet }) {
           <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
             style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '24px', marginBottom: '24px' }}>
             <div style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>Buscar canales</div>
+
+            {/* Buscador de text */}
             <input type="text" placeholder="Busca por nombre del canal..."
               value={searchQuery} onChange={e => handleSearch(e.target.value)}
-              style={{ ...inputStyle, marginBottom: '16px' }} />
+              style={{ ...inputStyle, marginBottom: '14px' }} />
+
+            {/* Filtres */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px', padding: '14px', background: 'var(--color-bg-soft)', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-border)' }}>
+
+              {/* Deporte */}
+              <div>
+                <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>Deporte</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {['', 'Fútbol', 'Baloncesto', 'Tenis', 'eSports', 'MMA', 'Otros'].map(s => (
+                    <button key={s} onClick={() => handleFilterSport(s)}
+                      style={{ padding: '4px 12px', borderRadius: 'var(--radius-full)', border: `0.5px solid ${filterSport === s ? 'var(--color-primary)' : 'var(--color-border)'}`, background: filterSport === s ? 'var(--color-primary-light)' : 'var(--color-bg)', color: filterSport === s ? 'var(--color-primary)' : 'var(--color-text-muted)', fontSize: '12px', fontWeight: filterSport === s ? 700 : 400, cursor: 'pointer', fontFamily: 'var(--font-sans)', transition: 'all 0.15s' }}>
+                      {s || 'Todos'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Idioma */}
+              <div>
+                <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>Idioma</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {[['', 'Todos'], ['Español', 'ES'], ['Català', 'CAT'], ['English', 'EN'], ['Português', 'PT'], ['Français', 'FR'], ['Deutsch', 'DE']].map(([val, label]) => (
+                    <button key={val} onClick={() => handleFilterLanguage(val)}
+                      style={{ padding: '4px 12px', borderRadius: 'var(--radius-full)', border: `0.5px solid ${filterLanguage === val ? 'var(--color-primary)' : 'var(--color-border)'}`, background: filterLanguage === val ? 'var(--color-primary-light)' : 'var(--color-bg)', color: filterLanguage === val ? 'var(--color-primary)' : 'var(--color-text-muted)', fontSize: '12px', fontWeight: filterLanguage === val ? 700 : 400, cursor: 'pointer', fontFamily: 'var(--font-sans)', transition: 'all 0.15s' }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Ordenar */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px', flexShrink: 0 }}>Ordenar</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {[['score', 'Relevancia'], ['yield', 'Mejor yield'], ['members', 'Más miembros'], ['winRate', '% acierto']].map(([val, label]) => (
+                    <button key={val} onClick={() => handleSortBy(val)}
+                      style={{ padding: '4px 12px', borderRadius: 'var(--radius-full)', border: `0.5px solid ${sortBy === val ? 'var(--color-primary)' : 'var(--color-border)'}`, background: sortBy === val ? 'var(--color-primary-light)' : 'var(--color-bg)', color: sortBy === val ? 'var(--color-primary)' : 'var(--color-text-muted)', fontSize: '12px', fontWeight: sortBy === val ? 700 : 400, cursor: 'pointer', fontFamily: 'var(--font-sans)', transition: 'all 0.15s' }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Codi d'invitació */}
             <div style={{ marginBottom: '16px' }}>
               <label style={labelStyle}>🔒 Código de invitación (canal privado)</label>
               <div style={{ display: 'flex', gap: '8px' }}>
@@ -226,25 +316,27 @@ export default function Canales({ user, initialCanalCode, onAddBet }) {
               </div>
               {inviteError && <div style={{ color: 'var(--color-error)', fontSize: '12px', marginTop: '6px' }}>{inviteError}</div>}
             </div>
+
             {joinError && (
               <div style={{ background: 'var(--color-error-light)', color: 'var(--color-error)', padding: '8px 14px', borderRadius: 'var(--radius-md)', fontSize: '13px', marginBottom: '12px' }}>
                 {joinError}
               </div>
             )}
+
             {searching && <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '13px', padding: '12px 0' }}>Buscando...</div>}
 
             {!searching && (() => {
-              const list = searchQuery.trim() ? searchResults : suggestedChannels
-              if (list.length === 0 && searchQuery.trim()) return (
-                <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '13px', paddingTop: '8px' }}>No se encontraron canales públicos</div>
+              const hasActiveFilter = searchQuery.trim() || filterSport || filterLanguage
+              const list = hasActiveFilter ? searchResults : suggestedChannels
+              if (list.length === 0 && hasActiveFilter) return (
+                <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '13px', paddingTop: '8px' }}>No se encontraron canales con estos filtros</div>
               )
+              if (list.length === 0) return null
               return (
                 <>
-                  {!searchQuery.trim() && list.length > 0 && (
-                    <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '10px' }}>
-                      🔥 Canales sugeridos
-                    </div>
-                  )}
+                  <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '10px' }}>
+                    {hasActiveFilter ? `${list.length} resultado${list.length !== 1 ? 's' : ''}` : '🔥 Canales sugeridos'}
+                  </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {list.map((c, idx) => {
                       const alreadyJoined = joinedChannels.some(j => j.id === c.id)
@@ -267,11 +359,13 @@ export default function Canales({ user, initialCanalCode, onAddBet }) {
 
                           {/* Info canal */}
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px', flexWrap: 'wrap' }}>
                               <span style={{ fontWeight: 700, fontSize: '14px' }}>#{c.name}</span>
-                              {idx === 0 && !searchQuery.trim() && (
+                              {idx === 0 && !hasActiveFilter && (
                                 <span style={{ fontSize: '10px', background: 'var(--color-primary)', color: '#010906', borderRadius: 'var(--radius-full)', padding: '1px 7px', fontWeight: 700 }}>TOP</span>
                               )}
+                              {c.sport && <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-full)', padding: '1px 7px' }}>{c.sport}</span>}
+                              {c.language && <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-full)', padding: '1px 7px' }}>{c.language}</span>}
                             </div>
                             {prof?.username && (
                               <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>@{prof.username}</div>
@@ -287,9 +381,14 @@ export default function Canales({ user, initialCanalCode, onAddBet }) {
                               <span>👥</span><span>{c.memberCount}</span>
                             </div>
                             {stats.total > 0 && (
-                              <div style={{ fontSize: '11px', color: stats.yieldVal >= 0 ? 'var(--color-primary)' : 'var(--color-error)', fontWeight: 700 }}>
-                                {stats.yieldVal >= 0 ? '+' : ''}{stats.yieldVal.toFixed(1)}% yield
-                              </div>
+                              <>
+                                <div style={{ fontSize: '11px', color: stats.yieldVal >= 0 ? 'var(--color-primary)' : 'var(--color-error)', fontWeight: 700 }}>
+                                  {stats.yieldVal >= 0 ? '+' : ''}{stats.yieldVal.toFixed(1)}% yield
+                                </div>
+                                <div style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>
+                                  {stats.winRate.toFixed(0)}% acierto
+                                </div>
+                              </>
                             )}
                             {alreadyJoined || isOwn ? (
                               <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontWeight: 600 }}>Unido ✓</span>

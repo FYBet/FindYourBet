@@ -425,7 +425,7 @@ function BetCard({ b, onResolveBet, onDeleteBet, onEditBet }) {
 // ── Component principal ───────────────────────────────────────────────────────
 
 export default function MisApuestas({ bets: allBets, loadingBets, onNewBet, onResolveBet, onDeleteBet, onUpdateBet }) {
-  const [period, setPeriod] = useState('activas')
+  const [period, setPeriod] = useState('trimestral')
   const [offset, setOffset] = useState(0)
   const [editingBet, setEditingBet] = useState(null)
 
@@ -473,22 +473,8 @@ export default function MisApuestas({ bets: allBets, loadingBets, onNewBet, onRe
             ))}
           </div>
 
-          {/* Fila Activas + botó */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', gap: '8px' }}>
-            <button onClick={() => handlePeriodChange('activas')}
-              style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 12px', borderRadius: 'var(--radius-lg)', border: period === 'activas' ? 'none' : '0.5px solid var(--color-border)', cursor: 'pointer', fontSize: '11px', fontWeight: 700, fontFamily: 'var(--font-sans)', transition: 'all 0.15s', background: period === 'activas' ? 'var(--color-primary)' : 'var(--color-bg)', color: period === 'activas' ? '#010906' : 'var(--color-text-muted)' }}>
-              Activas
-              {activeCount > 0 && (
-                <span style={{ fontSize: '9px', background: period === 'activas' ? 'rgba(0,0,0,0.15)' : 'var(--color-primary-light)', color: period === 'activas' ? '#010906' : 'var(--color-primary)', borderRadius: 'var(--radius-full)', padding: '1px 5px', fontWeight: 700 }}>
-                  {activeCount}
-                </span>
-              )}
-            </button>
-            <Button size="sm" onClick={onNewBet}>+ Nueva</Button>
-          </div>
-
           {/* Pills períodes */}
-          <div style={{ display: 'flex', gap: '2px', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '2px', marginBottom: isNavigable ? '8px' : '12px' }}>
+          <div style={{ display: 'flex', gap: '2px', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '2px', marginBottom: '8px' }}>
             {PERIODS.filter(p => p.id !== 'activas').map(p => (
               <button key={p.id} onClick={() => handlePeriodChange(p.id)}
                 style={{ flex: 1, padding: '4px 0', borderRadius: 'var(--radius-sm)', border: 'none', cursor: 'pointer', fontSize: '11px', fontWeight: 600, fontFamily: 'var(--font-sans)', transition: 'all 0.15s', background: period === p.id ? 'var(--color-primary)' : 'transparent', color: period === p.id ? '#010906' : 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
@@ -499,12 +485,26 @@ export default function MisApuestas({ bets: allBets, loadingBets, onNewBet, onRe
 
           {/* Navegació temporal */}
           {isNavigable && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', padding: '6px 10px', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', padding: '6px 10px', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
               {navBtn(false, () => setOffset(o => o + 1), '←')}
               <span style={{ flex: 1, textAlign: 'center', fontSize: '11px', fontWeight: 600, color: 'var(--color-text)' }}>{periodLabel}</span>
               {navBtn(offset === 0, () => setOffset(o => o - 1), '→')}
             </div>
           )}
+
+          {/* Activas + Nova aposta apilades */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' }}>
+            <button onClick={() => handlePeriodChange('activas')}
+              style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 14px', borderRadius: 'var(--radius-lg)', border: period === 'activas' ? 'none' : '0.5px solid var(--color-border)', cursor: 'pointer', fontSize: '11px', fontWeight: 700, fontFamily: 'var(--font-sans)', transition: 'all 0.15s', background: period === 'activas' ? 'var(--color-primary)' : 'var(--color-bg)', color: period === 'activas' ? '#010906' : 'var(--color-text-muted)', alignSelf: 'flex-start' }}>
+              Activas
+              {activeCount > 0 && (
+                <span style={{ fontSize: '9px', background: period === 'activas' ? 'rgba(0,0,0,0.15)' : 'var(--color-primary-light)', color: period === 'activas' ? '#010906' : 'var(--color-primary)', borderRadius: 'var(--radius-full)', padding: '1px 5px', fontWeight: 700 }}>
+                  {activeCount}
+                </span>
+              )}
+            </button>
+            <Button size="sm" onClick={onNewBet} style={{ alignSelf: 'flex-start' }}>+ Nueva apuesta</Button>
+          </div>
 
           {/* Cartes */}
           {loadingBets ? (

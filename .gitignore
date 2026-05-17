@@ -25,3 +25,8 @@ dist-ssr
 
 #tulsa's files
 /images
+
+# Environment variables (mai a git)
+.env
+.env.local
+.env.*.local

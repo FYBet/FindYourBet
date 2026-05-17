@@ -82,11 +82,13 @@ async function sendBetToChannels(bet, channelIds) {
     date: bet.date,
     status: bet.status
   })}`
+  const sentAt = bet.created_at || new Date().toISOString()
   await Promise.all(channelIds.map(channelId =>
     supabase.from('channel_messages').insert({
       channel_id: channelId,
       user_id: bet.user_id,
-      content
+      content,
+      created_at: sentAt
     })
   ))
 }
@@ -105,12 +107,17 @@ export function useBets(user) {
 
   const fetchBets = async () => {
     setLoadingBets(true)
-    const { data, error } = await supabase
-      .from('bets').select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-    if (!error) setBets(data || [])
-    setLoadingBets(false)
+    try {
+      const { data, error } = await supabase
+        .from('bets').select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+      if (!error) setBets(data || [])
+    } catch (e) {
+      // silent
+    } finally {
+      setLoadingBets(false)
+    }
   }
 
   const submitBet = async (preselectedChannelId = null) => {

@@ -72,49 +72,53 @@ export function useFeed(currentUserId) {
 
   const fetchFeed = async () => {
     if (!currentUserId) return
+    try {
+      const { data: memberships } = await supabase
+        .from('channel_members')
+        .select('channel_id')
+        .eq('user_id', currentUserId)
 
-    const { data: memberships } = await supabase
-      .from('channel_members')
-      .select('channel_id')
-      .eq('user_id', currentUserId)
+      const joinedIds = (memberships || []).map(m => m.channel_id)
 
-    const joinedIds = (memberships || []).map(m => m.channel_id)
+      const followingPromise = joinedIds.length > 0
+        ? supabase.from('channel_messages').select('*')
+            .in('channel_id', joinedIds)
+            .like('content', '[BET]:%')
+            .neq('user_id', currentUserId)
+            .order('created_at', { ascending: false })
+            .limit(50)
+        : Promise.resolve({ data: [] })
 
-    const followingPromise = joinedIds.length > 0
-      ? supabase.from('channel_messages').select('*')
-          .in('channel_id', joinedIds)
-          .like('content', '[BET]:%')
-          .neq('user_id', currentUserId)
-          .order('created_at', { ascending: false })
-          .limit(50)
-      : Promise.resolve({ data: [] })
+      const publicChannelsPromise = supabase.from('channels').select('id').eq('is_private', false)
 
-    const publicChannelsPromise = supabase.from('channels').select('id').eq('is_private', false)
+      const [followingResult, publicResult] = await Promise.all([followingPromise, publicChannelsPromise])
 
-    const [followingResult, publicResult] = await Promise.all([followingPromise, publicChannelsPromise])
+      const publicIds = (publicResult.data || [])
+        .map(c => c.id)
+        .filter(id => !joinedIds.includes(id))
 
-    const publicIds = (publicResult.data || [])
-      .map(c => c.id)
-      .filter(id => !joinedIds.includes(id))
+      const discoverResult = publicIds.length > 0
+        ? await supabase.from('channel_messages').select('*')
+            .in('channel_id', publicIds)
+            .like('content', '[BET]:%')
+            .neq('user_id', currentUserId)
+            .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+            .order('created_at', { ascending: false })
+            .limit(50)
+        : { data: [] }
 
-    const discoverResult = publicIds.length > 0
-      ? await supabase.from('channel_messages').select('*')
-          .in('channel_id', publicIds)
-          .like('content', '[BET]:%')
-          .neq('user_id', currentUserId)
-          .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-          .order('created_at', { ascending: false })
-          .limit(50)
-      : { data: [] }
+      const [enrichedFollowing, enrichedDiscover] = await Promise.all([
+        enrichMessages(followingResult.data || [], currentUserId),
+        enrichMessages(discoverResult.data || [], currentUserId),
+      ])
 
-    const [enrichedFollowing, enrichedDiscover] = await Promise.all([
-      enrichMessages(followingResult.data || [], currentUserId),
-      enrichMessages(discoverResult.data || [], currentUserId),
-    ])
-
-    setFollowingFeed(enrichedFollowing)
-    setDiscoverFeed(enrichedDiscover.sort((a, b) => scorePost(b) - scorePost(a)))
-    setLoading(false)
+      setFollowingFeed(enrichedFollowing)
+      setDiscoverFeed(enrichedDiscover.sort((a, b) => scorePost(b) - scorePost(a)))
+    } catch (e) {
+      // silent
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {

@@ -7,15 +7,21 @@ body {
   background: var(--color-bg);
   color: var(--color-text);
   -webkit-font-smoothing: antialiased;
+  text-align: justify;
 }
 
 #root {
   width: 100%;
   max-width: 100%;
   margin: 0;
-  text-align: left;
+  text-align: justify;
   min-height: 100svh;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+}
+
+@keyframes voicePulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.35; transform: scale(0.75); }
 }

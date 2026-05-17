@@ -23,14 +23,30 @@ function StatPill({ label, value, color }) {
   )
 }
 
-export default function ProfileView({ userId, currentUser, onBack, onStartDM, isFollowing, isFollower, onFollow, onUnfollow }) {
+export default function ProfileView({ userId, currentUser, onBack, onStartDM, isFollowing, isFollower, onFollow, onUnfollow, onNavigateToChannel, onBlock, onReport }) {
   const [profile, setProfile] = useState(null)
   const [bets, setBets] = useState([])
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({ total: 0, won: 0, lost: 0, yieldVal: 0, avgOdds: '—' })
   const [followersCount, setFollowersCount] = useState(0)
   const [followingCount, setFollowingCount] = useState(0)
-  const [activeTab, setActiveTab] = useState('picks')
+  const [activeTab, setActiveTab] = useState('stats')
+  const [channels, setChannels] = useState([])
+  const [loadingChannels, setLoadingChannels] = useState(false)
+
+  // Bloc
+  const [isBlocked, setIsBlocked] = useState(false)
+
+  // 3-dot menu
+  const [showMenu, setShowMenu] = useState(false)
+
+  // Enviar perfil modal
+  const [showSendProfile, setShowSendProfile] = useState(false)
+  const [sendTab, setSendTab] = useState('dm')
+  const [sendConvs, setSendConvs] = useState([])
+  const [sendChannels, setSendChannels] = useState([])
+  const [loadingSend, setLoadingSend] = useState(false)
+  const [sentSet, setSentSet] = useState(new Set())
 
   useEffect(() => {
     if (!userId) return
@@ -39,32 +55,128 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
 
   const fetchProfile = async () => {
     setLoading(true)
-    const [{ data: prof }, { data: resolvedBets }, { count: fersCount }, { count: fingCount }] = await Promise.all([
-      supabase.from('profiles').select('*').eq('id', userId).single(),
-      supabase.from('bets').select('*').eq('user_id', userId).neq('status', 'pending'),
-      supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', userId),
-      supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId),
-    ])
-    setProfile(prof)
-    setFollowersCount(fersCount || 0)
-    setFollowingCount(fingCount || 0)
+    try {
+      const [{ data: prof }, { data: resolvedBets }, { count: fersCount }, { count: fingCount }, { data: blockRow }] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', userId).single(),
+        supabase.from('bets').select('*').eq('user_id', userId).neq('status', 'pending'),
+        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', userId),
+        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId),
+        currentUser?.id ? supabase.from('blocks').select('id').eq('blocker_id', currentUser.id).eq('blocked_id', userId).maybeSingle() : Promise.resolve({ data: null }),
+      ])
+      setProfile(prof)
+      setIsBlocked(!!blockRow)
+      setFollowersCount(fersCount || 0)
+      setFollowingCount(fingCount || 0)
 
-    if (resolvedBets && resolvedBets.length > 0) {
-      const won = resolvedBets.filter(b => b.status === 'won').length
-      const lost = resolvedBets.filter(b => b.status === 'lost').length
-      const { profit, stakeSum } = resolvedBets.reduce(
-        (acc, b) => ({
-          stakeSum: acc.stakeSum + b.stake,
-          profit: acc.profit + (b.status === 'won' ? b.stake * (b.odds - 1) : -b.stake)
-        }),
-        { profit: 0, stakeSum: 0 }
-      )
-      const yieldVal = stakeSum > 0 ? (profit / stakeSum) * 100 : 0
-      const avgOdds = (resolvedBets.reduce((s, b) => s + b.odds, 0) / resolvedBets.length).toFixed(2)
-      setStats({ total: resolvedBets.length, won, lost, yieldVal, avgOdds })
-      setBets(resolvedBets.slice(0, 6))
+      if (resolvedBets && resolvedBets.length > 0) {
+        const won = resolvedBets.filter(b => b.status === 'won').length
+        const lost = resolvedBets.filter(b => b.status === 'lost').length
+        const { profit, stakeSum } = resolvedBets.reduce(
+          (acc, b) => ({
+            stakeSum: acc.stakeSum + b.stake,
+            profit: acc.profit + (b.status === 'won' ? b.stake * (b.odds - 1) : -b.stake)
+          }),
+          { profit: 0, stakeSum: 0 }
+        )
+        const yieldVal = stakeSum > 0 ? (profit / stakeSum) * 100 : 0
+        const avgOdds = (resolvedBets.reduce((s, b) => s + b.odds, 0) / resolvedBets.length).toFixed(2)
+        setStats({ total: resolvedBets.length, won, lost, yieldVal, avgOdds })
+        setBets(resolvedBets.slice(0, 6))
+      }
+    } catch (e) {
+      // silent
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
+  }
+
+  const fetchChannels = async () => {
+    if (loadingChannels || channels.length) return
+    setLoadingChannels(true)
+    try {
+      const { data: chans } = await supabase.from('channels')
+        .select('*').eq('owner_id', userId).eq('is_private', false)
+      if (!chans?.length) { setChannels([]); return }
+      const { data: mems } = await supabase
+        .from('channel_members').select('channel_id')
+        .in('channel_id', chans.map(c => c.id))
+      const countMap = {}
+      for (const m of mems || []) countMap[m.channel_id] = (countMap[m.channel_id] || 0) + 1
+      setChannels(chans.map(c => ({ ...c, memberCount: (countMap[c.id] || 0) + 1 })))
+    } catch (e) {
+      // silent
+    } finally {
+      setLoadingChannels(false)
+    }
+  }
+
+  const handleBlock = async () => {
+    await supabase.from('blocks').upsert({ blocker_id: currentUser.id, blocked_id: userId })
+    setIsBlocked(true)
+    setShowMenu(false)
+    onBlock?.(userId)
+  }
+
+  const handleUnblock = async () => {
+    await supabase.from('blocks').delete().eq('blocker_id', currentUser.id).eq('blocked_id', userId)
+    setIsBlocked(false)
+  }
+
+  const openSendProfile = async () => {
+    setShowSendProfile(true)
+    setSentSet(new Set())
+    setLoadingSend(true)
+    try {
+      const [{ data: convData }, { data: myChans }, { data: adminMems }] = await Promise.all([
+        supabase.from('dm_conversations')
+          .select('id, user1_id, user2_id')
+          .or(`user1_id.eq.${currentUser.id},user2_id.eq.${currentUser.id}`)
+          .limit(40),
+        supabase.from('channels').select('id, name, avatar_url').eq('owner_id', currentUser.id).limit(20),
+        supabase.from('channel_members').select('channel_id').eq('user_id', currentUser.id).eq('role', 'admin').limit(20),
+      ])
+
+      // DM conversations amb perfil de l'altre
+      if (convData?.length) {
+        const otherIds = convData.map(c => c.user1_id === currentUser.id ? c.user2_id : c.user1_id)
+        const { data: profiles } = await supabase.from('profiles').select('id, username, name, avatar_url').in('id', otherIds)
+        const profMap = Object.fromEntries((profiles || []).map(p => [p.id, p]))
+        setSendConvs(convData.map(c => {
+          const otherId = c.user1_id === currentUser.id ? c.user2_id : c.user1_id
+          const p = profMap[otherId] || {}
+          return { id: c.id, otherId, username: p.username || '?', name: p.name || '', avatarUrl: p.avatar_url || null }
+        }))
+      } else {
+        setSendConvs([])
+      }
+
+      // Canals (owner + admin)
+      const adminIds = (adminMems || []).map(m => m.channel_id)
+      let allChans = [...(myChans || [])]
+      if (adminIds.length) {
+        const { data: adminChanData } = await supabase.from('channels').select('id, name, avatar_url').in('id', adminIds)
+        allChans = [...allChans, ...(adminChanData || [])]
+      }
+      const seen = new Set()
+      setSendChannels(allChans.filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true }))
+    } catch {
+      setSendConvs([])
+      setSendChannels([])
+    } finally {
+      setLoadingSend(false)
+    }
+  }
+
+  const handleSendProfileTo = async (type, id, displayName) => {
+    const content = `[PROFILE]:${userId}:${profile?.username || '?'}`
+    try {
+      if (type === 'dm') {
+        await supabase.from('direct_messages').insert({ conversation_id: id, sender_id: currentUser.id, content })
+      } else {
+        await supabase.from('channel_messages').insert({ channel_id: id, user_id: currentUser.id, content, created_at: new Date().toISOString() })
+      }
+      setSentSet(prev => new Set([...prev, id]))
+    } catch {}
   }
 
   if (loading) return (
@@ -73,6 +185,31 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
   if (!profile) return (
     <div style={{ textAlign: 'center', padding: '60px', color: 'var(--color-text-muted)' }}>Usuario no encontrado</div>
   )
+
+  if (isBlocked) {
+    return (
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+          <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', color: 'var(--color-text-muted)' }}>←</button>
+          <div style={{ fontWeight: 700, fontSize: '16px' }}>Perfil</div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', padding: '60px 20px', textAlign: 'center' }}>
+          <Avatar url={profile.avatar_url || null} name={profile.name || profile.username} size={72} fontSize={28} />
+          <div>
+            <div style={{ fontWeight: 700, fontSize: '18px', marginBottom: '4px' }}>{profile.name || profile.username}</div>
+            <div style={{ fontSize: '14px', color: 'var(--color-text-muted)' }}>@{profile.username}</div>
+          </div>
+          <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '8px 20px' }}>
+            🚫 Usuario bloqueado
+          </div>
+          <button onClick={handleUnblock}
+            style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '8px 20px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: 'var(--color-text)', fontFamily: 'var(--font-sans)' }}>
+            Desbloquear
+          </button>
+        </div>
+      </motion.div>
+    )
+  }
 
   const isOwnProfile = userId === currentUser?.id
   const displayName = profile.name || profile.username
@@ -84,6 +221,14 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
     : stats.total >= 30 && stats.yieldVal >= 5 ? '🥈 Silver'
     : stats.total >= 10 ? '🥉 Bronze'
     : null
+
+  const btnSt = (variant) => ({
+    background: variant === 'primary' ? 'var(--color-primary)' : 'var(--color-bg)',
+    color: variant === 'primary' ? '#010906' : 'var(--color-text)',
+    border: variant === 'primary' ? 'none' : '0.5px solid var(--color-border)',
+    borderRadius: 'var(--radius-md)', padding: '6px 14px', cursor: 'pointer',
+    fontSize: '12px', fontWeight: 700, fontFamily: 'var(--font-sans)',
+  })
 
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
@@ -100,16 +245,42 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
         {/* BANNER */}
         <div style={{ height: '100px', background: 'linear-gradient(135deg, var(--color-primary-light) 0%, rgba(0,200,100,0.08) 100%)', borderBottom: '0.5px solid var(--color-border)', position: 'relative' }}>
           {!isOwnProfile && (
-            <div style={{ position: 'absolute', top: '12px', right: '12px', display: 'flex', gap: '8px' }}>
+            <div style={{ position: 'absolute', top: '12px', right: '12px', display: 'flex', gap: '8px', alignItems: 'center' }}>
               <button
                 onClick={() => isFollowing ? onUnfollow(userId) : onFollow(userId)}
-                style={{ background: isFollowing ? 'var(--color-bg)' : 'var(--color-primary)', color: isFollowing ? 'var(--color-text)' : '#010906', border: isFollowing ? '0.5px solid var(--color-border)' : 'none', borderRadius: 'var(--radius-md)', padding: '6px 14px', cursor: 'pointer', fontSize: '12px', fontWeight: 700, fontFamily: 'var(--font-sans)' }}>
+                style={btnSt(isFollowing ? 'secondary' : 'primary')}>
                 {isFollowing ? 'Siguiendo ✓' : '+ Seguir'}
               </button>
-              <button onClick={() => onStartDM(userId)}
-                style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '6px 12px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: 'var(--color-text)', fontFamily: 'var(--font-sans)' }}>
+              <button onClick={() => onStartDM?.(userId)} style={btnSt('secondary')}>
                 💬 Mensaje
               </button>
+              {/* 3 punts */}
+              <div style={{ position: 'relative' }}>
+                <button onClick={() => setShowMenu(v => !v)}
+                  style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '6px 10px', cursor: 'pointer', fontSize: '15px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-sans)', lineHeight: 1 }}>
+                  ···
+                </button>
+                <AnimatePresence>
+                  {showMenu && (
+                    <>
+                      <div onClick={() => setShowMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
+                      <motion.div initial={{ opacity: 0, y: -6, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.95 }}
+                        style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-md)', zIndex: 20, minWidth: '170px', overflow: 'hidden' }}>
+                        {[
+                          { icon: '📤', label: 'Enviar perfil', action: () => { openSendProfile(); setShowMenu(false) } },
+                          { icon: '🚩', label: 'Denunciar', action: () => { onReport?.(userId); setShowMenu(false); alert('Usuario denunciado. Lo revisaremos pronto.') } },
+                          { icon: '🚫', label: 'Bloquear', action: handleBlock, danger: true },
+                        ].map((item, i, arr) => (
+                          <button key={i} onClick={item.action}
+                            style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '12px 16px', background: 'none', border: 'none', borderBottom: i < arr.length - 1 ? '0.5px solid var(--color-border)' : 'none', cursor: 'pointer', fontSize: '13px', color: item.danger ? 'var(--color-error)' : 'var(--color-text)', fontWeight: item.danger ? 700 : 400, fontFamily: 'var(--font-sans)', textAlign: 'left' }}>
+                            <span>{item.icon}</span><span>{item.label}</span>
+                          </button>
+                        ))}
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
           )}
         </div>
@@ -140,7 +311,6 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
             <div style={{ fontSize: '14px', color: 'var(--color-text-soft)', marginBottom: '16px', lineHeight: 1.5 }}>{profile.bio}</div>
           )}
 
-          {/* STATS SOCIALS */}
           <div style={{ display: 'flex', gap: '0' }}>
             <StatPill label="Seguidores" value={followersCount} />
             <StatPill label="Siguiendo" value={followingCount} />
@@ -159,8 +329,12 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
 
       {/* TABS */}
       <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', borderBottom: '0.5px solid var(--color-border)' }}>
-        {[{ id: 'picks', label: '📋 Últimos picks' }, { id: 'stats', label: '📊 Rendimiento' }].map(t => (
-          <button key={t.id} onClick={() => setActiveTab(t.id)}
+        {[
+          { id: 'stats', label: '📊 Rendimiento' },
+          { id: 'canales', label: '📡 Canales' },
+          { id: 'picks', label: '📋 Últimos picks' },
+        ].map(t => (
+          <button key={t.id} onClick={() => { setActiveTab(t.id); if (t.id === 'canales') fetchChannels() }}
             style={{ padding: '10px 20px', fontSize: '13px', fontWeight: 500, color: activeTab === t.id ? 'var(--color-primary)' : 'var(--color-text-muted)', background: 'transparent', border: 'none', borderBottom: `2px solid ${activeTab === t.id ? 'var(--color-primary)' : 'transparent'}`, cursor: 'pointer', marginBottom: '-1px', fontFamily: 'var(--font-sans)', transition: 'all 0.15s' }}>
             {t.label}
           </button>
@@ -227,6 +401,124 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
                 ))}
               </div>
             )}
+          </motion.div>
+        )}
+
+        {activeTab === 'canales' && (
+          <motion.div key="canales" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+            {loadingChannels ? (
+              <div style={{ textAlign: 'center', padding: '40px', color: 'var(--color-text-muted)' }}>⏳ Cargando canales...</div>
+            ) : channels.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px', color: 'var(--color-text-muted)' }}>
+                <div style={{ fontSize: '40px', marginBottom: '12px' }}>📡</div>
+                <div style={{ fontWeight: 600 }}>Sin canales públicos</div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {channels.map(c => (
+                  <div key={c.id} style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden', border: '2px solid var(--color-bg-soft)' }}>
+                      {c.avatar_url ? <img src={c.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : c.name[0].toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: '15px', marginBottom: '2px' }}>#{c.name}</div>
+                      {c.description && <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', marginBottom: '4px' }}>{c.description}</div>}
+                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>👥 {c.memberCount} miembros</span>
+                        {stats.total > 0 && <span style={{ fontSize: '11px', fontWeight: 700, color: stats.yieldVal >= 0 ? 'var(--color-primary)' : 'var(--color-error)' }}>{stats.yieldVal >= 0 ? '+' : ''}{stats.yieldVal.toFixed(1)}% yield tipster</span>}
+                        {c.sport && <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{c.sport}</span>}
+                        {c.language && <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{c.language}</span>}
+                      </div>
+                    </div>
+                    {onNavigateToChannel ? (
+                      <button onClick={() => onNavigateToChannel(c)}
+                        style={{ background: 'var(--color-primary)', color: '#010906', border: 'none', borderRadius: 'var(--radius-md)', padding: '8px 16px', cursor: 'pointer', fontSize: '12px', fontWeight: 700, fontFamily: 'var(--font-sans)', flexShrink: 0 }}>
+                        Ver canal
+                      </button>
+                    ) : (
+                      <span style={{ fontSize: '11px', color: 'var(--color-primary)', fontWeight: 700, flexShrink: 0 }}>🌐 Público</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL ENVIAR PERFIL */}
+      <AnimatePresence>
+        {showSendProfile && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setShowSendProfile(false)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 50, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: '0' }}>
+            <motion.div initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 60, opacity: 0 }} transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+              onClick={e => e.stopPropagation()}
+              style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius-xl) var(--radius-xl) 0 0', width: '100%', maxWidth: '520px', maxHeight: '70vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', borderTop: '0.5px solid var(--color-border)' }}>
+
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '0.5px solid var(--color-border)', flexShrink: 0 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '15px' }}>📤 Enviar perfil</div>
+                  <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '2px' }}>@{profile.username}</div>
+                </div>
+                <button onClick={() => setShowSendProfile(false)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: 'var(--color-text-muted)' }}>✕</button>
+              </div>
+
+              {/* Tabs DM / Canals */}
+              <div style={{ display: 'flex', borderBottom: '0.5px solid var(--color-border)', flexShrink: 0 }}>
+                {[['dm', '💬 Mensajes directos'], ['canal', '📡 Canales']].map(([id, label]) => (
+                  <button key={id} onClick={() => setSendTab(id)}
+                    style={{ flex: 1, padding: '10px', border: 'none', background: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 700, color: sendTab === id ? 'var(--color-primary)' : 'var(--color-text-muted)', borderBottom: `2px solid ${sendTab === id ? 'var(--color-primary)' : 'transparent'}`, fontFamily: 'var(--font-sans)', transition: 'color 0.15s' }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Llista */}
+              <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+                {loadingSend ? (
+                  <div style={{ textAlign: 'center', padding: '40px', color: 'var(--color-text-muted)', fontSize: '13px' }}>Cargando...</div>
+                ) : sendTab === 'dm' ? (
+                  sendConvs.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '40px', color: 'var(--color-text-muted)', fontSize: '13px' }}>Sin conversaciones</div>
+                  ) : sendConvs.map(c => (
+                    <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 20px' }}>
+                      <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden' }}>
+                        {c.avatarUrl ? <img src={c.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (c.username || '?')[0].toUpperCase()}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: '13px' }}>{c.name || c.username}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>@{c.username}</div>
+                      </div>
+                      <button onClick={() => handleSendProfileTo('dm', c.id, c.username)} disabled={sentSet.has(c.id)}
+                        style={{ background: sentSet.has(c.id) ? 'var(--color-primary-light)' : 'var(--color-primary)', color: sentSet.has(c.id) ? 'var(--color-primary)' : '#010906', border: 'none', borderRadius: 'var(--radius-md)', padding: '6px 14px', cursor: sentSet.has(c.id) ? 'default' : 'pointer', fontSize: '12px', fontWeight: 700, fontFamily: 'var(--font-sans)', flexShrink: 0, transition: 'all 0.2s' }}>
+                        {sentSet.has(c.id) ? '✓ Enviado' : 'Enviar'}
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  sendChannels.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '40px', color: 'var(--color-text-muted)', fontSize: '13px' }}>Sin canales donde puedes publicar</div>
+                  ) : sendChannels.map(c => (
+                    <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 20px' }}>
+                      <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden' }}>
+                        {c.avatar_url ? <img src={c.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (c.name || '?')[0].toUpperCase()}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Canal</div>
+                      </div>
+                      <button onClick={() => handleSendProfileTo('canal', c.id, c.name)} disabled={sentSet.has(c.id)}
+                        style={{ background: sentSet.has(c.id) ? 'var(--color-primary-light)' : 'var(--color-primary)', color: sentSet.has(c.id) ? 'var(--color-primary)' : '#010906', border: 'none', borderRadius: 'var(--radius-md)', padding: '6px 14px', cursor: sentSet.has(c.id) ? 'default' : 'pointer', fontSize: '12px', fontWeight: 700, fontFamily: 'var(--font-sans)', flexShrink: 0, transition: 'all 0.2s' }}>
+                        {sentSet.has(c.id) ? '✓ Enviado' : 'Enviar'}
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

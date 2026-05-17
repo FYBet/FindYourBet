@@ -34,7 +34,7 @@ export default function PreviewView({ channel, user, onBack, onJoin, joining, me
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', color: 'var(--color-text-muted)' }}>←</button>
         <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 700, fontSize: '18px' }}>#{channel.name}</div>
+          <div style={{ fontWeight: 700, fontSize: '18px' }}>{channel.name}</div>
           {channel.description && <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>{channel.description}</div>}
         </div>
         <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>👥 {memberCount} participantes</span>
@@ -70,11 +70,8 @@ export default function PreviewView({ channel, user, onBack, onJoin, joining, me
       </div>
 
       <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', padding: '16px', background: 'var(--color-bg-soft)', borderRadius: 'var(--radius-lg)', border: '0.5px solid var(--color-border)' }}>
-        <div style={{ fontSize: '14px', color: 'var(--color-text-soft)', textAlign: 'center' }}>
-          Únete al canal para ver todos los mensajes e interactuar con la comunidad
-        </div>
         <Button onClick={onJoin} disabled={joining}>
-          {joining ? 'Uniéndose...' : `Unirse a #${channel.name}`}
+          {joining ? 'Uniéndose...' : `Unirse a ${channel.name}`}
         </Button>
       </div>
     </motion.div>

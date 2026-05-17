@@ -8,33 +8,71 @@ export function useDMs(currentUserId) {
 
   useEffect(() => {
     if (!currentUserId) return
-    fetchConversations()
-    const interval = setInterval(fetchConversations, 5000)
-    return () => clearInterval(interval)
-  }, [currentUserId])
+    let cancelled = false
+    const run = async () => {
+      await fetchConversations(cancelled)
+    }
+    run()
+    const interval = setInterval(() => fetchConversations(false), 5000)
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [currentUserId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchConversations = async () => {
-    const { data } = await supabase
+  // Optimitzat: 4 queries en total en comptes de 1 + N×3
+  const fetchConversations = async (cancelled = false) => {
+    const { data: convs } = await supabase
       .from('dm_conversations')
       .select('*')
       .or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId}`)
       .order('created_at', { ascending: false })
 
-    if (!data) { setLoading(false); return }
+    if (cancelled) return
+    if (!convs?.length) {
+      setConversations([])
+      setUnreadCount(0)
+      setLoading(false)
+      return
+    }
 
-    // Busca l'últim missatge i info de l'altre usuari per cada conversa
-    const enriched = await Promise.all(data.map(async (conv) => {
+    const otherIds = [...new Set(convs.map(c => c.user1_id === currentUserId ? c.user2_id : c.user1_id))]
+    const convIds = convs.map(c => c.id)
+
+    // 3 queries paral·leles en comptes de N×3 seqüencials
+    const [{ data: profiles }, lastMsgResults, { data: unreadMsgs }] = await Promise.all([
+      supabase.from('profiles').select('id, username, name, avatar_url').in('id', otherIds),
+      // Última missatge per conversa — en paral·lel però cada una és 1 query
+      Promise.all(convIds.map(id =>
+        supabase.from('direct_messages')
+          .select('conversation_id, content, created_at, sender_id')
+          .eq('conversation_id', id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+          .then(({ data }) => ({ id, data }))
+      )),
+      // Tots els no llegits d'un cop
+      supabase.from('direct_messages')
+        .select('conversation_id')
+        .in('conversation_id', convIds)
+        .neq('sender_id', currentUserId)
+        .is('read_at', null),
+    ])
+
+    if (cancelled) return
+
+    const profileMap = Object.fromEntries((profiles || []).map(p => [p.id, p]))
+    const lastMsgMap = Object.fromEntries(lastMsgResults.map(r => [r.id, r.data]))
+    const unreadMap = {}
+    for (const msg of (unreadMsgs || [])) {
+      unreadMap[msg.conversation_id] = (unreadMap[msg.conversation_id] || 0) + 1
+    }
+
+    const enriched = convs.map(conv => {
       const otherId = conv.user1_id === currentUserId ? conv.user2_id : conv.user1_id
+      const profile = profileMap[otherId] || null
+      const lastMsg = lastMsgMap[conv.id] || null
+      const unread = unreadMap[conv.id] || 0
       const isAccepted = conv.user1_id === currentUserId ? conv.user1_accepted : conv.user2_accepted
       const otherAccepted = conv.user1_id === currentUserId ? conv.user2_accepted : conv.user1_accepted
-
-      const [{ data: profile }, { data: lastMsg }, { count: unread }] = await Promise.all([
-        supabase.from('profiles').select('username, name, avatar_url').eq('id', otherId).single(),
-        supabase.from('direct_messages').select('content, created_at, sender_id')
-          .eq('conversation_id', conv.id).order('created_at', { ascending: false }).limit(1).single(),
-        supabase.from('direct_messages').select('*', { count: 'exact', head: true })
-          .eq('conversation_id', conv.id).eq('sender_id', otherId).is('read_at', null)
-      ])
 
       return {
         ...conv,
@@ -45,12 +83,12 @@ export function useDMs(currentUserId) {
         lastMessage: lastMsg?.content || '',
         lastMessageAt: lastMsg?.created_at || conv.created_at,
         lastMessageIsOwn: lastMsg?.sender_id === currentUserId,
-        unread: unread || 0,
+        unread,
         isAccepted,
         otherAccepted,
         isPending: !otherAccepted && conv.user1_id !== currentUserId,
       }
-    }))
+    })
 
     const total = enriched.reduce((sum, c) => sum + c.unread, 0)
     setUnreadCount(total)
@@ -59,7 +97,6 @@ export function useDMs(currentUserId) {
   }
 
   const startConversation = async (otherUserId, isFollowing) => {
-    // Comprova si ja existeix
     const { data: existing } = await supabase
       .from('dm_conversations')
       .select('*')
@@ -74,7 +111,7 @@ export function useDMs(currentUserId) {
       user1_id: currentUserId,
       user2_id: otherUserId,
       user1_accepted: true,
-      user2_accepted: isFollowing // si et segueix, acceptat directament
+      user2_accepted: isFollowing,
     }).select().single()
 
     await fetchConversations()
@@ -86,7 +123,10 @@ export function useDMs(currentUserId) {
     if (!conv) return
     const field = conv.user1_id === currentUserId ? 'user1_accepted' : 'user2_accepted'
     await supabase.from('dm_conversations').update({ [field]: true }).eq('id', conversationId)
-    await fetchConversations()
+    // Actualitza l'estat local sense recarregar tot
+    setConversations(prev => prev.map(c =>
+      c.id === conversationId ? { ...c, isAccepted: true } : c
+    ))
   }
 
   const sendMessage = async (conversationId, content) => {
@@ -94,9 +134,16 @@ export function useDMs(currentUserId) {
     await supabase.from('direct_messages').insert({
       conversation_id: conversationId,
       sender_id: currentUserId,
-      content: content.trim()
+      content: content.trim(),
     })
-    await fetchConversations()
+    // Actualitza l'últim missatge localment sense recarregar tot
+    const now = new Date().toISOString()
+    setConversations(prev =>
+      prev.map(c => c.id === conversationId
+        ? { ...c, lastMessage: content.trim(), lastMessageAt: now, lastMessageIsOwn: true }
+        : c
+      ).sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt))
+    )
   }
 
   const fetchMessages = async (conversationId) => {
@@ -113,7 +160,12 @@ export function useDMs(currentUserId) {
       .neq('sender_id', currentUserId)
       .is('read_at', null)
 
-    await fetchConversations()
+    // Actualitza unread localment
+    setConversations(prev => prev.map(c =>
+      c.id === conversationId ? { ...c, unread: 0 } : c
+    ))
+    setUnreadCount(prev => Math.max(0, prev - (conversations.find(c => c.id === conversationId)?.unread || 0)))
+
     return data || []
   }
 
@@ -126,6 +178,6 @@ export function useDMs(currentUserId) {
     conversations, loading, unreadCount,
     startConversation, acceptConversation,
     sendMessage, fetchMessages, blockUser,
-    refetch: fetchConversations
+    refetch: fetchConversations,
   }
 }

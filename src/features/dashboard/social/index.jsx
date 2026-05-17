@@ -7,6 +7,17 @@ import { useMutes, MUTE_DURATIONS } from '../../../hooks/useMutes'
 import DMView from './DMView'
 import ProfileView from './ProfileView'
 
+function formatMsgPreview(content) {
+  if (!content) return ''
+  if (content.startsWith('[VOICE]:')) return '🎤 Mensaje de voz'
+  if (content.startsWith('[GIF]:')) return '🎞 GIF'
+  if (content.startsWith('[IMAGE]:')) return '📷 Imagen'
+  if (content.startsWith('[FILE:')) return '📎 Archivo'
+  if (content.startsWith('[BET]:')) return '📊 Pick'
+  if (content.startsWith('[STICKER]:')) return content.replace('[STICKER]:', '')
+  return content
+}
+
 export default function Social({ user }) {
   const { conversations, loading, unreadCount, startConversation, acceptConversation, sendMessage, fetchMessages, blockUser } = useDMs(user.id)
   const { isFollowing, isFollower, follow, unfollow } = useFollow(user.id)
@@ -24,13 +35,16 @@ export default function Social({ user }) {
     setSearchQuery(q)
     if (!q.trim()) { setSearchResults([]); return }
     setSearching(true)
-    const { data } = await supabase
-      .from('profiles')
-      .select('id, username, name')
-      .or(`username.ilike.%${q}%,name.ilike.%${q}%`)
-      .neq('id', user.id)
-      .limit(10)
-    setSearchResults(data || [])
+    const [{ data }, { data: myBlocks }, { data: blockedByOthers }] = await Promise.all([
+      supabase.from('profiles').select('id, username, name').or(`username.ilike.%${q}%,name.ilike.%${q}%`).neq('id', user.id).limit(20),
+      supabase.from('blocks').select('blocked_id').eq('blocker_id', user.id),
+      supabase.from('blocks').select('blocker_id').eq('blocked_id', user.id),
+    ])
+    const hidden = new Set([
+      ...(myBlocks || []).map(b => b.blocked_id),
+      ...(blockedByOthers || []).map(b => b.blocker_id),
+    ])
+    setSearchResults((data || []).filter(u => !hidden.has(u.id)).slice(0, 10))
     setSearching(false)
   }
 
@@ -64,6 +78,10 @@ export default function Social({ user }) {
         onBlock={(id) => { blockUser(id); setView('list') }}
         onReport={() => alert('Conversación reportada.')}
         onViewProfile={(userId) => { setActiveProfile(userId); setView('profile') }}
+        onAccept={async (id) => {
+          await acceptConversation(id)
+          setActiveConv(prev => prev ? { ...prev, isAccepted: true } : prev)
+        }}
       />
     )
   }
@@ -79,6 +97,8 @@ export default function Social({ user }) {
         isFollower={isFollower(activeProfile)}
         onFollow={follow}
         onUnfollow={unfollow}
+        onBlock={(userId) => { alert('Usuario bloqueado.') }}
+        onReport={(userId) => {}}
       />
     )
   }
@@ -192,7 +212,7 @@ export default function Social({ user }) {
                   onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--color-border)'}>
                   <div onClick={() => handleOpenConv(c)} style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, cursor: 'pointer', minWidth: 0 }}>
                     <div style={{ position: 'relative', flexShrink: 0 }}>
-                      <div style={{ width: '44px', height: '44px', background: 'var(--color-primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '17px', fontWeight: 700, color: 'var(--color-primary)', opacity: muted ? 0.5 : 1, overflow: 'hidden' }}>
+                      <div onClick={e => { e.stopPropagation(); handleOpenProfile(c.otherId) }} style={{ width: '44px', height: '44px', background: 'var(--color-primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '17px', fontWeight: 700, color: 'var(--color-primary)', opacity: muted ? 0.5 : 1, overflow: 'hidden', cursor: 'pointer' }}>
                         {c.otherAvatarUrl
                           ? <img src={c.otherAvatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                           : (c.otherUsername || '?')[0].toUpperCase()}
@@ -214,7 +234,7 @@ export default function Social({ user }) {
                         </div>
                       </div>
                       <div style={{ fontSize: '13px', color: c.unread > 0 && !muted ? 'var(--color-text)' : 'var(--color-text-muted)', fontWeight: c.unread > 0 && !muted ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {c.lastMessageIsOwn ? 'Tú: ' : ''}{c.lastMessage || 'Sin mensajes'}
+                        {c.lastMessageIsOwn ? 'Tú: ' : ''}{formatMsgPreview(c.lastMessage) || 'Sin mensajes'}
                       </div>
                     </div>
                   </div>

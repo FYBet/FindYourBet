@@ -13,13 +13,18 @@ export function useFollow(currentUserId) {
 
   const fetchFollows = async () => {
     setLoading(true)
-    const [{ data: followingData }, { data: followersData }] = await Promise.all([
-      supabase.from('follows').select('following_id').eq('follower_id', currentUserId),
-      supabase.from('follows').select('follower_id').eq('following_id', currentUserId)
-    ])
-    setFollowing(followingData?.map(f => f.following_id) || [])
-    setFollowers(followersData?.map(f => f.follower_id) || [])
-    setLoading(false)
+    try {
+      const [{ data: followingData }, { data: followersData }] = await Promise.all([
+        supabase.from('follows').select('following_id').eq('follower_id', currentUserId),
+        supabase.from('follows').select('follower_id').eq('following_id', currentUserId)
+      ])
+      setFollowing(followingData?.map(f => f.following_id) || [])
+      setFollowers(followersData?.map(f => f.follower_id) || [])
+    } catch (e) {
+      // silent
+    } finally {
+      setLoading(false)
+    }
   }
 
   const follow = async (userId) => {

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
 import { StickerPicker } from '../StickerPicker'
+import { VoicePlayer, VoiceRecordButton } from '../VoiceMessage'
 
 function formatTime(ts) {
   if (!ts) return ''
@@ -10,10 +11,50 @@ function formatTime(ts) {
   return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
 }
 
-function renderContent(content, isOwn) {
+function isSingleEmoji(content) {
+  const t = content.trim()
+  if (!t || t.startsWith('[')) return false
+  try {
+    const segs = [...new Intl.Segmenter('en', { granularity: 'grapheme' }).segment(t)]
+    return segs.length === 1 && /\p{Emoji}/u.test(t)
+  } catch {
+    return /^\p{Emoji_Presentation}️?$/u.test(t)
+  }
+}
+
+function renderContent(content, isOwn, onViewProfile) {
   if (!content) return null
+  if (content.startsWith('[PROFILE]:')) {
+    const rest = content.replace('[PROFILE]:', '')
+    const idx = rest.indexOf(':')
+    const profileId = idx >= 0 ? rest.slice(0, idx) : rest
+    const profileUsername = idx >= 0 ? rest.slice(idx + 1) : '?'
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '12px 14px', minWidth: '200px' }}>
+        <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0 }}>
+          {(profileUsername || '?')[0].toUpperCase()}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--color-text)' }}>@{profileUsername}</div>
+          <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Tipster · FYB</div>
+        </div>
+        <button onClick={() => onViewProfile?.(profileId)}
+          style={{ background: 'var(--color-primary)', color: '#010906', border: 'none', borderRadius: 'var(--radius-md)', padding: '5px 12px', cursor: 'pointer', fontSize: '11px', fontWeight: 700, fontFamily: 'var(--font-sans)', flexShrink: 0 }}>
+          Ver →
+        </button>
+      </div>
+    )
+  }
   if (content.startsWith('[STICKER]:')) {
     return <span style={{ fontSize: '56px', lineHeight: 1.1 }}>{content.replace('[STICKER]:', '')}</span>
+  }
+  if (content.startsWith('[VOICE]:')) {
+    const url = content.replace('[VOICE]:', '')
+    return <VoicePlayer url={url} isOwn={isOwn} />
+  }
+  if (content.startsWith('[GIF]:')) {
+    const url = content.replace('[GIF]:', '')
+    return <img src={url} alt="gif" style={{ display: 'block', maxWidth: '240px', maxHeight: '200px', borderRadius: 'var(--radius-md)', objectFit: 'contain' }} />
   }
   if (content.startsWith('[IMAGE]:')) {
     const url = content.replace('[IMAGE]:', '')
@@ -28,10 +69,22 @@ function renderContent(content, isOwn) {
       </a>
     )
   }
+  if (isSingleEmoji(content)) {
+    return (
+      <motion.span
+        initial={{ scale: 0.3, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 500, damping: 18 }}
+        style={{ fontSize: '52px', lineHeight: 1.1, display: 'inline-block' }}
+      >
+        {content.trim()}
+      </motion.span>
+    )
+  }
   return content
 }
 
-export default function DMView({ conversation, currentUser, onBack, onSend, onFetchMessages, onBlock, onReport, onMute, onViewProfile }) {
+export default function DMView({ conversation, currentUser, onBack, onSend, onFetchMessages, onBlock, onReport, onViewProfile, onAccept }) {
   const [messages, setMessages] = useState([])
   const [text, setText] = useState('')
   const [loading, setLoading] = useState(true)
@@ -43,24 +96,44 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
   const scrollRef = useRef(null)
   const bottomRef = useRef(null)
   const prevCountRef = useRef(0)
+  const wasAtBottomRef = useRef(true)
   const fileInputRef = useRef(null)
 
+  const isNearBottom = () => {
+    const el = scrollRef.current
+    if (!el) return true
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 80
+  }
+
   useEffect(() => {
+    let cancelled = false
+
+    const loadMessages = async () => {
+      const data = await onFetchMessages(conversation.id)
+      if (!cancelled) {
+        setMessages(data)
+        setLoading(false)
+      }
+    }
+
     loadMessages()
     const interval = setInterval(loadMessages, 3000)
-    return () => clearInterval(interval)
-  }, [conversation.id])
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [conversation.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const loadMessages = async () => {
-    const data = await onFetchMessages(conversation.id)
-    setMessages(data)
-    const newCount = data.length
+  // Scroll automàtic igual que ChatView — sense setTimeout fràgil
+  useEffect(() => {
+    const newCount = messages.length
     const prevCount = prevCountRef.current
-    if (newCount > prevCount || prevCount === 0) {
-      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: prevCount === 0 ? 'instant' : 'smooth' }), 50)
+    if (newCount > prevCount && (wasAtBottomRef.current || prevCount === 0)) {
+      bottomRef.current?.scrollIntoView({ behavior: prevCount === 0 ? 'instant' : 'smooth' })
     }
     prevCountRef.current = newCount
-    setLoading(false)
+  }, [messages])
+
+  const refreshMessages = async () => {
+    const data = await onFetchMessages(conversation.id)
+    setMessages(data)
   }
 
   const handleSend = async () => {
@@ -68,12 +141,16 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
     const content = text
     setText('')
     await onSend(conversation.id, content)
-    await loadMessages()
+    await refreshMessages()
   }
 
   const handleSendSticker = (sticker) => {
     setText(prev => prev + sticker)
-    setShowStickers(false)
+  }
+
+  const handleSendGif = async (url) => {
+    await onSend(conversation.id, `[GIF]:${url}`)
+    await refreshMessages()
   }
 
   const handleKey = (e) => {
@@ -96,7 +173,7 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
       const isImage = /^image\/(jpeg|png|gif|webp)$/.test(file.type) || /\.(jpg|jpeg|png|gif|webp)$/i.test(file.name)
       const content = isImage ? `[IMAGE]:${urlData.publicUrl}` : `[FILE:${file.name}]:${urlData.publicUrl}`
       await onSend(conversation.id, content)
-      await loadMessages()
+      await refreshMessages()
     } catch {
       setUploadError('Error inesperado al subir el archivo.')
     } finally {
@@ -156,7 +233,8 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
       </div>
 
       {/* MISSATGES */}
-      <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      <div ref={scrollRef} onScroll={() => { wasAtBottomRef.current = isNearBottom() }}
+        style={{ flex: 1, overflowY: 'auto', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {loading ? (
           <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '40px' }}>⏳ Cargando...</div>
         ) : messages.length === 0 ? (
@@ -168,30 +246,32 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
           const isOwn = m.sender_id === currentUser.id
           const isImage = m.content?.startsWith('[IMAGE]:')
           const isSticker = m.content?.startsWith('[STICKER]:')
+          const isProfile = m.content?.startsWith('[PROFILE]:')
+          const isSpecialNobubble = isSticker || isProfile
           return (
             <div key={m.id} style={{ display: 'flex', justifyContent: isOwn ? 'flex-end' : 'flex-start' }}>
-              <div style={{ maxWidth: isSticker ? 'fit-content' : '70%' }}>
+              <div style={{ maxWidth: isProfile ? '320px' : isSticker ? 'fit-content' : m.content?.startsWith('[VOICE]:') ? '280px' : '70%' }}>
                 <div style={{
                   position: 'relative',
-                  background: isSticker ? 'transparent' : isOwn ? 'var(--color-primary)' : 'var(--color-bg-soft)',
+                  background: isSpecialNobubble ? 'transparent' : isOwn ? 'var(--color-primary)' : 'var(--color-bg-soft)',
                   color: isOwn ? '#010906' : 'var(--color-text)',
-                  padding: isImage ? '6px' : isSticker ? '0' : '10px 14px 22px 14px',
+                  padding: isImage ? '6px' : isSpecialNobubble ? '0' : '10px 14px 22px 14px',
                   borderRadius: 'var(--radius-lg)', fontSize: '14px', lineHeight: 1.5, whiteSpace: 'pre-wrap',
-                  border: isOwn || isSticker ? 'none' : '0.5px solid var(--color-border)'
+                  border: isOwn || isSpecialNobubble ? 'none' : '0.5px solid var(--color-border)'
                 }}>
-                  {renderContent(m.content, isOwn)}
-                  {!isImage && !isSticker && (
+                  {renderContent(m.content, isOwn, onViewProfile)}
+                  {!isImage && !isSpecialNobubble && (
                     <span style={{
                       position: 'absolute', bottom: '5px', right: '10px',
-                      fontSize: '10px',
-                      color: isOwn ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.45)',
+                      fontSize: '10px', fontWeight: 500,
+                      color: isOwn ? 'rgba(1,9,6,0.65)' : 'rgba(224,245,235,0.55)',
                       whiteSpace: 'nowrap',
                     }}>
                       {formatTime(m.created_at)}{isOwn && m.read_at ? ' ✓✓' : ''}
                     </span>
                   )}
                 </div>
-                {(isImage || isSticker) && (
+                {(isImage || isSpecialNobubble) && (
                   <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '3px', textAlign: isOwn ? 'right' : 'left' }}>
                     {formatTime(m.created_at)}
                   </div>
@@ -221,7 +301,7 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
               style={{ padding: '8px 16px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-error-border)', background: 'var(--color-error-light)', color: 'var(--color-error)', cursor: 'pointer', fontSize: '13px', fontWeight: 600, fontFamily: 'var(--font-sans)' }}>
               Rechazar
             </button>
-            <button onClick={() => {}}
+            <button onClick={() => onAccept?.(conversation.id)}
               style={{ padding: '8px 16px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--color-primary)', color: '#010906', cursor: 'pointer', fontSize: '13px', fontWeight: 700, fontFamily: 'var(--font-sans)' }}>
               Aceptar
             </button>
@@ -243,6 +323,7 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
               style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '11px 14px', cursor: 'pointer', fontSize: '16px', color: 'var(--color-text-muted)', flexShrink: 0 }}>
               {uploading ? '⏳' : '📎'}
             </button>
+            <VoiceRecordButton userId={currentUser.id} onSend={async content => { await onSend(conversation.id, content); await refreshMessages() }} />
             <textarea value={text} onChange={e => setText(e.target.value)} onKeyDown={handleKey}
               placeholder="Envía un mensaje" rows={2}
               style={{ flex: 1, background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '14px', padding: '12px 14px', borderRadius: 'var(--radius-md)', outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
@@ -252,7 +333,7 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
                 😊
               </button>
               <AnimatePresence>
-                {showStickers && <StickerPicker onSelect={handleSendSticker} onClose={() => setShowStickers(false)} />}
+                {showStickers && <StickerPicker onSelect={handleSendSticker} onSendGif={handleSendGif} onClose={() => setShowStickers(false)} user={currentUser} />}
               </AnimatePresence>
             </div>
             <button onClick={handleSend} disabled={!text.trim()}

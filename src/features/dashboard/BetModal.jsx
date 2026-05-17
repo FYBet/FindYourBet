@@ -9,14 +9,26 @@ import './dashboard.css'
 const SPORTS = ['Fútbol', 'Baloncesto', 'Tenis', 'Béisbol', 'Fútbol Americano', 'eSports', 'MMA', 'Otros']
 const MARKETS = ['1X2', 'Hándicap', 'Over/Under', 'Ambos marcan', 'Otro']
 
+const inputStyle = { width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '14px', padding: '12px 14px', borderRadius: 'var(--radius-md)', outline: 'none', boxSizing: 'border-box' }
+const labelStyle = { display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-soft)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px' }
+
 function getMinDateTime() {
   const now = new Date()
   const pad = n => String(n).padStart(2, '0')
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`
 }
 
+function generateInviteCode() {
+  return Math.random().toString(36).substring(2, 10).toLowerCase()
+}
+
 export function BetModal({ open, onClose, form, setForm, onSubmit, user, preselectedChannelId }) {
   const [myChannels, setMyChannels] = useState([])
+  const [showCreateChannel, setShowCreateChannel] = useState(false)
+  const [createForm, setCreateForm] = useState({ name: '', description: '', isPrivate: false })
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState('')
+
   const set = (field, val) => setForm(prev => ({ ...prev, [field]: val }))
 
   useEffect(() => {
@@ -25,12 +37,46 @@ export function BetModal({ open, onClose, form, setForm, onSubmit, user, presele
       .then(({ data }) => setMyChannels(data || []))
   }, [open, user])
 
+  useEffect(() => {
+    if (!open) {
+      setShowCreateChannel(false)
+      setCreateForm({ name: '', description: '', isPrivate: false })
+      setCreateError('')
+    }
+  }, [open])
+
   const toggleChannel = (id) => {
     const current = form.channelIds || []
     set('channelIds', current.includes(id)
       ? current.filter(c => c !== id)
       : [...current, id]
     )
+  }
+
+  const handleCreateChannel = async () => {
+    if (!createForm.name.trim()) { setCreateError('El nombre es obligatorio'); return }
+    setCreating(true)
+    setCreateError('')
+    const { data, error } = await supabase
+      .from('channels').insert({
+        owner_id: user.id,
+        name: createForm.name.trim(),
+        description: createForm.description.trim(),
+        is_private: createForm.isPrivate,
+        invite_code: generateInviteCode(),
+      }).select().single()
+
+    if (error) {
+      setCreateError('Error al crear el canal. Inténtalo de nuevo.')
+      setCreating(false)
+      return
+    }
+
+    setMyChannels(prev => [data, ...prev])
+    set('channelIds', [...(form.channelIds || []), data.id])
+    setShowCreateChannel(false)
+    setCreateForm({ name: '', description: '', isPrivate: false })
+    setCreating(false)
   }
 
   return (
@@ -107,16 +153,19 @@ export function BetModal({ open, onClose, form, setForm, onSubmit, user, presele
                 value={form.analysis} onChange={e => set('analysis', e.target.value)} />
             </div>
 
-            {/* SELECTOR CANALS — només si no ve preseleccionat */}
+            {/* SELECTOR CANALS */}
             {!preselectedChannelId && (
               <div className="form-group-modal">
                 <FormLabel>Publicar en canales *</FormLabel>
-                {myChannels.length === 0 ? (
-                  <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', padding: '10px 0' }}>
-                    No tienes canales propios. Crea uno primero.
+
+                {myChannels.length === 0 && !showCreateChannel && (
+                  <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '10px' }}>
+                    Necesitas al menos un canal para publicar picks.
                   </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                )}
+
+                {myChannels.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '10px' }}>
                     {myChannels.map(c => {
                       const selected = (form.channelIds || []).includes(c.id)
                       return (
@@ -126,13 +175,72 @@ export function BetModal({ open, onClose, form, setForm, onSubmit, user, presele
                             {selected && <span style={{ color: '#010906', fontSize: '10px', fontWeight: 700 }}>✓</span>}
                           </div>
                           <span style={{ fontSize: '13px', fontWeight: selected ? 600 : 400, color: selected ? 'var(--color-primary)' : 'var(--color-text)' }}>
-                            #{c.name}
+                            {c.name}
                           </span>
                         </div>
                       )
                     })}
                   </div>
                 )}
+
+                <AnimatePresence>
+                  {showCreateChannel ? (
+                    <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+                      style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-primary-border)', borderRadius: 'var(--radius-lg)', padding: '20px' }}>
+                      <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '14px' }}>Crear canal</div>
+
+                      {createError && (
+                        <div style={{ background: 'var(--color-error-light)', border: '0.5px solid var(--color-error-border)', color: 'var(--color-error)', padding: '10px 14px', borderRadius: 'var(--radius-md)', fontSize: '13px', marginBottom: '14px' }}>
+                          {createError}
+                        </div>
+                      )}
+
+                      <div style={{ marginBottom: '14px' }}>
+                        <label style={labelStyle}>Nombre *</label>
+                        <input autoFocus type="text" placeholder="ej. MarcGol Tips"
+                          value={createForm.name}
+                          onChange={e => setCreateForm(p => ({ ...p, name: e.target.value }))}
+                          style={inputStyle} />
+                      </div>
+                      <div style={{ marginBottom: '16px' }}>
+                        <label style={labelStyle}>Descripción (opcional)</label>
+                        <input type="text" placeholder="De qué va tu canal..."
+                          value={createForm.description}
+                          onChange={e => setCreateForm(p => ({ ...p, description: e.target.value }))}
+                          style={inputStyle} />
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '18px', padding: '14px', background: 'var(--color-bg-soft)', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-border)', cursor: 'pointer' }}
+                        onClick={() => setCreateForm(p => ({ ...p, isPrivate: !p.isPrivate }))}>
+                        <div style={{ width: '40px', height: '22px', borderRadius: '999px', background: createForm.isPrivate ? 'var(--color-primary)' : 'var(--color-border)', transition: 'background 0.2s', position: 'relative', flexShrink: 0 }}>
+                          <div style={{ position: 'absolute', top: '3px', left: createForm.isPrivate ? '21px' : '3px', width: '16px', height: '16px', borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>🔒 Canal privado</div>
+                          <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                            Solo accesible con enlace de invitación. No aparece en la búsqueda.
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <Button onClick={handleCreateChannel} disabled={creating || !createForm.name.trim()}>
+                          {creating ? 'Creando...' : 'Crear canal'}
+                        </Button>
+                        <Button variant="ghost" onClick={() => { setShowCreateChannel(false); setCreateForm({ name: '', description: '', isPrivate: false }); setCreateError('') }}>
+                          Cancelar
+                        </Button>
+                      </div>
+                    </motion.div>
+                  ) : (
+                    <motion.button initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                      onClick={() => setShowCreateChannel(true)}
+                      style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 12px', background: 'transparent', border: '0.5px dashed var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontSize: '13px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-sans)', width: '100%' }}>
+                      <span>+</span>
+                      {myChannels.length === 0 ? 'Crear mi primer canal' : 'Crear nuevo canal'}
+                    </motion.button>
+                  )}
+                </AnimatePresence>
               </div>
             )}
 

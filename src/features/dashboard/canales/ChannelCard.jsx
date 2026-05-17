@@ -28,10 +28,45 @@ function MuteMenu({ muteKey, isMuted, muteLabel, onMute, onUnmute, onClose }) {
 
 export default function ChannelCard({ channel, onClick, onLeave, onDelete, isOwner, memberCount }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleteInput, setDeleteInput] = useState('')
   const [showMuteMenu, setShowMuteMenu] = useState(false)
   const { mute, unmute, isMuted, muteLabel } = useMutes()
   const muteKey = `channel_${channel.id}`
   const muted = isMuted(muteKey)
+
+  if (confirmDelete) {
+    return (
+      <motion.div variants={fadeUp}
+        style={{ background: 'var(--color-error-light)', border: '0.5px solid var(--color-error-border)', borderRadius: 'var(--radius-lg)', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-error)' }}>⚠️ Esta acción es irreversible</div>
+        <div style={{ fontSize: '12px', color: 'var(--color-error)', lineHeight: 1.5 }}>
+          Se eliminarán permanentemente todos los mensajes, picks e historial del canal <strong>"{channel.name}"</strong>.
+        </div>
+        <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+          Escribe <strong style={{ color: 'var(--color-error)', letterSpacing: '0.5px' }}>ELIMINAR</strong> para confirmar:
+        </div>
+        <input
+          autoFocus
+          value={deleteInput}
+          onChange={e => setDeleteInput(e.target.value)}
+          placeholder="ELIMINAR"
+          style={{ width: '100%', background: 'var(--color-bg)', border: `1.5px solid ${deleteInput === 'ELIMINAR' ? 'var(--color-error)' : 'var(--color-error-border)'}`, color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '13px', fontWeight: 600, padding: '8px 12px', borderRadius: 'var(--radius-md)', outline: 'none', boxSizing: 'border-box', letterSpacing: '1px' }}
+        />
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={() => { setConfirmDelete(false); setDeleteInput('') }}
+            style={{ flex: 1, padding: '8px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', cursor: 'pointer', fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-sans)' }}>
+            Cancelar
+          </button>
+          <button
+            onClick={() => { onDelete(channel.id); setConfirmDelete(false); setDeleteInput('') }}
+            disabled={deleteInput !== 'ELIMINAR'}
+            style={{ flex: 1, padding: '8px', borderRadius: 'var(--radius-md)', border: 'none', background: deleteInput === 'ELIMINAR' ? 'var(--color-error)' : 'var(--color-bg-soft)', color: deleteInput === 'ELIMINAR' ? '#fff' : 'var(--color-text-muted)', cursor: deleteInput === 'ELIMINAR' ? 'pointer' : 'default', fontSize: '12px', fontWeight: 700, fontFamily: 'var(--font-sans)', transition: 'all 0.15s' }}>
+            Eliminar canal
+          </button>
+        </div>
+      </motion.div>
+    )
+  }
 
   return (
     <motion.div variants={fadeUp}
@@ -76,23 +111,10 @@ export default function ChannelCard({ channel, onClick, onLeave, onDelete, isOwn
       {isOwner ? (
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
           <span style={{ fontSize: '11px', background: 'var(--color-primary-light)', color: 'var(--color-primary)', padding: '3px 10px', borderRadius: 'var(--radius-full)', border: '0.5px solid var(--color-primary-border)', fontWeight: 600 }}>Propietario</span>
-          {!confirmDelete ? (
-            <button onClick={() => setConfirmDelete(true)}
-              style={{ fontSize: '12px', padding: '5px 10px', border: '0.5px solid var(--color-error-border)', borderRadius: 'var(--radius-md)', background: 'transparent', color: 'var(--color-error)', cursor: 'pointer' }}>
-              🗑️
-            </button>
-          ) : (
-            <div style={{ display: 'flex', gap: '4px' }}>
-              <button onClick={() => { onDelete(channel.id); setConfirmDelete(false) }}
-                style={{ fontSize: '11px', padding: '5px 10px', border: 'none', borderRadius: 'var(--radius-md)', background: 'var(--color-error)', color: '#fff', cursor: 'pointer' }}>
-                Confirmar
-              </button>
-              <button onClick={() => setConfirmDelete(false)}
-                style={{ fontSize: '11px', padding: '5px 10px', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer' }}>
-                Cancelar
-              </button>
-            </div>
-          )}
+          <button onClick={() => { setConfirmDelete(true); setDeleteInput('') }}
+            style={{ fontSize: '12px', padding: '5px 10px', border: '0.5px solid var(--color-error-border)', borderRadius: 'var(--radius-md)', background: 'transparent', color: 'var(--color-error)', cursor: 'pointer' }}>
+            🗑️
+          </button>
         </div>
       ) : (
         <button onClick={onLeave}

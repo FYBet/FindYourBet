@@ -22,30 +22,34 @@ export function useChannels(user) {
 
   const fetchChannels = async () => {
     setLoading(true)
-    const { data: own } = await supabase
-      .from('channels').select('*').eq('owner_id', user.id)
-      .order('created_at', { ascending: false })
-    setMyChannels(own || [])
+    try {
+      const { data: own } = await supabase
+        .from('channels').select('*').eq('owner_id', user.id)
+        .order('created_at', { ascending: false })
+      setMyChannels(own || [])
 
-    const { data: memberships } = await supabase
-      .from('channel_members').select('channel_id, channels(*)')
-      .eq('user_id', user.id)
+      const { data: memberships } = await supabase
+        .from('channel_members').select('channel_id, channels(*)')
+        .eq('user_id', user.id)
 
-    const joined = memberships
-      ?.map(m => m.channels)
-      .filter(c => c && !(own || []).some(o => o.id === c.id)) || []
-    setJoinedChannels(joined)
+      const joined = memberships
+        ?.map(m => m.channels)
+        .filter(c => c && !(own || []).some(o => o.id === c.id)) || []
+      setJoinedChannels(joined)
 
-    const allChannels = [...(own || []), ...joined]
-    const counts = {}
-    await Promise.all(allChannels.map(async c => {
-      const { count } = await supabase
-        .from('channel_members').select('*', { count: 'exact', head: true })
-        .eq('channel_id', c.id)
-      counts[c.id] = (count || 0) + 1
-    }))
-    setMemberCounts(counts)
-    setLoading(false)
+      const allChannels = [...(own || []), ...joined]
+      const counts = {}
+      if (allChannels.length) {
+        const { data: mems } = await supabase
+          .from('channel_members').select('channel_id')
+          .in('channel_id', allChannels.map(c => c.id))
+        for (const m of mems || []) counts[m.channel_id] = (counts[m.channel_id] || 0) + 1
+        for (const c of allChannels) counts[c.id] = (counts[c.id] || 0) + 1
+      }
+      setMemberCounts(counts)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const createChannel = async (name, description, isPrivate = false) => {
@@ -78,32 +82,32 @@ export function useChannels(user) {
     setMyChannels(prev => prev.filter(c => c.id !== channelId))
   }
 
-  const searchChannels = async (query) => {
-    const { data: channels } = await supabase.from('channels')
+  const searchChannels = async (query, { sport = '', language = '', sortBy = 'score' } = {}) => {
+    let q = supabase.from('channels')
       .select('*')
       .eq('is_private', false)
       .ilike('name', query.trim() ? `%${query}%` : '%')
-      .limit(query.trim() ? 15 : 12)
+      .limit(20)
 
+    if (sport)    q = q.eq('sport', sport)
+    if (language) q = q.eq('language', language)
+
+    const { data: channels } = await q
     if (!channels?.length) return []
 
     const channelIds = channels.map(c => c.id)
     const ownerIds = [...new Set(channels.map(c => c.owner_id))]
 
-    const [memberResults, { data: profiles }, { data: bets }] = await Promise.all([
-      Promise.all(channelIds.map(id =>
-        supabase.from('channel_members')
-          .select('*', { count: 'exact', head: true })
-          .eq('channel_id', id)
-          .then(({ count }) => ({ id, count: (count || 0) + 1 }))
-      )),
+    const [{ data: rawMems }, { data: profiles }, { data: bets }] = await Promise.all([
+      supabase.from('channel_members').select('channel_id').in('channel_id', channelIds),
       supabase.from('profiles').select('id, username, name, avatar_url').in('id', ownerIds),
       supabase.from('bets').select('user_id, status, stake, odds')
-        .in('user_id', ownerIds)
-        .in('status', ['won', 'lost']),
+        .in('user_id', ownerIds).in('status', ['won', 'lost']).limit(500),
     ])
 
-    const memberMap = Object.fromEntries(memberResults.map(m => [m.id, m.count]))
+    const memberMap = {}
+    for (const m of rawMems || []) memberMap[m.channel_id] = (memberMap[m.channel_id] || 0) + 1
+    for (const id of channelIds) memberMap[id] = (memberMap[id] || 0) + 1 // +1 propietari
     const profileMap = Object.fromEntries((profiles || []).map(p => [p.id, p]))
 
     const statsMap = {}
@@ -130,9 +134,15 @@ export function useChannels(user) {
     }))
 
     const maxMembers = Math.max(...enriched.map(c => c.memberCount), 1)
+    const scoreOf = c => (c.memberCount / maxMembers) * 60 + Math.max(0, c.ownerStats.yieldVal) * 1.5 + c.ownerStats.winRate * 0.4
+
     return enriched.sort((a, b) => {
-      const score = c => (c.memberCount / maxMembers) * 60 + Math.max(0, c.ownerStats.yieldVal) * 1.5 + c.ownerStats.winRate * 0.4
-      return score(b) - score(a)
+      switch (sortBy) {
+        case 'yield':   return b.ownerStats.yieldVal - a.ownerStats.yieldVal
+        case 'members': return b.memberCount - a.memberCount
+        case 'winRate': return b.ownerStats.winRate - a.ownerStats.winRate
+        default:        return scoreOf(b) - scoreOf(a)
+      }
     })
   }
 
@@ -147,6 +157,20 @@ export function useChannels(user) {
 
   const joinChannel = async (channelId) => {
     if (joinedChannels.length >= MAX_JOINED_CHANNELS) return { error: `Límite de ${MAX_JOINED_CHANNELS} canales alcanzado` }
+
+    // Comprova si l'usuari té un veto actiu
+    const { data: ban } = await supabase.from('channel_bans')
+      .select('banned_until').eq('channel_id', channelId).eq('user_id', user.id).maybeSingle()
+    if (ban) {
+      if (!ban.banned_until) return { error: 'Tienes un veto permanente en este canal' }
+      if (new Date(ban.banned_until) > new Date()) {
+        const until = new Date(ban.banned_until).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+        return { error: `Vetado hasta el ${until}` }
+      }
+      // Veto caducat — esborra'l
+      await supabase.from('channel_bans').delete().eq('channel_id', channelId).eq('user_id', user.id)
+    }
+
     const { data: existing } = await supabase.from('channel_members').select('id')
       .eq('channel_id', channelId).eq('user_id', user.id).maybeSingle()
     if (existing) return { alreadyJoined: true }

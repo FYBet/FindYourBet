@@ -35,7 +35,7 @@ function Avatar({ url, name, size = 80, fontSize = 32 }) {
   )
 }
 
-export default function MiPerfil({ user, onNavigate, onAvatarUpdated }) {
+export default function MiPerfil({ user, onNavigate, onAvatarUpdated, onNavigateToChannel }) {
   const [profile, setProfile] = useState(null)
   const [stats, setStats] = useState({ total: 0, won: 0, lost: 0, yieldVal: 0, avgOdds: '—' })
   const [followersCount, setFollowersCount] = useState(0)
@@ -47,7 +47,9 @@ export default function MiPerfil({ user, onNavigate, onAvatarUpdated }) {
   const [showDmConfig, setShowDmConfig] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [savingDm, setSavingDm] = useState(false)
-  const [activeTab, setActiveTab] = useState('picks')
+  const [activeTab, setActiveTab] = useState('stats')
+  const [channels, setChannels] = useState([])
+  const [loadingChannels, setLoadingChannels] = useState(false)
 
   // Edit form
   const [editForm, setEditForm] = useState({ name: '', username: '', bio: '' })
@@ -62,45 +64,69 @@ export default function MiPerfil({ user, onNavigate, onAvatarUpdated }) {
     fetchAll()
   }, [user])
 
+  const fetchChannels = async () => {
+    if (loadingChannels || channels.length) return
+    setLoadingChannels(true)
+    try {
+      const { data: chans } = await supabase.from('channels').select('*').eq('owner_id', user.id)
+      if (!chans?.length) { setChannels([]); return }
+      const { data: mems } = await supabase
+        .from('channel_members').select('channel_id')
+        .in('channel_id', chans.map(c => c.id))
+      const countMap = {}
+      for (const m of mems || []) countMap[m.channel_id] = (countMap[m.channel_id] || 0) + 1
+      setChannels(chans.map(c => ({ ...c, memberCount: (countMap[c.id] || 0) + 1 })))
+    } catch (e) {
+      // silent
+    } finally {
+      setLoadingChannels(false)
+    }
+  }
+
   const fetchAll = async () => {
     setLoading(true)
-    const [
-      { data: prof },
-      { data: bets },
-      { count: fersCount },
-      { count: fingCount },
-      { data: dmSet }
-    ] = await Promise.all([
-      supabase.from('profiles').select('*').eq('id', user.id).single(),
-      supabase.from('bets').select('*').eq('user_id', user.id),
-      supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', user.id),
-      supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', user.id),
-      supabase.from('dm_settings').select('allow_dms').eq('user_id', user.id).single(),
-    ])
+    try {
+      const [
+        { data: prof },
+        { data: bets },
+        { count: fersCount },
+        { count: fingCount },
+        { data: dmSet }
+      ] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', user.id).single(),
+        supabase.from('bets').select('*').eq('user_id', user.id),
+        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', user.id),
+        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', user.id),
+        supabase.from('dm_settings').select('allow_dms').eq('user_id', user.id).single(),
+      ])
 
-    setProfile(prof)
-    setFollowersCount(fersCount || 0)
-    setFollowingCount(fingCount || 0)
-    if (dmSet) setDmSetting(dmSet.allow_dms)
-    if (prof) setEditForm({ name: prof.name || '', username: prof.username || '', bio: prof.bio || '' })
+      setProfile(prof)
+      setFollowersCount(fersCount || 0)
+      setFollowingCount(fingCount || 0)
+      if (dmSet) setDmSetting(dmSet.allow_dms)
+      if (prof) setEditForm({ name: prof.name || '', username: prof.username || '', bio: prof.bio || '' })
 
-    if (bets && bets.length > 0) {
-      const resolved = bets.filter(b => b.status !== 'pending')
-      const won = resolved.filter(b => b.status === 'won').length
-      const lost = resolved.filter(b => b.status === 'lost').length
-      const { profit, stakeSum } = resolved.reduce(
-        (acc, b) => ({
-          stakeSum: acc.stakeSum + b.stake,
-          profit: acc.profit + (b.status === 'won' ? b.stake * (b.odds - 1) : -b.stake)
-        }),
-        { profit: 0, stakeSum: 0 }
-      )
-      const yieldVal = stakeSum > 0 ? (profit / stakeSum) * 100 : 0
-      const avgOdds = bets.length > 0 ? (bets.reduce((s, b) => s + b.odds, 0) / bets.length).toFixed(2) : '—'
-      setStats({ total: resolved.length, won, lost, yieldVal, avgOdds })
-      setRecentBets(resolved.slice(0, 6))
+      if (bets && bets.length > 0) {
+        const resolved = bets.filter(b => b.status !== 'pending')
+        const won = resolved.filter(b => b.status === 'won').length
+        const lost = resolved.filter(b => b.status === 'lost').length
+        const { profit, stakeSum } = resolved.reduce(
+          (acc, b) => ({
+            stakeSum: acc.stakeSum + b.stake,
+            profit: acc.profit + (b.status === 'won' ? b.stake * (b.odds - 1) : -b.stake)
+          }),
+          { profit: 0, stakeSum: 0 }
+        )
+        const yieldVal = stakeSum > 0 ? (profit / stakeSum) * 100 : 0
+        const avgOdds = bets.length > 0 ? (bets.reduce((s, b) => s + b.odds, 0) / bets.length).toFixed(2) : '—'
+        setStats({ total: resolved.length, won, lost, yieldVal, avgOdds })
+        setRecentBets(resolved.slice(0, 6))
+      }
+    } catch (e) {
+      // silent
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   const handleSaveDm = async (val) => {
@@ -309,10 +335,14 @@ export default function MiPerfil({ user, onNavigate, onAvatarUpdated }) {
         </div>
       </div>
 
-      {/* TABS PICKS / STATS */}
+      {/* TABS */}
       <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', borderBottom: '0.5px solid var(--color-border)' }}>
-        {[{ id: 'picks', label: '📋 Últimos picks' }, { id: 'stats', label: '📊 Rendimiento' }].map(t => (
-          <button key={t.id} onClick={() => setActiveTab(t.id)}
+        {[
+          { id: 'stats', label: '📊 Rendimiento' },
+          { id: 'canales', label: '📡 Canales' },
+          { id: 'picks', label: '📋 Últimos picks' },
+        ].map(t => (
+          <button key={t.id} onClick={() => { setActiveTab(t.id); if (t.id === 'canales') fetchChannels() }}
             style={{ padding: '10px 20px', fontSize: '13px', fontWeight: 500, color: activeTab === t.id ? 'var(--color-primary)' : 'var(--color-text-muted)', background: 'transparent', border: 'none', borderBottom: `2px solid ${activeTab === t.id ? 'var(--color-primary)' : 'transparent'}`, cursor: 'pointer', marginBottom: '-1px', fontFamily: 'var(--font-sans)', transition: 'all 0.15s' }}>
             {t.label}
           </button>
@@ -362,21 +392,75 @@ export default function MiPerfil({ user, onNavigate, onAvatarUpdated }) {
 
         {activeTab === 'stats' && (
           <motion.div key="stats" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px' }}>
-              {[
-                { label: 'Yield total', value: `${stats.yieldVal >= 0 ? '+' : ''}${stats.yieldVal.toFixed(2)}%`, color: stats.yieldVal >= 0 ? 'var(--color-primary)' : 'var(--color-error)', sub: 'Beneficio sobre apostado' },
-                { label: 'W / L', value: `${stats.won} / ${stats.lost}`, color: 'var(--color-text)', sub: 'Ganadas / Perdidas' },
-                { label: 'Total picks', value: stats.total, color: 'var(--color-text)', sub: 'Picks resueltos' },
-                { label: 'Cuota media', value: stats.avgOdds, color: 'var(--color-warning)', sub: 'Promedio de cuotas' },
-                { label: 'Win rate', value: stats.total > 0 ? `${((stats.won / stats.total) * 100).toFixed(0)}%` : '—', color: 'var(--color-text)', sub: 'Porcentaje de acierto' },
-              ].map((s, i) => (
-                <div key={i} style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '20px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>{s.label}</div>
-                  <div style={{ fontSize: '28px', fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.value}</div>
-                  <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '6px' }}>{s.sub}</div>
-                </div>
-              ))}
-            </div>
+            {stats.total === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px', color: 'var(--color-text-muted)' }}>
+                <div style={{ fontSize: '32px', marginBottom: '8px' }}>📊</div>
+                <div>Aún no tienes picks registrados.</div>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px' }}>
+                {[
+                  { label: 'Yield total', value: `${stats.yieldVal >= 0 ? '+' : ''}${stats.yieldVal.toFixed(2)}%`, color: stats.yieldVal >= 0 ? 'var(--color-primary)' : 'var(--color-error)', sub: 'Beneficio sobre apostado' },
+                  { label: 'W / L', value: `${stats.won} / ${stats.lost}`, color: 'var(--color-text)', sub: 'Ganadas / Perdidas' },
+                  { label: 'Total picks', value: stats.total, color: 'var(--color-text)', sub: 'Picks resueltos' },
+                  { label: 'Cuota media', value: stats.avgOdds, color: 'var(--color-warning)', sub: 'Promedio de cuotas' },
+                  { label: 'Win rate', value: stats.total > 0 ? `${((stats.won / stats.total) * 100).toFixed(0)}%` : '—', color: 'var(--color-text)', sub: 'Porcentaje de acierto' },
+                ].map((s, i) => (
+                  <div key={i} style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '20px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>{s.label}</div>
+                    <div style={{ fontSize: '28px', fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.value}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '6px' }}>{s.sub}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+
+        {activeTab === 'canales' && (
+          <motion.div key="canales" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+            {loadingChannels ? (
+              <div style={{ textAlign: 'center', padding: '40px', color: 'var(--color-text-muted)' }}>⏳ Cargando canales...</div>
+            ) : channels.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px', color: 'var(--color-text-muted)' }}>
+                <div style={{ fontSize: '40px', marginBottom: '12px' }}>📡</div>
+                <div style={{ fontWeight: 600, marginBottom: '6px' }}>Sin canales todavía</div>
+                <button onClick={() => onNavigate('canales')}
+                  style={{ marginTop: '16px', padding: '10px 20px', background: 'var(--color-primary)', color: '#010906', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 700, fontFamily: 'var(--font-sans)', fontSize: '13px' }}>
+                  + Crear canal
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {channels.map(c => (
+                  <div key={c.id} style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden', border: '2px solid var(--color-bg-soft)' }}>
+                      {c.avatar_url ? <img src={c.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : c.name[0].toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px', flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 700, fontSize: '15px' }}>{c.name}</span>
+                        {c.is_private && <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-full)', padding: '1px 7px' }}>🔒 Privado</span>}
+                        {c.sport && <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-full)', padding: '1px 7px' }}>{c.sport}</span>}
+                      </div>
+                      {c.description && <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', marginBottom: '4px' }}>{c.description}</div>}
+                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>👥 {c.memberCount} miembros</span>
+                        {c.language && <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{c.language}</span>}
+                      </div>
+                    </div>
+                    {onNavigateToChannel ? (
+                      <button onClick={() => onNavigateToChannel(c)}
+                        style={{ background: 'var(--color-primary)', color: '#010906', border: 'none', borderRadius: 'var(--radius-md)', padding: '8px 16px', cursor: 'pointer', fontSize: '12px', fontWeight: 700, fontFamily: 'var(--font-sans)', flexShrink: 0 }}>
+                        Ir al canal
+                      </button>
+                    ) : (
+                      <span style={{ fontSize: '11px', color: 'var(--color-primary)', fontWeight: 700, flexShrink: 0 }}>Tu canal</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

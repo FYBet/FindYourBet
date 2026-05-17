@@ -105,10 +105,12 @@ function useRanking(period, selectedSports) {
 
   const fetchRanking = async () => {
     setLoading(true)
+    try {
     const { data: bets, error } = await supabase
       .from('bets')
       .select('user_id, odds, stake, status, date, sport')
       .neq('status', 'pending')
+      .limit(5000)
     if (error || !bets) { setLoading(false); return }
 
     const range = getPeriodRange(period)
@@ -178,12 +180,16 @@ function useRanking(period, selectedSports) {
       ...e,
       username: profileMap[e.userId] ? `@${profileMap[e.userId]}` : `@${e.userId.slice(0, 6)}`
     })))
-    setLoading(false)
+    } catch (e) {
+      // silent — no bloqueja la UI
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
     fetchRanking()
-    const interval = setInterval(fetchRanking, 10000)
+    const interval = setInterval(fetchRanking, 60000)
     return () => clearInterval(interval)
   }, [period, JSON.stringify(selectedSports)])
 

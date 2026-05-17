@@ -4,6 +4,9 @@ import { supabase } from '../../../lib/supabase'
 import { Button } from '../../../components/ui/Button'
 import { useMessages } from './hooks/useMessages'
 import { StickerPicker } from '../StickerPicker'
+import { VoicePlayer, VoiceRecordButton } from '../VoiceMessage'
+import ProfileView from '../social/ProfileView'
+import OfferManager from '../payments/OfferManager'
 
 function parseBetMessage(content) {
   try {
@@ -11,14 +14,15 @@ function parseBetMessage(content) {
   } catch { return null }
 }
 
-function BetCard({ bet }) {
+function BetCard({ bet, timeStr }) {
   const [liveStatus, setLiveStatus] = useState(bet.status)
 
   useEffect(() => {
-    if (!bet.id) return
+    // Aposta ja resolta: no cal re-consultar, l'estat no pot canviar
+    if (!bet.id || bet.status !== 'pending') return
     supabase.from('bets').select('status').eq('id', bet.id).single()
       .then(({ data }) => { if (data?.status) setLiveStatus(data.status) })
-  }, [bet.id])
+  }, [bet.id, bet.status])
 
   const statusColor = liveStatus === 'won' ? 'var(--color-primary)' : liveStatus === 'lost' ? 'var(--color-error)' : 'var(--color-text-muted)'
   const statusLabel = liveStatus === 'won' ? '✓ Ganada' : liveStatus === 'lost' ? '✗ Perdida' : '⏳ Pendiente'
@@ -36,11 +40,12 @@ function BetCard({ bet }) {
       <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '10px' }}>
         {bet.sport} · {bet.market}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
         {[
           { label: 'Pick', value: bet.pick },
           { label: 'Cuota', value: parseFloat(bet.odds).toFixed(2) },
           { label: 'Stake', value: `${bet.stake}` },
+          { label: 'Fecha', value: new Date(bet.date).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) },
         ].map((s, i) => (
           <div key={i} style={{ background: 'var(--color-bg-soft)', borderRadius: 'var(--radius-sm)', padding: '6px 8px', textAlign: 'center' }}>
             <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>{s.label}</div>
@@ -48,23 +53,76 @@ function BetCard({ bet }) {
           </div>
         ))}
       </div>
-      <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '8px' }}>
-        🕐 {new Date(bet.date).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-      </div>
+      {timeStr && (
+        <div style={{ textAlign: 'right', marginTop: '10px', fontSize: '10px', color: 'var(--color-text-muted)', opacity: 0.65 }}>
+          {timeStr}
+        </div>
+      )}
     </div>
   )
 }
 
-function renderMessage(content, onInternalLink, isOwnerMsg = false) {
+function isSingleEmoji(content) {
+  const t = content.trim()
+  if (!t || t.startsWith('[')) return false
+  try {
+    const segs = [...new Intl.Segmenter('en', { granularity: 'grapheme' }).segment(t)]
+    return segs.length === 1 && /\p{Emoji}/u.test(t)
+  } catch {
+    return /^\p{Emoji_Presentation}️?$/u.test(t)
+  }
+}
+
+function ProfileCard({ profileId, profileUsername, onViewProfile, timeStr }) {
+  return (
+    <div style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '12px 14px', minWidth: '220px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: timeStr ? '8px' : '0' }}>
+        <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0 }}>
+          {(profileUsername || '?')[0].toUpperCase()}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--color-text)' }}>@{profileUsername}</div>
+          <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Tipster · FYB</div>
+        </div>
+        <button onClick={() => onViewProfile?.(profileId)}
+          style={{ background: 'var(--color-primary)', color: '#010906', border: 'none', borderRadius: 'var(--radius-md)', padding: '5px 12px', cursor: 'pointer', fontSize: '11px', fontWeight: 700, fontFamily: 'var(--font-sans)', flexShrink: 0 }}>
+          Ver →
+        </button>
+      </div>
+      {timeStr && (
+        <div style={{ textAlign: 'right', fontSize: '10px', color: 'var(--color-text-muted)', opacity: 0.7 }}>
+          {timeStr}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function renderMessage(content, onInternalLink, isOwnerMsg = false, onViewProfile = null, timeStr = '') {
   const linkColor = isOwnerMsg ? '#010906' : 'var(--color-primary)'
 
+  if (content.startsWith('[PROFILE]:')) {
+    const rest = content.replace('[PROFILE]:', '')
+    const idx = rest.indexOf(':')
+    const profileId = idx >= 0 ? rest.slice(0, idx) : rest
+    const profileUsername = idx >= 0 ? rest.slice(idx + 1) : '?'
+    return <ProfileCard profileId={profileId} profileUsername={profileUsername} onViewProfile={onViewProfile} timeStr={timeStr} />
+  }
   if (content.startsWith('[STICKER]:')) {
     return <span style={{ fontSize: '56px', lineHeight: 1.1 }}>{content.replace('[STICKER]:', '')}</span>
   }
+  if (content.startsWith('[VOICE]:')) {
+    const url = content.replace('[VOICE]:', '')
+    return <VoicePlayer url={url} isOwn={isOwnerMsg} />
+  }
   if (content.startsWith('[BET]:')) {
     const bet = parseBetMessage(content)
-    if (bet) return <BetCard bet={bet} />
+    if (bet) return <BetCard bet={bet} timeStr={timeStr} />
     return null
+  }
+  if (content.startsWith('[GIF]:')) {
+    const url = content.replace('[GIF]:', '')
+    return <img src={url} alt="gif" style={{ display: 'block', maxWidth: '240px', maxHeight: '200px', borderRadius: 'var(--radius-md)', objectFit: 'contain' }} />
   }
   if (content.startsWith('[IMAGE]:')) {
     const url = content.replace('[IMAGE]:', '')
@@ -105,6 +163,18 @@ function renderMessage(content, onInternalLink, isOwnerMsg = false) {
       </span>
     )
   }
+  if (isSingleEmoji(content)) {
+    return (
+      <motion.span
+        initial={{ scale: 0.3, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 500, damping: 18 }}
+        style={{ fontSize: '52px', lineHeight: 1.1, display: 'inline-block' }}
+      >
+        {content.trim()}
+      </motion.span>
+    )
+  }
   return content
 }
 
@@ -112,6 +182,8 @@ function isImageMessage(content) { return content.startsWith('[IMAGE]:') }
 function isLinkMessage(content) { return content.startsWith('http://') || content.startsWith('https://') }
 function isBetMessage(content) { return content.startsWith('[BET]:') }
 function isStickerMessage(content) { return content.startsWith('[STICKER]:') }
+function isVoiceMessage(content) { return content.startsWith('[VOICE]:') }
+function isProfileMessage(content) { return content.startsWith('[PROFILE]:') }
 
 function formatMsgTime(created_at) {
   if (!created_at) return ''
@@ -147,12 +219,15 @@ function DaySeparator({ label }) {
   )
 }
 
-function calcChannelStats(messages) {
+// liveStatuses: map { betId → status } amb l'estat actual de la BD
+function calcChannelStats(messages, liveStatuses = {}) {
   const betMessages = messages.filter(m => isBetMessage(m.content))
   const bets = betMessages.map(m => parseBetMessage(m.content)).filter(Boolean)
-  const resolved = bets.filter(b => b.status !== 'pending')
-  const won = bets.filter(b => b.status === 'won').length
-  const lost = bets.filter(b => b.status === 'lost').length
+  // Substitueix l'status incrustat (sempre 'pending') pel de la BD si existeix
+  const enriched = bets.map(b => ({ ...b, status: liveStatuses[b.id] ?? b.status }))
+  const resolved = enriched.filter(b => b.status !== 'pending')
+  const won = enriched.filter(b => b.status === 'won').length
+  const lost = enriched.filter(b => b.status === 'lost').length
   let yieldVal = 0
   if (resolved.length > 0) {
     const { profit, stakeSum } = resolved.reduce(
@@ -193,46 +268,46 @@ function InfoToggle({ label, desc, active, onChange }) {
   )
 }
 
-function MemberRow({ profile, userId, isChannelOwner, isMemberAdmin, canKick, onKick, canPromote, onPromote, canDemote, onDemote }) {
+function MemberRow({ profile, userId, isChannelOwner, isMemberAdmin, canKick, onKick, canPromote, onPromote, canDemote, onDemote, canBan, onBanClick, onViewProfile }) {
   const initial = (profile?.username || userId?.slice(0, 2) || '?')[0].toUpperCase()
+  const [showMenu, setShowMenu] = useState(false)
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px 0' }}>
-      <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 0', borderBottom: '0.5px solid var(--color-border)' }}>
+      <div onClick={() => onViewProfile?.(userId)} style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden', cursor: onViewProfile ? 'pointer' : 'default' }}>
         {profile?.avatar_url ? <img src={profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initial}
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div onClick={() => onViewProfile?.(userId)} style={{ flex: 1, minWidth: 0, cursor: onViewProfile ? 'pointer' : 'default' }}>
         <div style={{ fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
           @{profile?.username || userId?.slice(0, 8) || '?'}
           {isChannelOwner && <span style={{ fontSize: '10px', background: 'rgba(245,158,11,0.15)', color: 'var(--color-warning)', padding: '1px 7px', borderRadius: 'var(--radius-full)', fontWeight: 700, border: '0.5px solid rgba(245,158,11,0.3)' }}>Creador</span>}
           {isMemberAdmin && !isChannelOwner && <span style={{ fontSize: '10px', background: 'var(--color-primary-light)', color: 'var(--color-primary)', padding: '1px 7px', borderRadius: 'var(--radius-full)', fontWeight: 700, border: '0.5px solid var(--color-primary-border)' }}>Admin</span>}
         </div>
-        {profile?.name && <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{profile.name}</div>}
+        {profile?.name && <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.name}</div>}
       </div>
-      <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
-        {canPromote && (
-          <button onClick={onPromote}
-            style={{ background: 'var(--color-primary-light)', border: '0.5px solid var(--color-primary-border)', color: 'var(--color-primary)', cursor: 'pointer', fontSize: '11px', fontWeight: 600, padding: '4px 8px', borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font-sans)' }}>
-            ⬆ Admin
+      {(canPromote || canDemote || canKick || canBan) && (
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <button onClick={() => setShowMenu(v => !v)}
+            style={{ background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '14px', padding: '4px 8px', borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font-sans)' }}>
+            ···
           </button>
-        )}
-        {canDemote && (
-          <button onClick={onDemote}
-            style={{ background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '11px', fontWeight: 600, padding: '4px 8px', borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font-sans)' }}>
-            ⬇ Miembro
-          </button>
-        )}
-        {canKick && (
-          <button onClick={onKick}
-            style={{ background: 'var(--color-error-light)', border: '0.5px solid var(--color-error-border)', color: 'var(--color-error)', cursor: 'pointer', fontSize: '11px', fontWeight: 600, padding: '4px 8px', borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font-sans)' }}>
-            Expulsar
-          </button>
-        )}
-      </div>
+          {showMenu && (
+            <>
+              <div onClick={() => setShowMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
+              <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: '4px', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-md)', zIndex: 20, minWidth: '140px', overflow: 'hidden' }}>
+                {canPromote && <button onClick={() => { onPromote(); setShowMenu(false) }} style={{ display: 'flex', width: '100%', padding: '9px 14px', background: 'none', border: 'none', borderBottom: '0.5px solid var(--color-border)', cursor: 'pointer', fontSize: '12px', color: 'var(--color-primary)', fontWeight: 600, textAlign: 'left', fontFamily: 'var(--font-sans)' }}>⬆ Hacer admin</button>}
+                {canDemote && <button onClick={() => { onDemote(); setShowMenu(false) }} style={{ display: 'flex', width: '100%', padding: '9px 14px', background: 'none', border: 'none', borderBottom: '0.5px solid var(--color-border)', cursor: 'pointer', fontSize: '12px', color: 'var(--color-text-muted)', fontWeight: 600, textAlign: 'left', fontFamily: 'var(--font-sans)' }}>⬇ Quitar admin</button>}
+                {canKick && <button onClick={() => { onKick(); setShowMenu(false) }} style={{ display: 'flex', width: '100%', padding: '9px 14px', background: 'none', border: 'none', borderBottom: canBan ? '0.5px solid var(--color-border)' : 'none', cursor: 'pointer', fontSize: '12px', color: 'var(--color-error)', fontWeight: 600, textAlign: 'left', fontFamily: 'var(--font-sans)' }}>🚪 Expulsar</button>}
+                {canBan && <button onClick={() => { onBanClick({ userId, username: profile?.username || userId?.slice(0, 8) }); setShowMenu(false) }} style={{ display: 'flex', width: '100%', padding: '9px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', color: 'var(--color-error)', fontWeight: 700, textAlign: 'left', fontFamily: 'var(--font-sans)' }}>⛔ Vetar</button>}
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }
 
-function InfoView({ channel, messages, isOwner, isAdmin, onClose, onUpdateChannel, onDeleteChannel }) {
+function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, onUpdateChannel, onDeleteChannel, currentUser }) {
   const [editing, setEditing] = useState(false)
   const [editForm, setEditForm] = useState({ name: channel.name, description: channel.description || '' })
   const [saving, setSaving] = useState(false)
@@ -244,10 +319,14 @@ function InfoView({ channel, messages, isOwner, isAdmin, onClose, onUpdateChanne
   const [avatarFile, setAvatarFile] = useState(null)
   const [avatarPreview, setAvatarPreview] = useState(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleteInput, setDeleteInput] = useState('')
   const [avatarError, setAvatarError] = useState('')
+  const [memberSearch, setMemberSearch] = useState('')
+  const [banModal, setBanModal] = useState(null) // { userId, username }
+  const [profileOverlay, setProfileOverlay] = useState(null) // userId
   const avatarInputRef = useRef(null)
 
-  const stats = calcChannelStats(messages)
+  const stats = calcChannelStats(messages, liveStatuses)
   const images = messages.filter(m => isImageMessage(m.content))
   const links = messages.filter(m => isLinkMessage(m.content))
 
@@ -300,6 +379,11 @@ function InfoView({ channel, messages, isOwner, isAdmin, onClose, onUpdateChanne
     onUpdateChannel({ ...channel, [field]: newVal })
   }
 
+  const handleField = async (field, value) => {
+    await supabase.from('channels').update({ [field]: value || null }).eq('id', channel.id)
+    onUpdateChannel({ ...channel, [field]: value || null })
+  }
+
   const handleCopyLink = () => {
     navigator.clipboard.writeText(`https://fyourbet.com/canal/${channel.invite_code}`)
     setCopiedLink(true)
@@ -327,6 +411,15 @@ function InfoView({ channel, messages, isOwner, isAdmin, onClose, onUpdateChanne
   const handleDemote = async (userId) => {
     await supabase.from('channel_members').update({ role: 'member' }).eq('channel_id', channel.id).eq('user_id', userId)
     setMembers(prev => prev.map(m => m.user_id === userId ? { ...m, role: 'member' } : m))
+  }
+
+  const handleBan = async (userId, bannedUntil) => {
+    await Promise.all([
+      supabase.from('channel_bans').upsert({ channel_id: channel.id, user_id: userId, banned_by: channel.owner_id, banned_until: bannedUntil }),
+      supabase.from('channel_members').delete().eq('channel_id', channel.id).eq('user_id', userId),
+    ])
+    setMembers(prev => prev.filter(m => m.user_id !== userId))
+    setBanModal(null)
   }
 
   const avatarDisplay = avatarPreview || channel.avatar_url
@@ -416,6 +509,27 @@ function InfoView({ channel, messages, isOwner, isAdmin, onClose, onUpdateChanne
           <InfoSection title="⚙️ Configuración">
             <InfoToggle label="Canal privado" desc="Solo accesible con código de invitación" active={channel.is_private} onChange={() => handleToggle('is_private')} />
             <InfoToggle label="Enlace visible públicamente" desc="Cualquiera puede compartir y ver el link" active={!!channel.link_public} onChange={() => handleToggle('link_public')} />
+
+            {/* Deporte e idioma — permiten que el canal aparezca en filtros de búsqueda */}
+            <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: '6px' }}>Deporte principal</div>
+                <select value={channel.sport || ''} onChange={e => handleField('sport', e.target.value)}
+                  style={{ width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: channel.sport ? 'var(--color-text)' : 'var(--color-text-muted)', fontFamily: 'var(--font-sans)', fontSize: '13px', padding: '9px 12px', borderRadius: 'var(--radius-md)', outline: 'none', cursor: 'pointer' }}>
+                  <option value=''>Sin especificar</option>
+                  {['Fútbol','Baloncesto','Tenis','eSports','MMA','Béisbol','Fútbol Americano','Otros'].map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: '6px' }}>Idioma del canal</div>
+                <select value={channel.language || ''} onChange={e => handleField('language', e.target.value)}
+                  style={{ width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: channel.language ? 'var(--color-text)' : 'var(--color-text-muted)', fontFamily: 'var(--font-sans)', fontSize: '13px', padding: '9px 12px', borderRadius: 'var(--radius-md)', outline: 'none', cursor: 'pointer' }}>
+                  <option value=''>Sin especificar</option>
+                  {['Español','Català','English','Português','Français','Deutsch'].map(l => <option key={l} value={l}>{l}</option>)}
+                </select>
+              </div>
+            </div>
+
             <div style={{ marginTop: '14px' }}>
               <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: '6px' }}>Código de invitación</div>
               <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
@@ -439,27 +553,84 @@ function InfoView({ channel, messages, isOwner, isAdmin, onClose, onUpdateChanne
         <InfoSection title={`👥 Miembros (${members.length + 1})`}>
           {loadingMembers ? (
             <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Cargando...</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <MemberRow profile={ownerProfile} userId={channel.owner_id} isChannelOwner canKick={false} canPromote={false} canDemote={false} />
-              {members.map(m => (
-                <MemberRow
-                  key={m.user_id}
-                  profile={m.profile}
-                  userId={m.user_id}
-                  isChannelOwner={false}
-                  isMemberAdmin={m.role === 'admin'}
-                  canKick={isOwner || (isAdmin && m.role !== 'admin')}
-                  onKick={() => handleKick(m.user_id)}
-                  canPromote={isOwner && m.role !== 'admin'}
-                  onPromote={() => handlePromote(m.user_id)}
-                  canDemote={isOwner && m.role === 'admin'}
-                  onDemote={() => handleDemote(m.user_id)}
-                />
-              ))}
-            </div>
-          )}
+          ) : (isOwner || isAdmin) ? (
+            <>
+              {/* Barra de cerca — solo owner/admin */}
+              <input
+                type="text"
+                placeholder="Buscar por @usuario..."
+                value={memberSearch}
+                onChange={e => setMemberSearch(e.target.value)}
+                style={{ width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '12px', padding: '7px 10px', borderRadius: 'var(--radius-md)', outline: 'none', boxSizing: 'border-box', marginBottom: '8px' }}
+              />
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {/* El propietari sempre apareix primer */}
+                {(!memberSearch || (ownerProfile?.username || '').toLowerCase().includes(memberSearch.toLowerCase())) && (
+                  <MemberRow profile={ownerProfile} userId={channel.owner_id} isChannelOwner canKick={false} canPromote={false} canDemote={false} canBan={false} onViewProfile={setProfileOverlay} />
+                )}
+                {members
+                  .filter(m => !memberSearch || (m.profile?.username || '').toLowerCase().includes(memberSearch.toLowerCase()))
+                  .map(m => (
+                    <MemberRow
+                      key={m.user_id}
+                      profile={m.profile}
+                      userId={m.user_id}
+                      isChannelOwner={false}
+                      isMemberAdmin={m.role === 'admin'}
+                      canKick={isOwner || (isAdmin && m.role !== 'admin')}
+                      onKick={() => handleKick(m.user_id)}
+                      canPromote={isOwner && m.role !== 'admin'}
+                      onPromote={() => handlePromote(m.user_id)}
+                      canDemote={isOwner && m.role === 'admin'}
+                      onDemote={() => handleDemote(m.user_id)}
+                      canBan={isOwner}
+                      onBanClick={setBanModal}
+                      onViewProfile={setProfileOverlay}
+                    />
+                  ))}
+                {memberSearch && members.filter(m => (m.profile?.username || '').toLowerCase().includes(memberSearch.toLowerCase())).length === 0 && (
+                  <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', padding: '8px 0', textAlign: 'center' }}>Sin resultados</div>
+                )}
+              </div>
+            </>
+          ) : null}
         </InfoSection>
+
+        {/* MODAL DE VET */}
+        {banModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+            onClick={() => setBanModal(null)}>
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+              onClick={e => e.stopPropagation()}
+              style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-error-border)', borderRadius: 'var(--radius-lg)', padding: '24px', width: '100%', maxWidth: '300px' }}>
+              <div style={{ fontWeight: 700, fontSize: '15px', marginBottom: '4px' }}>⛔ Vetar a @{banModal.username}</div>
+              <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>Selecciona la duración del veto</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {[
+                  [60 * 60 * 1000,          '1 hora'],
+                  [6 * 60 * 60 * 1000,      '6 horas'],
+                  [24 * 60 * 60 * 1000,     '24 horas'],
+                  [7 * 24 * 60 * 60 * 1000, '7 días'],
+                  [30 * 24 * 60 * 60 * 1000,'30 días'],
+                ].map(([ms, label]) => (
+                  <button key={ms} onClick={() => handleBan(banModal.userId, new Date(Date.now() + ms).toISOString())}
+                    style={{ padding: '9px 14px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-error-border)', background: 'var(--color-error-light)', color: 'var(--color-error)', cursor: 'pointer', fontSize: '13px', fontWeight: 600, fontFamily: 'var(--font-sans)', textAlign: 'left' }}>
+                    ⏱ {label}
+                  </button>
+                ))}
+                <button onClick={() => handleBan(banModal.userId, null)}
+                  style={{ padding: '9px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--color-error)', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: 700, fontFamily: 'var(--font-sans)', textAlign: 'left' }}>
+                  🚫 Permanente
+                </button>
+                <button onClick={() => setBanModal(null)}
+                  style={{ padding: '9px 14px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-border)', background: 'var(--color-bg-soft)', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-sans)' }}>
+                  Cancelar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
 
         {/* ENLACE per a membres normals */}
         {!isOwner && channel.link_public && (
@@ -501,25 +672,49 @@ function InfoView({ channel, messages, isOwner, isAdmin, onClose, onUpdateChanne
           </InfoSection>
         )}
 
+        {/* PAGAMENT */}
+        {isOwner && (
+          <InfoSection title="💳 Ofertas de pago">
+            <OfferManager channelId={channel.id} userId={currentUser.id} />
+          </InfoSection>
+        )}
+
         {/* ZONA DE PERILL */}
         {isOwner && (
           <InfoSection title="⚠️ Zona de peligro">
             {!showDeleteConfirm ? (
-              <button onClick={() => setShowDeleteConfirm(true)}
+              <button onClick={() => { setShowDeleteConfirm(true); setDeleteInput('') }}
                 style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-error-border)', background: 'var(--color-error-light)', color: 'var(--color-error)', cursor: 'pointer', fontSize: '13px', fontWeight: 700, fontFamily: 'var(--font-sans)' }}>
                 🗑 Eliminar canal
               </button>
             ) : (
-              <div style={{ background: 'var(--color-error-light)', border: '0.5px solid var(--color-error-border)', borderRadius: 'var(--radius-md)', padding: '14px' }}>
-                <div style={{ fontSize: '13px', color: 'var(--color-error)', fontWeight: 600, marginBottom: '10px' }}>¿Seguro? Se eliminarán todos los mensajes y picks del canal.</div>
+              <div style={{ background: 'var(--color-error-light)', border: '0.5px solid var(--color-error-border)', borderRadius: 'var(--radius-md)', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ fontSize: '13px', color: 'var(--color-error)', fontWeight: 700 }}>
+                  ⚠️ Esta acción es irreversible
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--color-error)', lineHeight: 1.5 }}>
+                  Se eliminarán permanentemente todos los mensajes, picks e historial del canal. No se puede deshacer.
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                  Escribe <strong style={{ color: 'var(--color-error)', letterSpacing: '0.5px' }}>ELIMINAR</strong> para confirmar:
+                </div>
+                <input
+                  autoFocus
+                  value={deleteInput}
+                  onChange={e => setDeleteInput(e.target.value)}
+                  placeholder="ELIMINAR"
+                  style={{ width: '100%', background: 'var(--color-bg)', border: `1.5px solid ${deleteInput === 'ELIMINAR' ? 'var(--color-error)' : 'var(--color-error-border)'}`, color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '13px', fontWeight: 600, padding: '9px 12px', borderRadius: 'var(--radius-md)', outline: 'none', boxSizing: 'border-box', letterSpacing: '1px' }}
+                />
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <button onClick={() => setShowDeleteConfirm(false)}
-                    style={{ flex: 1, padding: '8px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', cursor: 'pointer', fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-sans)' }}>
+                  <button onClick={() => { setShowDeleteConfirm(false); setDeleteInput('') }}
+                    style={{ flex: 1, padding: '9px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', cursor: 'pointer', fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-sans)' }}>
                     Cancelar
                   </button>
-                  <button onClick={() => onDeleteChannel?.(channel.id)}
-                    style={{ flex: 1, padding: '8px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--color-error)', color: '#fff', cursor: 'pointer', fontSize: '12px', fontWeight: 700, fontFamily: 'var(--font-sans)' }}>
-                    Eliminar
+                  <button
+                    onClick={() => onDeleteChannel?.(channel.id)}
+                    disabled={deleteInput !== 'ELIMINAR'}
+                    style={{ flex: 1, padding: '9px', borderRadius: 'var(--radius-md)', border: 'none', background: deleteInput === 'ELIMINAR' ? 'var(--color-error)' : 'var(--color-bg-soft)', color: deleteInput === 'ELIMINAR' ? '#fff' : 'var(--color-text-muted)', cursor: deleteInput === 'ELIMINAR' ? 'pointer' : 'default', fontSize: '12px', fontWeight: 700, fontFamily: 'var(--font-sans)', transition: 'all 0.15s' }}>
+                    Eliminar canal
                   </button>
                 </div>
               </div>
@@ -527,6 +722,25 @@ function InfoView({ channel, messages, isOwner, isAdmin, onClose, onUpdateChanne
           </InfoSection>
         )}
       </div>
+
+      {/* OVERLAY PERFIL membre */}
+      <AnimatePresence>
+        {profileOverlay && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setProfileOverlay(null)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+            <motion.div initial={{ opacity: 0, scale: 0.96, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
+              onClick={e => e.stopPropagation()}
+              style={{ width: '100%', maxWidth: '480px', maxHeight: '88vh', overflowY: 'auto', background: 'var(--color-bg)', borderRadius: 'var(--radius-xl)', padding: '20px', boxSizing: 'border-box' }}>
+              <ProfileView
+                userId={profileOverlay}
+                currentUser={currentUser}
+                onBack={() => setProfileOverlay(null)}
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }
@@ -540,6 +754,7 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
   const [showMenu, setShowMenu] = useState(false)
   const [showInfo, setShowInfo] = useState(false)
   const [showStickers, setShowStickers] = useState(false)
+  const [showExtras, setShowExtras] = useState(false)
   const [muted, setMuted] = useState(false)
   const fileInputRef = useRef(null)
   const scrollRef = useRef(null)
@@ -548,6 +763,24 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
   const wasAtBottomRef = useRef(true)
   const isOwner = channel.owner_id === user.id
   const [isAdmin, setIsAdmin] = useState(false)
+  const [liveBetStatuses, setLiveBetStatuses] = useState({})
+  const [profileModal, setProfileModal] = useState(null)
+
+  // Cada cop que arriben missatges nous, refresca els status reals de la BD
+  useEffect(() => {
+    const betIds = messages
+      .filter(m => isBetMessage(m.content))
+      .map(m => parseBetMessage(m.content)?.id)
+      .filter(Boolean)
+    if (!betIds.length) { setLiveBetStatuses({}); return }
+    supabase.from('bets').select('id, status').in('id', betIds)
+      .then(({ data }) => {
+        if (!data) return
+        setLiveBetStatuses(Object.fromEntries(data.map(b => [b.id, b.status])))
+      })
+  }, [messages])
+
+  const channelStats = calcChannelStats(messages, liveBetStatuses)
 
   useEffect(() => {
     if (!user?.id || isOwner || user.id === 'dev-skip') return
@@ -580,7 +813,10 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
 
   const handleSendSticker = (sticker) => {
     setText(prev => prev + sticker)
-    setShowStickers(false)
+  }
+
+  const handleSendGif = async (url) => {
+    await sendMessage(`[GIF]:${url}`, user.id)
   }
 
   const handleKey = (e) => {
@@ -626,10 +862,10 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', color: 'var(--color-text-muted)' }}>←</button>
-        <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden', border: '2px solid var(--color-bg-soft)' }}>
+        <div onClick={() => setShowInfo(true)} style={{ width: '38px', height: '38px', borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden', border: '2px solid var(--color-bg-soft)', cursor: 'pointer' }}>
           {channel.avatar_url ? <img src={channel.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : channel.name[0].toUpperCase()}
         </div>
-        <div style={{ flex: 1 }}>
+        <div onClick={() => setShowInfo(true)} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
           <div style={{ fontWeight: 700, fontSize: '18px' }}>{channel.name}</div>
           {channel.description && <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>{channel.description}</div>}
         </div>
@@ -670,40 +906,43 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
             <div>Sin mensajes todavía.</div>
           </div>
         ) : messages.map((m, i) => {
+          const isOwn = m.user_id === user.id
           const isBet = isBetMessage(m.content)
+          const isImage = isImageMessage(m.content)
           const isSticker = isStickerMessage(m.content)
-          const isSpecial = isBet || isSticker
-          const isOwnerMsg = m.user_id === user.id && !isSpecial
+          const isProfile = isProfileMessage(m.content)
+          const isVoice = isVoiceMessage(m.content)
+          const isNobubble = isSticker || isBet || isProfile
           const timeStr = formatMsgTime(m.created_at)
           const prev = messages[i - 1]
           const showDaySep = !prev || getDayLabel(m.created_at) !== getDayLabel(prev.created_at)
           return (
             <div key={m.id}>
               {showDaySep && <DaySeparator label={getDayLabel(m.created_at) ?? ''} />}
-              <div style={{ display: 'flex', justifyContent: isBet ? 'flex-start' : m.user_id === user.id ? 'flex-end' : 'flex-start' }}>
-                <div style={{ maxWidth: isBet ? '320px' : isSticker ? 'fit-content' : '70%' }}>
+              <div style={{ display: 'flex', justifyContent: (isBet || isVoice || isProfile) ? 'flex-start' : isOwn ? 'flex-end' : 'flex-start' }}>
+                <div style={{ maxWidth: isBet || isProfile ? '320px' : isNobubble ? 'fit-content' : isVoice ? '280px' : '70%' }}>
                   <div style={{
                     position: 'relative',
-                    background: isSpecial ? 'transparent' : m.user_id === user.id ? 'var(--color-primary)' : 'var(--color-bg-soft)',
-                    color: isOwnerMsg ? '#010906' : 'var(--color-text)',
-                    padding: isSpecial ? '0' : '10px 14px 22px 14px',
+                    background: isNobubble ? 'transparent' : isOwn ? 'var(--color-primary)' : 'var(--color-bg-soft)',
+                    color: isOwn ? '#010906' : 'var(--color-text)',
+                    padding: isNobubble ? '0' : isImage ? '6px' : '10px 14px 22px 14px',
                     borderRadius: 'var(--radius-lg)', fontSize: '14px', lineHeight: 1.5, whiteSpace: 'pre-wrap',
-                    border: isSpecial ? 'none' : m.user_id === user.id ? 'none' : '0.5px solid var(--color-border)'
+                    border: isOwn || isNobubble ? 'none' : '0.5px solid var(--color-border)',
                   }}>
-                    {renderMessage(m.content, handleInternalLink, isOwnerMsg)}
-                    {!isSpecial && timeStr && (
+                    {renderMessage(m.content, handleInternalLink, isOwn, setProfileModal)}
+                    {!isNobubble && !isImage && (
                       <span style={{
-                        position: 'absolute', bottom: '6px', right: '10px',
-                        fontSize: '10px',
-                        color: isOwnerMsg ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.45)',
+                        position: 'absolute', bottom: '5px', right: '10px',
+                        fontSize: '10px', fontWeight: 500,
+                        color: isOwn ? 'rgba(1,9,6,0.65)' : 'rgba(224,245,235,0.55)',
                         whiteSpace: 'nowrap',
                       }}>
                         {timeStr}
                       </span>
                     )}
                   </div>
-                  {isSpecial && timeStr && (
-                    <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '4px', opacity: 0.6 }}>
+                  {(isNobubble || isImage) && (
+                    <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '3px', textAlign: (isBet || isProfile) ? 'left' : isOwn ? 'right' : 'left' }}>
                       {timeStr}
                     </div>
                   )}
@@ -722,29 +961,52 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
               {uploadError}
             </div>
           )}
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
-          <input type="file" ref={fileInputRef} onChange={handleFile} accept="image/jpeg,image/png,image/gif,image/webp,.pdf" style={{ display: 'none' }} />
-          <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
-            style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '11px 14px', cursor: 'pointer', fontSize: '16px', color: 'var(--color-text-muted)', flexShrink: 0 }}>
-            {uploading ? '⏳' : '📎'}
-          </button>
-          <textarea value={text} onChange={e => setText(e.target.value)} onKeyDown={handleKey}
-            placeholder="Envía un mensaje" rows={2}
-            style={{ flex: 1, background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '14px', padding: '12px 14px', borderRadius: 'var(--radius-md)', outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
-          <div style={{ position: 'relative', flexShrink: 0 }}>
-            <button onClick={() => setShowStickers(v => !v)}
-              style={{ background: showStickers ? 'var(--color-primary-light)' : 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '11px 14px', cursor: 'pointer', fontSize: '16px', color: showStickers ? 'var(--color-primary)' : 'var(--color-text-muted)' }}>
-              😊
-            </button>
-            <AnimatePresence>
-              {showStickers && <StickerPicker onSelect={handleSendSticker} onClose={() => setShowStickers(false)} />}
-            </AnimatePresence>
-          </div>
-          <button onClick={() => onAddBet?.(channel.id)}
-            style={{ background: 'var(--color-primary-light)', border: '0.5px solid var(--color-primary-border)', borderRadius: 'var(--radius-md)', padding: '11px 14px', cursor: 'pointer', fontSize: '13px', color: 'var(--color-primary)', fontWeight: 700, flexShrink: 0, fontFamily: 'var(--font-sans)', whiteSpace: 'nowrap' }}>
-            📊 Añadir apuesta
-          </button>
-          <Button onClick={handleSend} disabled={!text.trim()}>Enviar</Button>
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-end' }}>
+            <input type="file" ref={fileInputRef} onChange={handleFile} accept="image/jpeg,image/png,image/gif,image/webp,.pdf" style={{ display: 'none' }} />
+
+            {/* Botó + per accions secundàries */}
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              <button onClick={() => { setShowMenu(false); setShowStickers(false); setShowExtras(v => !v) }}
+                style={{ background: showExtras ? 'var(--color-primary-light)' : 'var(--color-bg)', border: `0.5px solid ${showExtras ? 'var(--color-primary-border)' : 'var(--color-border)'}`, borderRadius: 'var(--radius-md)', padding: '11px 14px', cursor: 'pointer', fontSize: '18px', color: showExtras ? 'var(--color-primary)' : 'var(--color-text-muted)', flexShrink: 0, lineHeight: 1 }}>
+                +
+              </button>
+              <AnimatePresence>
+                {showExtras && (
+                  <>
+                    <div onClick={() => setShowExtras(false)} style={{ position: 'fixed', inset: 0, zIndex: 9 }} />
+                    <motion.div initial={{ opacity: 0, y: 6, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 6, scale: 0.95 }}
+                      style={{ position: 'absolute', bottom: '48px', left: 0, background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-md)', zIndex: 10, minWidth: '180px', overflow: 'hidden' }}>
+                      <button onClick={() => { fileInputRef.current?.click(); setShowExtras(false) }} disabled={uploading}
+                        style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '12px 16px', background: 'none', border: 'none', borderBottom: '0.5px solid var(--color-border)', cursor: 'pointer', fontSize: '14px', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', textAlign: 'left' }}>
+                        <span>{uploading ? '⏳' : '📎'}</span><span>Adjuntar archivo</span>
+                      </button>
+                      <button onClick={() => { onAddBet?.(channel.id); setShowExtras(false) }}
+                        style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '12px 16px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', color: 'var(--color-primary)', fontWeight: 700, fontFamily: 'var(--font-sans)', textAlign: 'left' }}>
+                        <span>📊</span><span>Añadir apuesta</span>
+                      </button>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
+
+            <VoiceRecordButton userId={user.id} onSend={async content => { await sendMessage(content, user.id) }} />
+
+            <textarea value={text} onChange={e => setText(e.target.value)} onKeyDown={handleKey}
+              placeholder="Envía un mensaje" rows={2}
+              style={{ flex: 1, minWidth: 0, background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '14px', padding: '12px 14px', borderRadius: 'var(--radius-md)', outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
+
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              <button onClick={() => setShowStickers(v => !v)}
+                style={{ background: showStickers ? 'var(--color-primary-light)' : 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '11px 14px', cursor: 'pointer', fontSize: '16px', color: showStickers ? 'var(--color-primary)' : 'var(--color-text-muted)' }}>
+                😊
+              </button>
+              <AnimatePresence>
+                {showStickers && <StickerPicker onSelect={handleSendSticker} onSendGif={handleSendGif} onClose={() => setShowStickers(false)} user={user} />}
+              </AnimatePresence>
+            </div>
+
+            <Button onClick={handleSend} disabled={!text.trim()}>Enviar</Button>
           </div>
         </div>
       ) : (
@@ -755,10 +1017,25 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
 
       <AnimatePresence>
         {showInfo && (
-          <InfoView channel={channel} messages={messages} isOwner={isOwner} isAdmin={isAdmin}
+          <InfoView channel={channel} messages={messages} liveStatuses={liveBetStatuses} isOwner={isOwner} isAdmin={isAdmin}
             onClose={() => setShowInfo(false)}
             onUpdateChannel={(updated) => { setChannel(updated); onChannelUpdated?.(updated) }}
-            onDeleteChannel={onDeleteChannel} />
+            onDeleteChannel={onDeleteChannel} currentUser={user} />
+        )}
+      </AnimatePresence>
+
+      {/* Overlay perfil des de targeta [PROFILE]: */}
+      <AnimatePresence>
+        {profileModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setProfileModal(null)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+            <motion.div initial={{ opacity: 0, scale: 0.96, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
+              onClick={e => e.stopPropagation()}
+              style={{ width: '100%', maxWidth: '480px', maxHeight: '88vh', overflowY: 'auto', background: 'var(--color-bg)', borderRadius: 'var(--radius-xl)', padding: '20px', boxSizing: 'border-box' }}>
+              <ProfileView userId={profileModal} currentUser={user} onBack={() => setProfileModal(null)} />
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </motion.div>
