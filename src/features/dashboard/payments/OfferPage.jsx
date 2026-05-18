@@ -22,9 +22,9 @@ export default function OfferPage({ user }) {
     const load = async () => {
       const { data } = await supabase
         .from('offers')
-        .select('*, channels(name, description, avatar_url, invite_code, owner_id, profiles(username, name))')
+        .select('*, channels(name, description, avatar_url, invite_code, owner_id)')
         .eq('id', id)
-        .single()
+        .maybeSingle()
 
       if (!data || !data.active) { setLoading(false); return }
       setOffer(data)
