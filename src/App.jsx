@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-route
 import Landing from './features/landing/Landing'
 import Login from './features/auth/Login'
 import Register from './features/auth/Register'
+import GoogleOnboarding from './features/auth/GoogleOnboarding'
 import Dashboard from './features/dashboard/Dashboard'
 import CanalPage from './features/dashboard/canales/CanalPage'
 import OfferPage from './features/dashboard/payments/OfferPage'
@@ -77,12 +78,23 @@ function AppRoutes() {
   const navigate = useNavigate()
 
   const buildUser = async (authUser) => {
-    const { data: profile } = await supabase.from('profiles').select('avatar_url, username, name').eq('id', authUser.id).single()
+    let profile = null
+    try {
+      const res = await Promise.race([
+        supabase.from('profiles').select('avatar_url, username, name').eq('id', authUser.id).maybeSingle(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('profile-timeout')), 6000))
+      ])
+      profile = res?.data || null
+    } catch (e) {
+      console.warn('[buildUser] profile fetch failed, falling back to metadata:', e?.message)
+    }
     return {
       id: authUser.id,
       name: profile?.name || authUser.user_metadata?.name || authUser.email,
+      username: profile?.username || null,
       email: authUser.email,
-      avatar_url: profile?.avatar_url || null,
+      avatar_url: profile?.avatar_url || authUser.user_metadata?.avatar_url || null,
+      needsOnboarding: !profile?.username,
     }
   }
 
@@ -92,27 +104,41 @@ function AppRoutes() {
   }
 
   useEffect(() => {
-    // Garanteix que loading s'apaga sempre, fins i tot si Supabase no respon
-    const timeout = setTimeout(() => setLoading(false), 5000)
+    let timedOut = false
+    // Si Supabase no respon en 5s, és que la sessió persisitida està corrompuda.
+    // Netegem-la perquè el següent intent comenci de zero.
+    const timeout = setTimeout(() => {
+      timedOut = true
+      Object.keys(localStorage)
+        .filter(k => k.includes('supabase') || k.startsWith('sb-'))
+        .forEach(k => localStorage.removeItem(k))
+      setLoading(false)
+    }, 5000)
 
     const init = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession()
-        if (session?.user) {
+        const { data: { session }, error } = await supabase.auth.getSession()
+        if (timedOut) return
+        if (error) {
+          await supabase.auth.signOut()
+        } else if (session?.user) {
           try { setUser(await buildUser(session.user)) } catch {
             setUser({ id: session.user.id, name: session.user.user_metadata?.name || session.user.email, email: session.user.email, avatar_url: null })
           }
         }
-      } catch { /* Supabase unreachable, continue as logged out */ } finally {
+      } catch {
+        await supabase.auth.signOut()
+      } finally {
         clearTimeout(timeout)
-        setLoading(false)
+        if (!timedOut) setLoading(false)
       }
     }
     init()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      // INITIAL_SESSION is already handled by the getSession call above
-      if (_event === 'INITIAL_SESSION') return
+      // INITIAL_SESSION ja el gestiona getSession; TOKEN_REFRESHED és silenciós i no
+      // ha de re-avaluar needsOnboarding perquè pot arribar amb perfil incomplet.
+      if (_event === 'INITIAL_SESSION' || _event === 'TOKEN_REFRESHED') return
       if (session?.user) {
         try { setUser(await buildUser(session.user)) } catch { setUser({ id: session.user.id, name: session.user.user_metadata?.name || session.user.email, email: session.user.email, avatar_url: null }) }
       } else {
@@ -131,7 +157,16 @@ function AppRoutes() {
   }
 
   const logout = async () => {
-    await supabase.auth.signOut()
+    try {
+      await Promise.race([
+        supabase.auth.signOut(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
+      ])
+    } catch {
+      Object.keys(localStorage)
+        .filter(k => k.includes('supabase') || k.startsWith('sb-'))
+        .forEach(k => localStorage.removeItem(k))
+    }
     setUser(null)
     navigate('/')
   }
@@ -150,7 +185,8 @@ function AppRoutes() {
       <Route path="/" element={<Landing navigate={(page) => navigate(`/${page === 'landing' ? '' : page}`)} user={user} />} />
       <Route path="/login" element={<Login navigate={(page) => navigate(`/${page === 'landing' ? '' : page}`)} login={login} />} />
       <Route path="/register" element={<Register navigate={(page) => navigate(`/${page === 'landing' ? '' : page}`)} login={login} />} />
-      <Route path="/dashboard" element={user ? <Dashboard navigate={(page) => navigate(`/${page === 'landing' ? '' : page}`)} user={user} logout={logout} onRefreshUser={refreshUser} /> : <Navigate to="/" />} />
+      <Route path="/onboarding" element={user ? (user.needsOnboarding ? <GoogleOnboarding user={user} onComplete={refreshUser} /> : <Navigate to="/dashboard" />) : <Navigate to="/" />} />
+      <Route path="/dashboard" element={user ? (user.needsOnboarding ? <Navigate to="/onboarding" /> : <Dashboard navigate={(page) => navigate(`/${page === 'landing' ? '' : page}`)} user={user} logout={logout} onRefreshUser={refreshUser} />) : <Navigate to="/" />} />
       <Route path="/canal/:code" element={<CanalPage />} />
       <Route path="/oferta/:id" element={<OfferPage user={user} />} />
       <Route path="/payment/success" element={<PaymentSuccess user={user} />} />

@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
+import PostModal from '../feed/PostModal'
+import FollowListModal from './FollowListModal'
+import { useMutes, MUTE_DURATIONS } from '../../../hooks/useMutes'
 
 function Avatar({ url, name, size = 80, fontSize = 32 }) {
   if (url) return (
@@ -14,16 +17,16 @@ function Avatar({ url, name, size = 80, fontSize = 32 }) {
   )
 }
 
-function StatPill({ label, value, color }) {
+function StatPill({ label, value, color, onClick }) {
   return (
-    <div style={{ textAlign: 'center', padding: '0 20px', borderRight: '0.5px solid var(--color-border)' }}>
+    <div onClick={onClick} style={{ textAlign: 'center', padding: '0 20px', borderRight: '0.5px solid var(--color-border)', cursor: onClick ? 'pointer' : 'default' }}>
       <div style={{ fontSize: '20px', fontWeight: 700, color: color || 'var(--color-text)' }}>{value}</div>
       <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '2px', textTransform: 'uppercase', letterSpacing: '0.8px' }}>{label}</div>
     </div>
   )
 }
 
-export default function ProfileView({ userId, currentUser, onBack, onStartDM, isFollowing, isFollower, onFollow, onUnfollow, onNavigateToChannel, onBlock, onReport }) {
+export default function ProfileView({ userId, currentUser, onBack, onStartDM, isFollowing, isFollower, onFollow, onUnfollow, onNavigateToChannel, onBlock, onReport, onViewUser }) {
   const [profile, setProfile] = useState(null)
   const [bets, setBets] = useState([])
   const [loading, setLoading] = useState(true)
@@ -36,6 +39,18 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
 
   // Bloc
   const [isBlocked, setIsBlocked] = useState(false)
+  const [postModalBetId, setPostModalBetId] = useState(null)
+  const [picksSubTab, setPicksSubTab] = useState('public')
+  const [premiumChannelIds, setPremiumChannelIds] = useState(new Set())
+
+  // Follow list modal
+  const [followListType, setFollowListType] = useState(null) // 'followers' | 'following' | null
+
+  // Mute
+  const { mute, unmute, isMuted, muteLabel } = useMutes()
+  const muteKey = `user_${userId}`
+  const muted = isMuted(muteKey)
+  const [showMuteMenu, setShowMuteMenu] = useState(false)
 
   // 3-dot menu
   const [showMenu, setShowMenu] = useState(false)
@@ -55,14 +70,17 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
 
   const fetchProfile = async () => {
     setLoading(true)
+    const safetyTimer = setTimeout(() => setLoading(false), 10000)
     try {
-      const [{ data: prof }, { data: resolvedBets }, { count: fersCount }, { count: fingCount }, { data: blockRow }] = await Promise.all([
+      const [{ data: prof }, { data: resolvedBets }, { count: fersCount }, { count: fingCount }, { data: blockRow }, { data: activeOffers }] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', userId).single(),
-        supabase.from('bets').select('*').eq('user_id', userId).neq('status', 'pending'),
+        supabase.from('bets').select('*, channel:channels(id, name, is_private, deleted_at)').eq('user_id', userId).neq('status', 'pending').order('created_at', { ascending: false }),
         supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', userId),
         supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId),
         currentUser?.id ? supabase.from('blocks').select('id').eq('blocker_id', currentUser.id).eq('blocked_id', userId).maybeSingle() : Promise.resolve({ data: null }),
+        supabase.from('offers').select('channel_id').eq('active', true),
       ])
+      setPremiumChannelIds(new Set((activeOffers || []).map(o => o.channel_id)))
       setProfile(prof)
       setIsBlocked(!!blockRow)
       setFollowersCount(fersCount || 0)
@@ -81,11 +99,12 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
         const yieldVal = stakeSum > 0 ? (profit / stakeSum) * 100 : 0
         const avgOdds = (resolvedBets.reduce((s, b) => s + b.odds, 0) / resolvedBets.length).toFixed(2)
         setStats({ total: resolvedBets.length, won, lost, yieldVal, avgOdds })
-        setBets(resolvedBets.slice(0, 6))
+        setBets(resolvedBets)
       }
     } catch (e) {
       // silent
     } finally {
+      clearTimeout(safetyTimer)
       setLoading(false)
     }
   }
@@ -222,10 +241,12 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
     : stats.total >= 10 ? '🥉 Bronze'
     : null
 
+  const isMutual = isFollowing && isFollower
+
   const btnSt = (variant) => ({
-    background: variant === 'primary' ? 'var(--color-primary)' : 'var(--color-bg)',
-    color: variant === 'primary' ? '#010906' : 'var(--color-text)',
-    border: variant === 'primary' ? 'none' : '0.5px solid var(--color-border)',
+    background: variant === 'primary' ? 'var(--color-primary)' : variant === 'mutual' ? 'var(--color-primary-light)' : 'var(--color-bg)',
+    color: variant === 'primary' ? '#010906' : variant === 'mutual' ? 'var(--color-primary)' : 'var(--color-text)',
+    border: variant === 'primary' ? 'none' : variant === 'mutual' ? '0.5px solid var(--color-primary-border)' : '0.5px solid var(--color-border)',
     borderRadius: 'var(--radius-md)', padding: '6px 14px', cursor: 'pointer',
     fontSize: '12px', fontWeight: 700, fontFamily: 'var(--font-sans)',
   })
@@ -245,16 +266,7 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
         {/* BANNER */}
         <div style={{ height: '100px', background: 'linear-gradient(135deg, var(--color-primary-light) 0%, rgba(0,200,100,0.08) 100%)', borderBottom: '0.5px solid var(--color-border)', position: 'relative' }}>
           {!isOwnProfile && (
-            <div style={{ position: 'absolute', top: '12px', right: '12px', display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <button
-                onClick={() => isFollowing ? onUnfollow(userId) : onFollow(userId)}
-                style={btnSt(isFollowing ? 'secondary' : 'primary')}>
-                {isFollowing ? 'Siguiendo ✓' : '+ Seguir'}
-              </button>
-              <button onClick={() => onStartDM?.(userId)} style={btnSt('secondary')}>
-                💬 Mensaje
-              </button>
-              {/* 3 punts */}
+            <div style={{ position: 'absolute', top: '12px', right: '12px' }}>
               <div style={{ position: 'relative' }}>
                 <button onClick={() => setShowMenu(v => !v)}
                   style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '6px 10px', cursor: 'pointer', fontSize: '15px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-sans)', lineHeight: 1 }}>
@@ -267,7 +279,7 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
                       <motion.div initial={{ opacity: 0, y: -6, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.95 }}
                         style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-md)', zIndex: 20, minWidth: '170px', overflow: 'hidden' }}>
                         {[
-                          { icon: '📤', label: 'Enviar perfil', action: () => { openSendProfile(); setShowMenu(false) } },
+                          { icon: '📤', label: 'Compartir perfil', action: () => { openSendProfile(); setShowMenu(false) } },
                           { icon: '🚩', label: 'Denunciar', action: () => { onReport?.(userId); setShowMenu(false); alert('Usuario denunciado. Lo revisaremos pronto.') } },
                           { icon: '🚫', label: 'Bloquear', action: handleBlock, danger: true },
                         ].map((item, i, arr) => (
@@ -292,7 +304,7 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
               <Avatar url={avatarUrl} name={displayName} size={80} fontSize={32} />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {isFollower && !isOwnProfile && (
+              {isFollower && !isOwnProfile && !isMutual && (
                 <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', background: 'var(--color-bg-soft)', padding: '2px 8px', borderRadius: 'var(--radius-full)', border: '0.5px solid var(--color-border)' }}>
                   Te sigue
                 </span>
@@ -312,8 +324,8 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
           )}
 
           <div style={{ display: 'flex', gap: '0' }}>
-            <StatPill label="Seguidores" value={followersCount} />
-            <StatPill label="Siguiendo" value={followingCount} />
+            <StatPill label="Seguidores" value={followersCount} onClick={() => setFollowListType('followers')} />
+            <StatPill label="Siguiendo" value={followingCount} onClick={() => setFollowListType('following')} />
             <StatPill label="Picks" value={stats.total} />
             {stats.total > 0 && (
               <div style={{ textAlign: 'center', padding: '0 20px' }}>
@@ -326,6 +338,51 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
           </div>
         </div>
       </div>
+
+      {/* BOTONS D'ACCIÓ */}
+      {!isOwnProfile && (
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', alignItems: 'center' }}>
+          <motion.button whileTap={{ scale: 0.97 }}
+            onClick={() => (isMutual || isFollowing) ? onUnfollow(userId) : onFollow(userId)}
+            style={{ flex: 1, padding: '12px 0', borderRadius: 'var(--radius-lg)', border: (isMutual || isFollowing) ? '0.5px solid var(--color-border)' : 'none', background: isMutual ? 'var(--color-primary-light)' : isFollowing ? 'var(--color-bg)' : 'var(--color-primary)', color: isMutual ? 'var(--color-primary)' : isFollowing ? 'var(--color-text-muted)' : '#010906', cursor: 'pointer', fontSize: '14px', fontWeight: 700, fontFamily: 'var(--font-sans)', transition: 'all 0.15s' }}>
+            {isMutual ? '👥 Amigos' : isFollowing ? 'Siguiendo ✓' : isFollower ? 'Seguir también' : '+ Seguir'}
+          </motion.button>
+          <motion.button whileTap={{ scale: 0.97 }}
+            onClick={() => onStartDM?.(userId)}
+            style={{ flex: 1, padding: '12px 0', borderRadius: 'var(--radius-lg)', border: '0.5px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', cursor: 'pointer', fontSize: '14px', fontWeight: 700, fontFamily: 'var(--font-sans)' }}>
+            💬 Mensaje
+          </motion.button>
+          {/* Campaneta */}
+          <div style={{ position: 'relative' }}>
+            <button onClick={() => setShowMuteMenu(v => !v)}
+              style={{ width: '46px', height: '46px', borderRadius: 'var(--radius-lg)', border: '0.5px solid var(--color-border)', background: 'var(--color-bg)', cursor: 'pointer', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {muted ? '🔕' : '🔔'}
+            </button>
+            <AnimatePresence>
+              {showMuteMenu && (
+                <>
+                  <div onClick={() => setShowMuteMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />
+                  <motion.div initial={{ opacity: 0, y: -6, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.95 }}
+                    style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-md)', zIndex: 20, minWidth: '170px', overflow: 'hidden' }}>
+                    {muted && (
+                      <button onClick={() => { unmute(muteKey); setShowMuteMenu(false) }}
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '11px 14px', background: 'none', border: 'none', borderBottom: '0.5px solid var(--color-border)', cursor: 'pointer', fontSize: '13px', color: 'var(--color-primary)', fontWeight: 700, textAlign: 'left', fontFamily: 'var(--font-sans)' }}>
+                        🔔 Activar notificaciones
+                      </button>
+                    )}
+                    {MUTE_DURATIONS.map((d, i) => (
+                      <button key={i} onClick={() => { mute(muteKey, d.ms); setShowMuteMenu(false) }}
+                        style={{ display: 'flex', width: '100%', padding: '10px 14px', background: 'none', border: 'none', borderBottom: i < MUTE_DURATIONS.length - 1 ? '0.5px solid var(--color-border)' : 'none', cursor: 'pointer', fontSize: '13px', color: 'var(--color-text)', textAlign: 'left', fontFamily: 'var(--font-sans)' }}>
+                        {d.label}
+                      </button>
+                    ))}
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+      )}
 
       {/* TABS */}
       <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', borderBottom: '0.5px solid var(--color-border)' }}>
@@ -342,24 +399,60 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
       </div>
 
       <AnimatePresence mode="wait">
-        {activeTab === 'picks' && (
+        {activeTab === 'picks' && (() => {
+          const publicBets = bets.filter(b => !b.was_private)
+          // Premium = privat + canal amb offer activa. Invite-only no apareix al perfil.
+          const premiumBets = bets.filter(b => b.was_private && premiumChannelIds.has(b.channel_id))
+          const shownBets = picksSubTab === 'public' ? publicBets : premiumBets
+          const isOwnProfile = currentUser?.id === userId
+          return (
           <motion.div key="picks" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-            {bets.length === 0 ? (
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '14px', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '4px', width: 'fit-content' }}>
+              {[
+                { id: 'public',  label: `🌐 Públicos (${publicBets.length})` },
+                { id: 'private', label: `💎 Premium (${premiumBets.length})` },
+              ].map(t => (
+                <button key={t.id} onClick={() => setPicksSubTab(t.id)}
+                  style={{ padding: '6px 14px', borderRadius: 'var(--radius-md)', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-sans)', background: picksSubTab === t.id ? 'var(--color-primary)' : 'transparent', color: picksSubTab === t.id ? '#010906' : 'var(--color-text-muted)', transition: 'all 0.15s' }}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            {shownBets.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '60px', color: 'var(--color-text-muted)' }}>
                 <div style={{ fontSize: '40px', marginBottom: '12px' }}>📋</div>
-                <div style={{ fontWeight: 600 }}>Sin picks todavía</div>
+                <div style={{ fontWeight: 600 }}>
+                  {picksSubTab === 'public' ? 'Sin picks públicos todavía' : 'Sin picks premium todavía'}
+                </div>
               </div>
             ) : (
               <div style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
-                {bets.map((b, i) => (
-                  <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 20px', borderBottom: i < bets.length - 1 ? '0.5px solid var(--color-border)' : 'none', transition: 'background 0.15s' }}
+                {shownBets.map((b, i) => {
+                  const isPrivateForViewer = b.was_private && !isOwnProfile
+                  return (
+                  <div key={b.id} onClick={() => setPostModalBetId(b.id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 20px', borderBottom: i < shownBets.length - 1 ? '0.5px solid var(--color-border)' : 'none', transition: 'background 0.15s', cursor: 'pointer' }}
                     onMouseEnter={e => e.currentTarget.style.background = 'var(--color-bg-soft)'}
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                     <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: b.status === 'won' ? 'var(--color-primary)' : 'var(--color-error)', flexShrink: 0 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 500, fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.event}</div>
-                      <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-                        {b.sport} · <strong>{b.pick}</strong> · @{parseFloat(b.odds).toFixed(2)} · {b.stake}
+                      <div style={{ fontWeight: 500, fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontStyle: isPrivateForViewer ? 'italic' : 'normal', color: isPrivateForViewer ? 'var(--color-text-muted)' : 'var(--color-text)' }}>
+                        {isPrivateForViewer ? '🔒 Pick privado' : b.event}
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '2px', display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        {!isPrivateForViewer && <span>{b.sport} · <strong>{b.pick}</strong> ·</span>}
+                        <span>@{parseFloat(b.odds).toFixed(2)} · {b.stake}</span>
+                        {b.channel && (
+                          <>
+                            <span>·</span>
+                            {b.channel.deleted_at
+                              ? <span style={{ fontStyle: 'italic', opacity: 0.7 }}>Canal eliminado</span>
+                              : <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>{b.channel.name}</span>}
+                          </>
+                        )}
+                        <span style={{ padding: '1px 6px', borderRadius: 'var(--radius-full)', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', fontSize: '9px', fontWeight: 700 }}>
+                          {b.was_private ? '💎 Premium' : '🌐 Público'}
+                        </span>
                       </div>
                     </div>
                     <div style={{ textAlign: 'right', flexShrink: 0 }}>
@@ -371,11 +464,13 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
                       </div>
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </motion.div>
-        )}
+          )
+        })()}
 
         {activeTab === 'stats' && (
           <motion.div key="stats" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
@@ -520,6 +615,25 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
               </div>
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {followListType && (
+          <FollowListModal
+            type={followListType}
+            profileUserId={userId}
+            currentUser={currentUser}
+            onClose={() => setFollowListType(null)}
+            onViewProfile={(uid) => { setFollowListType(null); onViewUser?.(uid) }}
+            onStartDM={onStartDM}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {postModalBetId && (
+          <PostModal betId={postModalBetId} currentUser={currentUser} onClose={() => setPostModalBetId(null)} />
         )}
       </AnimatePresence>
 

@@ -2,22 +2,11 @@ import { useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '../../../components/ui/Button'
 import { useMessages } from './hooks/useMessages'
-
-function renderMessage(content) {
-  if (content.startsWith('[IMAGE]:')) {
-    const url = content.replace('[IMAGE]:', '')
-    return <img src={url} alt="img" style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: 'var(--radius-md)', display: 'block' }} />
-  }
-  if (content.startsWith('[FILE:')) {
-    const match = content.match(/\[FILE:(.*?)\]:(.*)/)
-    if (match) return (
-      <a href={match[2]} target="_blank" rel="noreferrer" style={{ color: 'inherit', display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}>
-        <span>📎</span><span style={{ textDecoration: 'underline', fontSize: '13px' }}>{match[1]}</span>
-      </a>
-    )
-  }
-  return content
-}
+import {
+  renderMessage,
+  isBetMessage, isImageMessage, isStickerMessage, isProfileMessage, isVoiceMessage,
+  formatMsgTime, getDayLabel, DaySeparator,
+} from './messageRenderer'
 
 export default function PreviewView({ channel, user, onBack, onJoin, joining, memberCount }) {
   const { messages, loading } = useMessages(channel.id)
@@ -43,7 +32,7 @@ export default function PreviewView({ channel, user, onBack, onJoin, joining, me
         </span>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', position: 'relative' }}>
+      <div style={{ flex: 1, overflowY: 'auto', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {loading ? (
           <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '40px' }}>⏳ Cargando mensajes...</div>
         ) : messages.length === 0 ? (
@@ -51,21 +40,54 @@ export default function PreviewView({ channel, user, onBack, onJoin, joining, me
             <div style={{ fontSize: '32px', marginBottom: '8px' }}>💬</div>
             <div>Sin mensajes todavía en este canal.</div>
           </div>
-        ) : (
-          <>
-            {messages.map(m => (
-              <div key={m.id} style={{ alignSelf: 'flex-start', maxWidth: '70%' }}>
-                <div style={{ background: 'var(--color-bg-soft)', color: 'var(--color-text)', padding: '10px 14px', borderRadius: 'var(--radius-lg)', fontSize: '14px', lineHeight: 1.5, border: '0.5px solid var(--color-border)' }}>
-                  {renderMessage(m.content)}
-                </div>
-                <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-                  {new Date(m.created_at).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
+        ) : messages.map((m, i) => {
+          const isOwn = false // mai propi: usuari encara no és al canal
+          const isBet = isBetMessage(m.content)
+          const isImage = isImageMessage(m.content)
+          const isSticker = isStickerMessage(m.content)
+          const isProfile = isProfileMessage(m.content)
+          const isVoice = isVoiceMessage(m.content)
+          const isNobubble = isSticker || isBet || isProfile
+          const timeStr = formatMsgTime(m.created_at)
+          const prev = messages[i - 1]
+          const showDaySep = !prev || getDayLabel(m.created_at) !== getDayLabel(prev.created_at)
+          return (
+            <div key={m.id}>
+              {showDaySep && <DaySeparator label={getDayLabel(m.created_at) ?? ''} />}
+              <div style={{ display: 'flex', justifyContent: (isBet || isVoice || isProfile) ? 'flex-start' : isOwn ? 'flex-end' : 'flex-start' }}>
+                <div style={{ maxWidth: isBet || isProfile ? '320px' : isNobubble ? 'fit-content' : isVoice ? '280px' : '70%' }}>
+                  <div style={{
+                    position: 'relative',
+                    background: isNobubble ? 'transparent' : 'var(--color-bg-soft)',
+                    color: 'var(--color-text)',
+                    padding: isNobubble ? '0' : isImage ? '6px' : isVoice ? '10px 12px 22px 12px' : '7px 12px 19px 12px',
+                    borderRadius: isNobubble || isImage ? 'var(--radius-lg)' : '4px 16px 16px 16px',
+                    minWidth: !isNobubble && !isImage && !isVoice ? '56px' : undefined,
+                    fontSize: '14px', lineHeight: 1.5, whiteSpace: 'pre-wrap', textAlign: 'left',
+                    border: isNobubble ? 'none' : '0.5px solid var(--color-border)',
+                  }}>
+                    {renderMessage(m.content, null, isOwn, null)}
+                    {!isNobubble && !isImage && (
+                      <span style={{
+                        position: 'absolute', bottom: '5px', right: '10px',
+                        fontSize: '10px', fontWeight: 500,
+                        color: 'var(--color-text-muted)',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {timeStr}
+                      </span>
+                    )}
+                  </div>
+                  {(isNobubble || isImage) && (
+                    <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '3px', textAlign: 'left' }}>
+                      {timeStr}
+                    </div>
+                  )}
                 </div>
               </div>
-            ))}
-            <div style={{ position: 'sticky', bottom: 0, height: '80px', background: 'linear-gradient(to bottom, transparent, var(--color-bg))', pointerEvents: 'none', marginTop: '-80px' }} />
-          </>
-        )}
+            </div>
+          )
+        })}
         <div ref={bottomRef} />
       </div>
 

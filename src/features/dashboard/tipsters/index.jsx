@@ -22,7 +22,7 @@ function Avatar({ url, name, size = 48, fontSize = 18 }) {
   )
 }
 
-function TipsterCard({ tipster, isFollowing, onClick }) {
+function TipsterCard({ tipster, isFollowing, isMutual, onClick }) {
   const { stats } = tipster
   const tier = TIER_LABEL(stats.total, stats.yieldVal)
   const displayName = tipster.name || tipster.username
@@ -41,7 +41,9 @@ function TipsterCard({ tipster, isFollowing, onClick }) {
           {tier && (
             <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--color-primary-light)', color: 'var(--color-primary)', border: '0.5px solid var(--color-primary-border)', fontWeight: 700 }}>{tier}</span>
           )}
-          {isFollowing && (
+          {isMutual ? (
+            <span style={{ fontSize: '10px', color: 'var(--color-primary)', padding: '2px 8px', background: 'var(--color-primary-light)', border: '0.5px solid var(--color-primary-border)', borderRadius: 'var(--radius-full)', fontWeight: 700 }}>👥 Amigos</span>
+          ) : isFollowing && (
             <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', padding: '2px 8px', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-full)' }}>Siguiendo</span>
           )}
         </div>
@@ -90,13 +92,14 @@ export default function Tipsters({ user, onNavigateToChannel, onStartDM }) {
   const [searching, setSearching] = useState(false)
   const [loading, setLoading] = useState(true)
   const [selectedUserId, setSelectedUserId] = useState(null)
-  const { follow, unfollow, isFollowing, isFollower } = useFollow(user?.id)
+  const { follow, unfollow, isFollowing, isFollower, isMutual } = useFollow(user?.id)
   const searchTimeout = useRef(null)
 
   useEffect(() => { loadPopular() }, [])
 
   const loadPopular = async () => {
     setLoading(true)
+    const safetyTimer = setTimeout(() => setLoading(false), 10000)
     try {
       const [{ data: bets }, { data: profiles }] = await Promise.all([
         supabase.from('bets').select('user_id, stake, status, odds')
@@ -117,6 +120,7 @@ export default function Tipsters({ user, onNavigateToChannel, onStartDM }) {
 
       setPopular(enriched)
     } finally {
+      clearTimeout(safetyTimer)
       setLoading(false)
     }
   }
@@ -226,6 +230,7 @@ export default function Tipsters({ user, onNavigateToChannel, onStartDM }) {
                   <TipsterCard
                     tipster={t}
                     isFollowing={isFollowing(t.id)}
+                    isMutual={isMutual(t.id)}
                     onClick={() => setSelectedUserId(t.id)}
                   />
                 </motion.div>

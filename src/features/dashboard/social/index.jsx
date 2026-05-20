@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
 import { useDMs } from './hooks/useDMs'
@@ -18,9 +18,9 @@ function formatMsgPreview(content) {
   return content
 }
 
-export default function Social({ user }) {
+export default function Social({ user, initialDMUserId }) {
   const { conversations, loading, unreadCount, startConversation, acceptConversation, sendMessage, fetchMessages, blockUser } = useDMs(user.id)
-  const { isFollowing, isFollower, follow, unfollow } = useFollow(user.id)
+  const { isFollowing, isFollower, follow, unfollow, isMutual } = useFollow(user.id)
   const { mute, unmute, isMuted, muteLabel } = useMutes()
   const [openMuteMenu, setOpenMuteMenu] = useState(null)
 
@@ -30,6 +30,10 @@ export default function Social({ user }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState([])
   const [searching, setSearching] = useState(false)
+
+  useEffect(() => {
+    if (initialDMUserId) handleStartDM(initialDMUserId)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSearch = async (q) => {
     setSearchQuery(q)
@@ -91,14 +95,15 @@ export default function Social({ user }) {
       <ProfileView
         userId={activeProfile}
         currentUser={user}
-        onBack={() => setView(view === 'profile' ? 'search' : 'list')}
+        onBack={() => setView('list')}
         onStartDM={handleStartDM}
         isFollowing={isFollowing(activeProfile)}
         isFollower={isFollower(activeProfile)}
-        onFollow={follow}
+        onFollow={(userId) => follow(userId, user?.name || 'alguien')}
         onUnfollow={unfollow}
         onBlock={(userId) => { alert('Usuario bloqueado.') }}
         onReport={(userId) => {}}
+        onViewUser={handleOpenProfile}
       />
     )
   }
@@ -134,18 +139,26 @@ export default function Social({ user }) {
               )}
               {searchResults.map((u, i) => (
                 <div key={u.id}
-                  style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', borderBottom: i < searchResults.length - 1 ? '0.5px solid var(--color-border)' : 'none', cursor: 'pointer' }}
-                  onClick={() => { handleOpenProfile(u.id); setSearchQuery(''); setSearchResults([]) }}>
-                  <div style={{ width: '40px', height: '40px', background: 'var(--color-primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0 }}>
+                  style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', borderBottom: i < searchResults.length - 1 ? '0.5px solid var(--color-border)' : 'none' }}>
+                  <div onClick={() => { handleOpenProfile(u.id); setSearchQuery(''); setSearchResults([]) }}
+                    style={{ width: '40px', height: '40px', background: 'var(--color-primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, cursor: 'pointer' }}>
                     {(u.username || u.name || '?')[0].toUpperCase()}
                   </div>
-                  <div style={{ flex: 1 }}>
+                  <div onClick={() => { handleOpenProfile(u.id); setSearchQuery(''); setSearchResults([]) }} style={{ flex: 1, cursor: 'pointer' }}>
                     <div style={{ fontWeight: 600, fontSize: '14px' }}>{u.name || u.username}</div>
-                    <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>@{u.username}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{u.username}</div>
                   </div>
-                  {isFollowing(u.id) && (
-                    <span style={{ fontSize: '11px', color: 'var(--color-primary)', background: 'var(--color-primary-light)', padding: '2px 8px', borderRadius: 'var(--radius-full)', border: '0.5px solid var(--color-primary-border)' }}>Siguiendo</span>
-                  )}
+                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                    <button
+                      onClick={() => isFollowing(u.id) ? unfollow(u.id) : follow(u.id, user?.name || 'alguien')}
+                      style={{ padding: '5px 12px', borderRadius: 'var(--radius-md)', border: isFollowing(u.id) ? '0.5px solid var(--color-border)' : 'none', background: isFollowing(u.id) ? 'var(--color-bg-soft)' : 'var(--color-primary)', color: isFollowing(u.id) ? 'var(--color-text-muted)' : '#010906', cursor: 'pointer', fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-sans)', transition: 'all 0.15s' }}>
+                      {isMutual(u.id) ? '👥 Amigos' : isFollowing(u.id) ? 'Siguiendo' : '+ Seguir'}
+                    </button>
+                    <button onClick={() => handleStartDM(u.id)}
+                      style={{ padding: '5px 10px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-sans)' }}>
+                      💬
+                    </button>
+                  </div>
                 </div>
               ))}
             </motion.div>
@@ -168,7 +181,7 @@ export default function Social({ user }) {
                     : (c.otherUsername || '?')[0].toUpperCase()}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: '14px' }}>@{c.otherUsername}</div>
+                  <div style={{ fontWeight: 600, fontSize: '14px' }}>{c.otherUsername}</div>
                   <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>quiere enviarte un mensaje</div>
                 </div>
                 <div style={{ display: 'flex', gap: '6px' }}>
@@ -226,7 +239,7 @@ export default function Social({ user }) {
                     <div style={{ flex: 1, minWidth: 0, opacity: muted ? 0.6 : 1 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
                         <div style={{ fontWeight: c.unread > 0 && !muted ? 700 : 600, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          @{c.otherUsername}
+                          {c.otherUsername}
                           {muted && <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontWeight: 400 }}>🔕 {muteLabel(dmKey)}</span>}
                         </div>
                         <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', flexShrink: 0 }}>

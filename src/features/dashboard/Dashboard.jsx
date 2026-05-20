@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useBets } from './hooks/useBets'
-import { useDMs } from './social/hooks/useDMs'
+import { useUnreadDMCount } from './social/hooks/useUnreadDMCount'
 import { BetModal } from './BetModal'
 import Estadisticas from './Estadisticas'
 import Historial from './MisApuestas'
@@ -14,6 +14,8 @@ import Social from './social'
 import Tipsters from './tipsters'
 import MiPerfil from './social/MiPerfil'
 import Feed from './feed'
+import ProfileView from './social/ProfileView'
+import PostModal from './feed/PostModal'
 import { useNotifications } from './notifications/useNotifications'
 import NotificationsPanel from './notifications/NotificationsPanel'
 import Configuracion from './Configuracion'
@@ -179,9 +181,22 @@ function ShortcutConfigModal({ shortcuts, onSave, onClose }) {
 export default function Dashboard({ user, logout, onRefreshUser }) {
   const [tab, setTabRaw] = useState('estadisticas')
   const [visited, setVisited] = useState(() => new Set(['estadisticas']))
+  const [canalesKey, setCanalesKey] = useState(0)
+  const [socialKey, setSocialKey] = useState(0)
+  const [tipstersKey, setTipstersKey] = useState(0)
+  const [pendingSocialDMUserId, setPendingSocialDMUserId] = useState(null)
   const setTab = (id) => {
+    if (tab === 'canales' && id !== 'canales') setCanalesKey(k => k + 1)
+    if (tab === 'social' && id !== 'social') { setSocialKey(k => k + 1); setPendingSocialDMUserId(null) }
+    if (tab === 'tipsters' && id !== 'tipsters') setTipstersKey(k => k + 1)
     setVisited(prev => new Set([...prev, id]))
     setTabRaw(id)
+  }
+  const handleStartDMExternal = (userId) => {
+    setPendingSocialDMUserId(userId)
+    setSocialKey(k => k + 1)
+    setVisited(prev => new Set([...prev, 'social']))
+    setTabRaw('social')
   }
   const [navAvatar, setNavAvatar] = useState(user?.avatar_url || null)
   const [showShortcutConfig, setShowShortcutConfig] = useState(false)
@@ -215,11 +230,13 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
     period, setPeriod
   } = useBets(user)
 
-  const { unreadCount } = useDMs(user?.id)
+  const unreadCount = useUnreadDMCount(user?.id)
   const { notifications, unreadCount: notifCount, markRead, markAllRead } = useNotifications(user?.id)
   const [showNotifs, setShowNotifs] = useState(false)
 
   const [pendingCanalCode, setPendingCanalCode] = useState(null)
+  const [notifProfileUserId, setNotifProfileUserId] = useState(null)
+  const [postModalId, setPostModalId] = useState(null)
 
   useEffect(() => {
     const canalCode = searchParams.get('canal')
@@ -246,6 +263,7 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
   }
 
   return (
+    <>
     <div className="dashboard">
       <BetModal
         open={showModal}
@@ -317,6 +335,9 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
                 <NotificationsPanel
                   notifications={notifications}
                   onClose={() => setShowNotifs(false)}
+                  currentUser={user}
+                  onViewProfile={(userId) => { setNotifProfileUserId(userId); setShowNotifs(false) }}
+                  onViewPost={(msgId) => { setPostModalId(msgId); setShowNotifs(false) }}
                 />
               )}
             </AnimatePresence>
@@ -390,6 +411,7 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
                 bets={allBets} loadingBets={loadingBets}
                 onNewBet={() => setShowModal(true)} onResolveBet={resolveBet}
                 onDeleteBet={deleteBet} onUpdateBet={updateBet}
+                user={user}
               />
             </div>
           )}
@@ -397,6 +419,7 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
           {visited.has('canales') && (
             <div style={{ display: tab === 'canales' ? 'block' : 'none' }}>
               <Canales
+                key={canalesKey}
                 user={user}
                 initialCanalCode={pendingCanalCode}
                 onCanalCodeUsed={() => setPendingCanalCode(null)}
@@ -413,13 +436,13 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
 
           {visited.has('tipsters') && (
             <div style={{ display: tab === 'tipsters' ? 'block' : 'none' }}>
-              <Tipsters user={user} onNavigateToChannel={handleNavigateToChannel} onStartDM={() => setTab('social')} />
+              <Tipsters key={tipstersKey} user={user} onNavigateToChannel={handleNavigateToChannel} onStartDM={handleStartDMExternal} />
             </div>
           )}
 
           {visited.has('social') && (
             <div style={{ display: tab === 'social' ? 'block' : 'none' }}>
-              <Social user={user} />
+              <Social key={socialKey} user={user} initialDMUserId={pendingSocialDMUserId} />
             </div>
           )}
 
@@ -456,5 +479,26 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
         </div>
       </div>
     </div>
+
+    <AnimatePresence>
+      {postModalId && (
+        <PostModal messageId={postModalId} currentUser={user} onClose={() => setPostModalId(null)} />
+      )}
+    </AnimatePresence>
+
+    <AnimatePresence>
+      {notifProfileUserId && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          onClick={() => setNotifProfileUserId(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <motion.div initial={{ opacity: 0, scale: 0.96, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
+            onClick={e => e.stopPropagation()}
+            style={{ width: '100%', maxWidth: '480px', maxHeight: '88vh', overflowY: 'auto', background: 'var(--color-bg)', borderRadius: 'var(--radius-xl)', padding: '20px', boxSizing: 'border-box' }}>
+            <ProfileView userId={notifProfileUserId} currentUser={user} onBack={() => setNotifProfileUserId(null)} onStartDM={(userId) => { setNotifProfileUserId(null); handleStartDMExternal(userId) }} />
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+    </>
   )
 }
