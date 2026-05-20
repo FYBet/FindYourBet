@@ -17,6 +17,7 @@ import {
 import PinDurationModal from './PinDurationModal'
 import PostModal from '../feed/PostModal'
 import ChannelBetPost from './ChannelBetPost'
+import { insertNotification } from '../notifications/useNotifications'
 
 function isLinkMessage(content) { return content.startsWith('http://') || content.startsWith('https://') }
 
@@ -288,7 +289,7 @@ function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, 
           {editing ? (
             <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <input value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))}
-                placeholder="Nombre del canal" style={{ ...inputSt, textAlign: 'center', fontWeight: 700, fontSize: '16px' }} />
+                placeholder="Nombre del canal" maxLength={30} style={{ ...inputSt, textAlign: 'center', fontWeight: 700, fontSize: '16px' }} />
               <textarea value={editForm.description} onChange={e => setEditForm(p => ({ ...p, description: e.target.value }))}
                 rows={2} maxLength={200} placeholder="Descripción del canal..."
                 style={{ ...inputSt, resize: 'none', textAlign: 'center' }} />
@@ -332,11 +333,8 @@ function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, 
         {isOwner && (
           <InfoSection title="⚙️ Configuración">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '0.5px solid var(--color-border)' }}>
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>{channel.is_private ? '🔒 Canal privado' : '🌐 Canal público'}</div>
-                <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '2px' }}>Esta opción se decidió al crear el canal y no puede modificarse.</div>
-              </div>
-              <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', padding: '3px 10px', borderRadius: 'var(--radius-full)', border: '0.5px solid var(--color-border)', background: 'var(--color-bg-soft)', fontWeight: 600 }}>Permanente</span>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>{channel.is_private ? '🔒 Canal privado' : '🌐 Canal público'}</div>
+              <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', padding: '3px 10px', borderRadius: 'var(--radius-full)', border: '0.5px solid var(--color-border)', background: 'var(--color-bg-soft)', fontWeight: 600 }}>Acción irreversible</span>
             </div>
             <InfoToggle label="Enlace visible públicamente" desc="Cualquiera puede compartir y ver el link" active={!!channel.link_public} onChange={() => handleToggle('link_public')} />
             {!channel.is_private && (
@@ -702,6 +700,26 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
     setText('')
     setReplyTo(null)
     await sendMessage(content, user.id)
+    notifyChannelMembers(content)
+  }
+
+  const notifyChannelMembers = async (content) => {
+    const { data: members } = await supabase
+      .from('channel_members').select('user_id').eq('channel_id', initialChannel.id)
+    const recipientIds = [
+      ...(members || []).map(m => m.user_id),
+      initialChannel.owner_id,
+    ].filter((id, i, arr) => id !== user.id && arr.indexOf(id) === i)
+    const preview = content.replace(/^\[FWD[^\]]*\]:/, '').replace(/^\[REPLY:[^\]]*\]:/, '').slice(0, 80)
+    await Promise.all(recipientIds.map(uid =>
+      insertNotification({
+        userId: uid,
+        type: 'channel_message',
+        fromUserId: user.id,
+        fromUsername: user.username || user.email,
+        preview: `[${initialChannel.name}] ${preview}`,
+      })
+    ))
   }
 
   const handleSendSticker = (sticker) => {

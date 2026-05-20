@@ -3,6 +3,35 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { fadeUp } from '../../../lib/animations'
 import { useMutes, MUTE_DURATIONS } from '../../../hooks/useMutes'
 
+function timeAgo(ts) {
+  if (!ts) return ''
+  const m = Math.floor((Date.now() - new Date(ts).getTime()) / 60000)
+  if (m < 1) return 'ahora'
+  if (m < 60) return `${m}m`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h`
+  const d = Math.floor(h / 24)
+  if (d < 7) return `${d}d`
+  return new Date(ts).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })
+}
+
+function formatLastMsg(content) {
+  if (!content) return ''
+  if (content === '[DELETED]') return '🗑 Mensaje eliminado'
+  if (content.startsWith('[IMAGE]:')) return '📷 Imagen'
+  if (content.startsWith('[STICKER]:')) return '🎭 Sticker'
+  if (content.startsWith('[VOICE]:')) return '🎙 Audio'
+  if (content.startsWith('[GIF]:')) return '🎬 GIF'
+  if (content.startsWith('[PROFILE]:')) return '👤 Perfil compartido'
+  if (content.startsWith('[BET]:')) return '🎯 Pick'
+  const stripped = content
+    .replace(/^\[FWD[^\]]*\]:/, '')
+    .replace(/^\[REPLY:[^\]]*\]:/, '')
+    .replace(/\[EDITED\]$/, '')
+    .trim()
+  return stripped.slice(0, 60)
+}
+
 function MuteMenu({ muteKey, isMuted, muteLabel, onMute, onUnmute, onClose }) {
   return (
     <>
@@ -26,7 +55,7 @@ function MuteMenu({ muteKey, isMuted, muteLabel, onMute, onUnmute, onClose }) {
   )
 }
 
-export default function ChannelCard({ channel, onClick, onLeave, onDelete, isOwner, memberCount }) {
+export default function ChannelCard({ channel, onClick, onLeave, onDelete, isOwner, memberCount, lastMessage }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleteInput, setDeleteInput] = useState('')
   const [showMuteMenu, setShowMuteMenu] = useState(false)
@@ -76,15 +105,15 @@ export default function ChannelCard({ channel, onClick, onLeave, onDelete, isOwn
         <div style={{ width: '42px', height: '42px', background: isOwner ? 'var(--color-primary-light)' : 'var(--color-bg-soft)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '17px', fontWeight: 700, color: isOwner ? 'var(--color-primary)' : 'var(--color-text-muted)', flexShrink: 0, border: '0.5px solid var(--color-border)', overflow: 'hidden', opacity: muted ? 0.6 : 1 }}>
           {channel.avatar_url ? <img src={channel.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : channel.name[0].toUpperCase()}
         </div>
-        <div style={{ minWidth: 0 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontWeight: 700, fontSize: '15px', display: 'flex', alignItems: 'center', gap: '6px', opacity: muted ? 0.6 : 1 }}>
             {channel.name}
             {channel.deleted_at && <span style={{ fontSize: '10px', color: 'var(--color-error)', fontWeight: 700, background: 'var(--color-error-light)', border: '0.5px solid var(--color-error-border)', padding: '1px 8px', borderRadius: 'var(--radius-full)' }}>⚠️ Eliminado</span>}
             {muted && <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontWeight: 400 }}>🔕 {muteLabel(muteKey)}</span>}
+            {lastMessage && <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', fontWeight: 400 }}>{timeAgo(lastMessage.created_at)}</span>}
           </div>
-          <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '2px', display: 'flex', gap: '8px', opacity: muted ? 0.6 : 1 }}>
-            {channel.description && <span>{channel.description} ·</span>}
-            <span>👥 {memberCount ?? '...'} participantes</span>
+          <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '2px', opacity: muted ? 0.6 : 1, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+            {lastMessage ? formatLastMsg(lastMessage.content) : (channel.description || 'Sin mensajes aún')}
           </div>
         </div>
       </div>

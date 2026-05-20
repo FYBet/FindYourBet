@@ -234,12 +234,6 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
   const username = profile.username
   const avatarUrl = profile.avatar_url || null
 
-  const tierLabel = stats.total >= 150 && stats.yieldVal >= 15 ? '💎 Elite'
-    : stats.total >= 80 && stats.yieldVal >= 10 ? '🥇 Gold'
-    : stats.total >= 30 && stats.yieldVal >= 5 ? '🥈 Silver'
-    : stats.total >= 10 ? '🥉 Bronze'
-    : null
-
   const isMutual = isFollowing && isFollower
 
   const btnSt = (variant) => ({
@@ -306,11 +300,6 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
               {isFollower && !isOwnProfile && !isMutual && (
                 <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', background: 'var(--color-bg-soft)', padding: '2px 8px', borderRadius: 'var(--radius-full)', border: '0.5px solid var(--color-border)' }}>
                   Te sigue
-                </span>
-              )}
-              {tierLabel && (
-                <span style={{ fontSize: '12px', padding: '4px 12px', borderRadius: 'var(--radius-full)', background: 'var(--color-primary-light)', color: 'var(--color-primary)', border: '0.5px solid var(--color-primary-border)', fontWeight: 700 }}>
-                  {tierLabel}
                 </span>
               )}
             </div>

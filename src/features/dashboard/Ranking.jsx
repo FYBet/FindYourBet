@@ -4,27 +4,20 @@ import { fadeUp, stagger } from '../../lib/animations'
 import { supabase } from '../../lib/supabase'
 import './dashboard.css'
 
-const MEDALS = ['🥇', '🥈', '🥉']
-const MIN_BETS = 10
+export const MIN_BETS = 10
 
-const MAIN_SPORTS = ['Fútbol', 'Baloncesto', 'Tenis', 'eSports']
-const SPORTS_LIST = [...MAIN_SPORTS, 'Otros']
-const SPORT_ICONS = { 'Fútbol': '⚽', 'Baloncesto': '🏀', 'Tenis': '🎾', 'eSports': '🎮', 'Otros': '🏅' }
+export const MAIN_SPORTS = ['Fútbol', 'Baloncesto', 'Tenis', 'eSports']
+export const SPORTS_LIST = [...MAIN_SPORTS, 'Otros']
+export const SPORT_ICONS = { 'Fútbol': '⚽', 'Baloncesto': '🏀', 'Tenis': '🎾', 'eSports': '🎮', 'Otros': '🏅' }
 
-const PERIODS = [
-  { id: 'trimestral', label: 'Ranking' },
+export const PERIODS = [
+  { id: 'trimestral', label: 'Global' },
   { id: 'setmanal',   label: 'Semanal' },
   { id: 'mensual',    label: 'Mensual' },
   { id: 'anual',      label: 'Anual' },
   { id: 'total',      label: 'Total' },
 ]
 
-const TIER_STYLES = {
-  elite:  { bg: 'rgba(139,92,246,0.15)',  color: '#8b5cf6', border: 'rgba(139,92,246,0.3)',  label: '💎 Elite'  },
-  gold:   { bg: 'rgba(245,158,11,0.15)',  color: '#f59e0b', border: 'rgba(245,158,11,0.3)',  label: '🥇 Gold'   },
-  silver: { bg: 'rgba(148,163,184,0.15)', color: '#94a3b8', border: 'rgba(148,163,184,0.3)', label: '🥈 Silver' },
-  bronze: { bg: 'rgba(180,120,60,0.15)',  color: '#b4783c', border: 'rgba(180,120,60,0.3)',  label: '🥉 Bronze' },
-}
 
 function getPeriodRange(period) {
   const now = new Date()
@@ -99,11 +92,14 @@ function getBestCombination(userBets, selectedSports) {
   return best
 }
 
-function useRanking(period, selectedSports, scope = 'public') {
+export function useRanking(period, selectedSports, scope = 'public', filterUserIds = null) {
   const [ranking, setRanking] = useState([])
   const [loading, setLoading] = useState(true)
 
   const fetchRanking = async () => {
+    if (filterUserIds !== null && filterUserIds.length === 0) {
+      setRanking([]); setLoading(false); return
+    }
     setLoading(true)
     const safetyTimer = setTimeout(() => setLoading(false), 10000)
     try {
@@ -116,6 +112,9 @@ function useRanking(period, selectedSports, scope = 'public') {
       .limit(2000)
     if (range) {
       query = query.gte('date', range.start.toISOString()).lte('date', range.end.toISOString())
+    }
+    if (filterUserIds !== null) {
+      query = query.in('user_id', filterUserIds)
     }
     const { data: bets, error } = await query
     if (error || !bets) { setLoading(false); return }
@@ -169,12 +168,7 @@ function useRanking(period, selectedSports, scope = 'public') {
           ? Object.entries(stakeFreq).sort((a, b) => b[1] - a[1])[0][0]
           : '—'
 
-        const tier = resolved.length >= 150 && yieldVal >= 15 ? 'elite'
-          : resolved.length >= 80 && yieldVal >= 10 ? 'gold'
-          : resolved.length >= 30 && yieldVal >= 5 ? 'silver'
-          : 'bronze'
-
-        return { userId, bets: resolved.length, won, lost, yieldVal, avgOdds, habitualStake, tier, usedSports }
+        return { userId, bets: resolved.length, won, lost, yieldVal, avgOdds, habitualStake, usedSports }
       })
       .filter(Boolean)
       .sort((a, b) => b.yieldVal - a.yieldVal)
@@ -204,29 +198,32 @@ function useRanking(period, selectedSports, scope = 'public') {
     fetchRanking()
     const interval = setInterval(fetchRanking, 60000)
     return () => clearInterval(interval)
-  }, [period, JSON.stringify(selectedSports), scope])
+  }, [period, JSON.stringify(selectedSports), scope, JSON.stringify(filterUserIds)])
 
   return { ranking, loading }
 }
 
-function PeriodDropdown({ period, setPeriod }) {
+export function PeriodDropdown({ period, setPeriod }) {
   const [open, setOpen] = useState(false)
   const selected = PERIODS.find(p => p.id === period)
-  const isRanking = period === 'trimestral'
+  const isGlobal = period === 'trimestral'
+  const isAmigos = period === 'amigos'
+  const isSpecial = isGlobal || isAmigos
+  const icon = isAmigos ? '👥' : isGlobal ? '🏆' : null
 
   return (
     <div style={{ position: 'relative', width: 'fit-content' }}>
       <button onClick={() => setOpen(v => !v)}
         style={{
-          background: isRanking ? 'var(--color-primary-light)' : 'var(--color-bg-soft)',
-          border: isRanking ? '1.5px solid var(--color-primary)' : '0.5px solid var(--color-border)',
-          color: isRanking ? 'var(--color-primary)' : 'var(--color-text)',
+          background: isSpecial ? 'var(--color-primary-light)' : 'var(--color-bg-soft)',
+          border: isSpecial ? '1.5px solid var(--color-primary)' : '0.5px solid var(--color-border)',
+          color: isSpecial ? 'var(--color-primary)' : 'var(--color-text)',
           fontFamily: 'var(--font-sans)', fontSize: '14px', fontWeight: 700,
           padding: '10px 14px', borderRadius: 'var(--radius-md)', cursor: 'pointer',
           display: 'flex', alignItems: 'center', gap: '8px', minWidth: '160px', justifyContent: 'space-between'
         }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          {isRanking && <span style={{ fontSize: '12px' }}>🏆</span>}
+          {icon && <span style={{ fontSize: '12px' }}>{icon}</span>}
           {selected?.label}
         </span>
         <span style={{ fontSize: '10px', opacity: 0.6 }}>{open ? '▲' : '▼'}</span>
@@ -238,15 +235,15 @@ function PeriodDropdown({ period, setPeriod }) {
             <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 9 }} />
             <motion.div
               initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-              style={{ position: 'absolute', top: '48px', left: 0, background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', zIndex: 10, minWidth: '200px', overflow: 'hidden', boxShadow: 'var(--shadow-md)' }}>
+              style={{ position: 'absolute', top: '48px', left: 0, background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', zIndex: 10, minWidth: '210px', overflow: 'hidden', boxShadow: 'var(--shadow-md)' }}>
 
-              {/* Opció principal */}
+              {/* Global */}
               <div onClick={() => { setPeriod('trimestral'); setOpen(false) }}
-                style={{ padding: '12px 16px', cursor: 'pointer', background: period === 'trimestral' ? 'var(--color-primary-light)' : 'transparent', borderBottom: '1px solid var(--color-border)' }}>
+                style={{ padding: '12px 16px', cursor: 'pointer', background: period === 'trimestral' ? 'var(--color-primary-light)' : 'transparent', borderBottom: '0.5px solid var(--color-border)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: '14px' }}>🏆</span>
                   <div>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-primary)' }}>Ranking</div>
+                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-primary)' }}>Global</div>
                     <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '1px' }}>Últimos 3 meses · Principal</div>
                   </div>
                   {period === 'trimestral' && (
@@ -255,13 +252,27 @@ function PeriodDropdown({ period, setPeriod }) {
                 </div>
               </div>
 
-              {/* Separador */}
+              {/* Amigos */}
+              <div onClick={() => { setPeriod('amigos'); setOpen(false) }}
+                style={{ padding: '12px 16px', cursor: 'pointer', background: period === 'amigos' ? 'var(--color-primary-light)' : 'transparent', borderBottom: '1px solid var(--color-border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '14px' }}>👥</span>
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-primary)' }}>Amigos</div>
+                    <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '1px' }}>Solo personas que sigues mutuamente</div>
+                  </div>
+                  {period === 'amigos' && (
+                    <span style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--color-primary)' }}>✓</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Por período */}
               <div style={{ padding: '6px 16px 2px', fontSize: '10px', fontWeight: 600, color: 'var(--color-text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
                 Por período
               </div>
 
-              {/* Resta d'opcions */}
-              {PERIODS.slice(1).map(p => (
+              {PERIODS.slice(2).map(p => (
                 <div key={p.id} onClick={() => { setPeriod(p.id); setOpen(false) }}
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', cursor: 'pointer', background: period === p.id ? 'rgba(255,255,255,0.04)' : 'transparent' }}>
                   <span style={{ fontSize: '13px', color: period === p.id ? 'var(--color-text)' : 'var(--color-text-muted)', fontWeight: period === p.id ? 600 : 400 }}>{p.label}</span>
@@ -276,7 +287,7 @@ function PeriodDropdown({ period, setPeriod }) {
   )
 }
 
-function SportDropdown({ selectedSports, toggleSport, onSelectAll, isTodos }) {
+export function SportDropdown({ selectedSports, toggleSport, onSelectAll, isTodos }) {
   const [open, setOpen] = useState(false)
 
   const label = isTodos
@@ -354,16 +365,19 @@ export default function Ranking({ user }) {
         <p>Clasificación por Yield. Mínimo {MIN_BETS} apuestas resueltas para aparecer.</p>
       </div>
 
-      <div style={{ display: 'flex', gap: '6px', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '4px', marginBottom: '16px', width: 'fit-content' }}>
-        {[
-          { id: 'public',  label: '🌐 Público',  desc: 'Tipsters de canales gratuitos' },
-          { id: 'private', label: '💎 Premium', desc: 'Tipsters de canales de pago' },
-        ].map(s => (
-          <button key={s.id} onClick={() => setScope(s.id)} title={s.desc}
-            style={{ padding: '8px 18px', borderRadius: 'var(--radius-md)', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 600, fontFamily: 'var(--font-sans)', background: scope === s.id ? 'var(--color-primary)' : 'transparent', color: scope === s.id ? '#010906' : 'var(--color-text-muted)', transition: 'all 0.15s' }}>
-            {s.label}
-          </button>
-        ))}
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '6px', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '4px' }}>
+          {[
+            { id: 'public',  label: '🌐 Público',  desc: 'Tipsters de canales gratuitos' },
+            { id: 'private', label: '💎 Premium', desc: 'Tipsters de canales de pago' },
+          ].map(s => (
+            <button key={s.id} onClick={() => setScope(s.id)} title={s.desc}
+              style={{ padding: '8px 18px', borderRadius: 'var(--radius-md)', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 600, fontFamily: 'var(--font-sans)', background: scope === s.id ? 'var(--color-primary)' : 'transparent', color: scope === s.id ? '#010906' : 'var(--color-text-muted)', transition: 'all 0.15s' }}>
+              {s.label}
+            </button>
+          ))}
+        </div>
+
       </div>
 
       <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -397,13 +411,12 @@ export default function Ranking({ user }) {
         <AnimatePresence>
           <motion.div className="ranking-list" initial="hidden" animate="visible" variants={stagger}>
             {ranking.map((t, i) => {
-              const tier = TIER_STYLES[t.tier]
               return (
                 <motion.div key={t.userId} className="ranking-item" variants={fadeUp}
                   layout whileHover={{ x: 4, transition: { duration: 0.2 } }}>
 
                   <div className={`rank-pos ${i === 0 ? 'top1' : i === 1 ? 'top2' : i === 2 ? 'top3' : ''}`}>
-                    {i < 3 ? MEDALS[i] : `#${i + 1}`}
+                    #{i + 1}
                   </div>
 
                   <div className="tipster-info-rank">
@@ -414,9 +427,6 @@ export default function Ranking({ user }) {
                           Tu
                         </span>
                       )}
-                      <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: 'var(--radius-full)', fontWeight: 700, background: tier.bg, color: tier.color, border: `0.5px solid ${tier.border}` }}>
-                        {tier.label}
-                      </span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
                       <span className="tipster-user-rank" style={{ margin: 0 }}>{t.bets} apuestas resueltas</span>
