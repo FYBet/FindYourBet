@@ -8,6 +8,7 @@ import { BetModal } from './BetModal'
 import Estadisticas from './Estadisticas'
 import Historial from './MisApuestas'
 import Ranking from './Ranking'
+import RankingAmigos from './RankingAmigos'
 import Canales from './canales'
 import Contacto from './Contacto'
 import Social from './social'
@@ -31,6 +32,7 @@ const SHORTCUT_OPTIONS = [
   { id: 'tipsters',     label: 'Tipsters',          icon: '🎯' },
   { id: 'social',       label: 'Mensajes',          icon: '💬' },
   { id: 'ranking',      label: 'Ranking',           icon: '🏆' },
+  { id: 'amigos',       label: 'Amigos',            icon: '👥' },
   { id: 'faqs',         label: 'FAQs',              icon: '❓' },
   { id: 'contacto',     label: 'Contacto',          icon: '📱' },
   { id: 'sugerencias',  label: 'Sugerencias',       icon: '💡' },
@@ -60,7 +62,8 @@ const SIDEBAR = [
   {
     label: 'Ranking',
     items: [
-      { id: 'ranking', label: 'Ranking', icon: '🏆' },
+      { id: 'ranking', label: 'Ranking',  icon: '🏆' },
+      { id: 'amigos',  label: 'Amigos',   icon: '👥' },
     ]
   },
   {
@@ -449,6 +452,12 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
           {visited.has('ranking') && (
             <div style={{ display: tab === 'ranking' ? 'block' : 'none' }}>
               <Ranking user={user} />
+            </div>
+          )}
+
+          {visited.has('amigos') && (
+            <div style={{ display: tab === 'amigos' ? 'block' : 'none' }}>
+              <RankingAmigos user={user} />
             </div>
           )}
 

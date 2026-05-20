@@ -17,6 +17,7 @@ import {
 import PinDurationModal from './PinDurationModal'
 import PostModal from '../feed/PostModal'
 import ChannelBetPost from './ChannelBetPost'
+import { insertNotification } from '../notifications/useNotifications'
 
 function isLinkMessage(content) { return content.startsWith('http://') || content.startsWith('https://') }
 
@@ -79,7 +80,7 @@ function MemberRow({ profile, userId, isChannelOwner, isMemberAdmin, canKick, on
       </div>
       <div onClick={() => onViewProfile?.(userId)} style={{ flex: 1, minWidth: 0, cursor: onViewProfile ? 'pointer' : 'default' }}>
         <div style={{ fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-          @{profile?.username || userId?.slice(0, 8) || '?'}
+          {profile?.username || userId?.slice(0, 8) || '?'}
           {isChannelOwner && <span style={{ fontSize: '10px', background: 'rgba(245,158,11,0.15)', color: 'var(--color-warning)', padding: '1px 7px', borderRadius: 'var(--radius-full)', fontWeight: 700, border: '0.5px solid rgba(245,158,11,0.3)' }}>Creador</span>}
           {isMemberAdmin && !isChannelOwner && <span style={{ fontSize: '10px', background: 'var(--color-primary-light)', color: 'var(--color-primary)', padding: '1px 7px', borderRadius: 'var(--radius-full)', fontWeight: 700, border: '0.5px solid var(--color-primary-border)' }}>Admin</span>}
         </div>
@@ -288,7 +289,7 @@ function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, 
           {editing ? (
             <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <input value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))}
-                placeholder="Nombre del canal" style={{ ...inputSt, textAlign: 'center', fontWeight: 700, fontSize: '16px' }} />
+                placeholder="Nombre del canal" maxLength={30} style={{ ...inputSt, textAlign: 'center', fontWeight: 700, fontSize: '16px' }} />
               <textarea value={editForm.description} onChange={e => setEditForm(p => ({ ...p, description: e.target.value }))}
                 rows={2} maxLength={200} placeholder="Descripción del canal..."
                 style={{ ...inputSt, resize: 'none', textAlign: 'center' }} />
@@ -332,11 +333,8 @@ function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, 
         {isOwner && (
           <InfoSection title="⚙️ Configuración">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '0.5px solid var(--color-border)' }}>
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>{channel.is_private ? '🔒 Canal privado' : '🌐 Canal público'}</div>
-                <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '2px' }}>Esta opción se decidió al crear el canal y no puede modificarse.</div>
-              </div>
-              <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', padding: '3px 10px', borderRadius: 'var(--radius-full)', border: '0.5px solid var(--color-border)', background: 'var(--color-bg-soft)', fontWeight: 600 }}>Permanente</span>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>{channel.is_private ? '🔒 Canal privado' : '🌐 Canal público'}</div>
+              <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', padding: '3px 10px', borderRadius: 'var(--radius-full)', border: '0.5px solid var(--color-border)', background: 'var(--color-bg-soft)', fontWeight: 600 }}>Acción irreversible</span>
             </div>
             <InfoToggle label="Enlace visible públicamente" desc="Cualquiera puede compartir y ver el link" active={!!channel.link_public} onChange={() => handleToggle('link_public')} />
             {!channel.is_private && (
@@ -437,7 +435,7 @@ function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, 
             <motion.div initial={{ opacity: 0, scale: 0.95, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
               onClick={e => e.stopPropagation()}
               style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-error-border)', borderRadius: 'var(--radius-lg)', padding: '24px', width: '100%', maxWidth: '300px' }}>
-              <div style={{ fontWeight: 700, fontSize: '15px', marginBottom: '4px' }}>⛔ Vetar a @{banModal.username}</div>
+              <div style={{ fontWeight: 700, fontSize: '15px', marginBottom: '4px' }}>⛔ Vetar a {banModal.username}</div>
               <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>Selecciona la duración del veto</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {[
@@ -702,6 +700,26 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
     setText('')
     setReplyTo(null)
     await sendMessage(content, user.id)
+    notifyChannelMembers(content)
+  }
+
+  const notifyChannelMembers = async (content) => {
+    const { data: members } = await supabase
+      .from('channel_members').select('user_id').eq('channel_id', initialChannel.id)
+    const recipientIds = [
+      ...(members || []).map(m => m.user_id),
+      initialChannel.owner_id,
+    ].filter((id, i, arr) => id !== user.id && arr.indexOf(id) === i)
+    const preview = content.replace(/^\[FWD[^\]]*\]:/, '').replace(/^\[REPLY:[^\]]*\]:/, '').slice(0, 80)
+    await Promise.all(recipientIds.map(uid =>
+      insertNotification({
+        userId: uid,
+        type: 'channel_message',
+        fromUserId: user.id,
+        fromUsername: user.username || user.email,
+        preview: `[${initialChannel.name}] ${preview}`,
+      })
+    ))
   }
 
   const handleSendSticker = (sticker) => {

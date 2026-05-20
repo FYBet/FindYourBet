@@ -13,7 +13,7 @@ const inputStyle = { width: '100%', background: 'var(--color-bg-soft)', border: 
 const labelStyle = { display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-soft)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px' }
 
 export default function Canales({ user, initialCanalCode, onCanalCodeUsed, onAddBet }) {
-  const { myChannels, joinedChannels, memberCounts, loading, createChannel, deleteChannel, updateChannel, searchChannels, findChannelByCode, joinChannel, leaveChannel, refetch, MAX_OWN_CHANNELS, MAX_JOINED_CHANNELS } = useChannels(user)
+  const { myChannels, joinedChannels, memberCounts, lastMessages, loading, createChannel, deleteChannel, updateChannel, searchChannels, findChannelByCode, joinChannel, leaveChannel, refetch, MAX_OWN_CHANNELS, MAX_JOINED_CHANNELS } = useChannels(user)
   const [activeChannel, setActiveChannel] = useState(null)
   const [activeMemberCount, setActiveMemberCount] = useState(0)
   const [previewChannel, setPreviewChannel] = useState(null)
@@ -34,6 +34,7 @@ export default function Canales({ user, initialCanalCode, onCanalCodeUsed, onAdd
   const [filterSport, setFilterSport] = useState('')
   const [filterLanguage, setFilterLanguage] = useState('')
   const [sortBy, setSortBy] = useState('score')
+  const [showFilters, setShowFilters] = useState(false)
 
   useEffect(() => {
     if (!initialCanalCode || loading) return
@@ -221,7 +222,9 @@ export default function Canales({ user, initialCanalCode, onCanalCodeUsed, onAdd
               <label style={labelStyle}>Nombre *</label>
               <input type="text" placeholder="ej. MarcGol Tips" value={createForm.name}
                 onChange={e => setCreateForm({ ...createForm, name: e.target.value })}
+                maxLength={30}
                 style={inputStyle} />
+              <div style={{ fontSize: '11px', color: createForm.name.length > 25 ? 'var(--color-warning)' : 'var(--color-text-muted)', marginTop: '4px', textAlign: 'right' }}>{createForm.name.length}/30</div>
             </div>
             <div style={{ marginBottom: '16px' }}>
               <label style={labelStyle}>Descripción (opcional)</label>
@@ -265,51 +268,59 @@ export default function Canales({ user, initialCanalCode, onCanalCodeUsed, onAdd
             style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '24px', marginBottom: '24px' }}>
             <div style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>Buscar canales</div>
 
-            {/* Buscador de text */}
-            <input type="text" placeholder="Busca por nombre del canal..."
-              value={searchQuery} onChange={e => handleSearch(e.target.value)}
-              style={{ ...inputStyle, marginBottom: '14px' }} />
-
-            {/* Filtres */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px', padding: '14px', background: 'var(--color-bg-soft)', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-border)' }}>
-
-              {/* Deporte */}
-              <div>
-                <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>Deporte</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  {['', 'Fútbol', 'Baloncesto', 'Tenis', 'eSports', 'MMA', 'Otros'].map(s => (
-                    <button key={s} onClick={() => handleFilterSport(s)}
-                      style={{ padding: '4px 12px', borderRadius: 'var(--radius-full)', border: `0.5px solid ${filterSport === s ? 'var(--color-primary)' : 'var(--color-border)'}`, background: filterSport === s ? 'var(--color-primary-light)' : 'var(--color-bg)', color: filterSport === s ? 'var(--color-primary)' : 'var(--color-text-muted)', fontSize: '12px', fontWeight: filterSport === s ? 700 : 400, cursor: 'pointer', fontFamily: 'var(--font-sans)', transition: 'all 0.15s' }}>
-                      {s || 'Todos'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Idioma */}
-              <div>
-                <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>Idioma</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  {[['', 'Todos'], ['Español', 'ES'], ['Català', 'CAT'], ['English', 'EN'], ['Português', 'PT'], ['Français', 'FR'], ['Deutsch', 'DE']].map(([val, label]) => (
-                    <button key={val} onClick={() => handleFilterLanguage(val)}
-                      style={{ padding: '4px 12px', borderRadius: 'var(--radius-full)', border: `0.5px solid ${filterLanguage === val ? 'var(--color-primary)' : 'var(--color-border)'}`, background: filterLanguage === val ? 'var(--color-primary-light)' : 'var(--color-bg)', color: filterLanguage === val ? 'var(--color-primary)' : 'var(--color-text-muted)', fontSize: '12px', fontWeight: filterLanguage === val ? 700 : 400, cursor: 'pointer', fontFamily: 'var(--font-sans)', transition: 'all 0.15s' }}>
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Ordenar */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px', flexShrink: 0 }}>Ordenar</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  {[['score', 'Relevancia'], ['yield', 'Mejor yield'], ['members', 'Más miembros'], ['winRate', '% acierto']].map(([val, label]) => (
-                    <button key={val} onClick={() => handleSortBy(val)}
-                      style={{ padding: '4px 12px', borderRadius: 'var(--radius-full)', border: `0.5px solid ${sortBy === val ? 'var(--color-primary)' : 'var(--color-border)'}`, background: sortBy === val ? 'var(--color-primary-light)' : 'var(--color-bg)', color: sortBy === val ? 'var(--color-primary)' : 'var(--color-text-muted)', fontSize: '12px', fontWeight: sortBy === val ? 700 : 400, cursor: 'pointer', fontFamily: 'var(--font-sans)', transition: 'all 0.15s' }}>
-                      {label}
-                    </button>
-                  ))}
-                </div>
+            {/* Buscador de text + botó filtres */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', position: 'relative' }}>
+              <input type="text" placeholder="Busca por nombre del canal..."
+                value={searchQuery} onChange={e => handleSearch(e.target.value)}
+                style={{ ...inputStyle, marginBottom: 0, flex: 1 }} />
+              <div style={{ position: 'relative', flexShrink: 0 }}>
+                <button onClick={() => setShowFilters(v => !v)}
+                  style={{ height: '100%', padding: '0 14px', borderRadius: 'var(--radius-md)', border: `0.5px solid ${(filterSport || filterLanguage || sortBy !== 'score') ? 'var(--color-primary)' : 'var(--color-border)'}`, background: (filterSport || filterLanguage || sortBy !== 'score') ? 'var(--color-primary-light)' : 'var(--color-bg-soft)', color: (filterSport || filterLanguage || sortBy !== 'score') ? 'var(--color-primary)' : 'var(--color-text-muted)', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-sans)', whiteSpace: 'nowrap' }}>
+                  🎛 Filtros
+                </button>
+                <AnimatePresence>
+                  {showFilters && (
+                    <>
+                      <div onClick={() => setShowFilters(false)} style={{ position: 'fixed', inset: 0, zIndex: 9 }} />
+                      <motion.div initial={{ opacity: 0, y: -6, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                        style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 10, background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-md)', padding: '16px', minWidth: '280px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div>
+                          <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>Deporte</div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                            {['', 'Fútbol', 'Baloncesto', 'Tenis', 'eSports', 'MMA', 'Otros'].map(s => (
+                              <button key={s} onClick={() => handleFilterSport(s)}
+                                style={{ padding: '4px 12px', borderRadius: 'var(--radius-full)', border: `0.5px solid ${filterSport === s ? 'var(--color-primary)' : 'var(--color-border)'}`, background: filterSport === s ? 'var(--color-primary-light)' : 'var(--color-bg-soft)', color: filterSport === s ? 'var(--color-primary)' : 'var(--color-text-muted)', fontSize: '12px', fontWeight: filterSport === s ? 700 : 400, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>
+                                {s || 'Todos'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>Idioma</div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                            {[['', 'Todos'], ['Español', 'ES'], ['Català', 'CAT'], ['English', 'EN'], ['Português', 'PT'], ['Français', 'FR'], ['Deutsch', 'DE']].map(([val, label]) => (
+                              <button key={val} onClick={() => handleFilterLanguage(val)}
+                                style={{ padding: '4px 12px', borderRadius: 'var(--radius-full)', border: `0.5px solid ${filterLanguage === val ? 'var(--color-primary)' : 'var(--color-border)'}`, background: filterLanguage === val ? 'var(--color-primary-light)' : 'var(--color-bg-soft)', color: filterLanguage === val ? 'var(--color-primary)' : 'var(--color-text-muted)', fontSize: '12px', fontWeight: filterLanguage === val ? 700 : 400, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>Ordenar</div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                            {[['score', 'Relevancia'], ['yield', 'Mejor yield'], ['members', 'Más miembros'], ['winRate', '% acierto']].map(([val, label]) => (
+                              <button key={val} onClick={() => handleSortBy(val)}
+                                style={{ padding: '4px 12px', borderRadius: 'var(--radius-full)', border: `0.5px solid ${sortBy === val ? 'var(--color-primary)' : 'var(--color-border)'}`, background: sortBy === val ? 'var(--color-primary-light)' : 'var(--color-bg-soft)', color: sortBy === val ? 'var(--color-primary)' : 'var(--color-text-muted)', fontSize: '12px', fontWeight: sortBy === val ? 700 : 400, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
 
@@ -378,7 +389,7 @@ export default function Canales({ user, initialCanalCode, onCanalCodeUsed, onAdd
                               {c.language && <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-full)', padding: '1px 7px' }}>{c.language}</span>}
                             </div>
                             {prof?.username && (
-                              <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>@{prof.username}</div>
+                              <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>{prof.username}</div>
                             )}
                             {c.description && (
                               <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{c.description}</div>
@@ -426,6 +437,7 @@ export default function Canales({ user, initialCanalCode, onCanalCodeUsed, onAdd
             {myChannels.map(c => (
               <ChannelCard key={c.id} channel={c} isOwner={true}
                 memberCount={memberCounts[c.id]}
+                lastMessage={lastMessages[c.id] || null}
                 onClick={() => handleOpenChannel(c)}
                 onDelete={deleteChannel}
               />
@@ -443,6 +455,7 @@ export default function Canales({ user, initialCanalCode, onCanalCodeUsed, onAdd
             {joinedChannels.map(c => (
               <ChannelCard key={c.id} channel={c} isOwner={false}
                 memberCount={memberCounts[c.id]}
+                lastMessage={lastMessages[c.id] || null}
                 onClick={() => handleOpenChannel(c)}
                 onLeave={() => leaveChannel(c.id)}
               />

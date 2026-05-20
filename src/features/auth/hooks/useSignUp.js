@@ -46,7 +46,10 @@ export function useSignUp({ onLogin }) {
     setError('')
     setLoading(true)
 
-    const desiredUsername = username.toLowerCase()
+    const desiredUsername = username.trim().toLowerCase()
+    if (!/^[a-z0-9_]{3,20}$/.test(desiredUsername)) {
+      setError('El usuario solo puede contener letras, números y _ (3-20 caracteres)'); setLoading(false); return
+    }
 
     try {
       const { data: existingUser, error: checkErr } = await withTimeout(

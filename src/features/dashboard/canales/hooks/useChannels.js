@@ -13,6 +13,7 @@ export function useChannels(user) {
   const [myChannels, setMyChannels] = useState([])
   const [joinedChannels, setJoinedChannels] = useState([])
   const [memberCounts, setMemberCounts] = useState({})
+  const [lastMessages, setLastMessages] = useState({})
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -48,11 +49,22 @@ export function useChannels(user) {
       const allChannels = [...(own || []), ...joined]
       const counts = {}
       if (allChannels.length) {
-        const { data: mems } = await supabase
-          .from('channel_members').select('channel_id')
-          .in('channel_id', allChannels.map(c => c.id))
+        const channelIds = allChannels.map(c => c.id)
+        const [{ data: mems }, lastMsgResults] = await Promise.all([
+          supabase.from('channel_members').select('channel_id').in('channel_id', channelIds),
+          Promise.all(channelIds.map(id =>
+            supabase.from('channel_messages')
+              .select('content, created_at')
+              .eq('channel_id', id)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle()
+              .then(({ data }) => ({ id, data }))
+          )),
+        ])
         for (const m of mems || []) counts[m.channel_id] = (counts[m.channel_id] || 0) + 1
         for (const c of allChannels) counts[c.id] = (counts[c.id] || 0) + 1
+        setLastMessages(Object.fromEntries(lastMsgResults.map(r => [r.id, r.data])))
       }
       setMemberCounts(counts)
     } finally {
@@ -64,6 +76,7 @@ export function useChannels(user) {
   const createChannel = async (name, description, isPrivate = false) => {
     const trimmed = name.trim()
     if (!trimmed) return { error: 'El nombre es obligatorio' }
+    if (trimmed.length > 30) return { error: 'El nombre del canal no puede superar los 30 caracteres' }
     if (myChannels.length >= MAX_OWN_CHANNELS) return { error: `Límite de ${MAX_OWN_CHANNELS} canales propios alcanzado` }
 
     // Nom únic per canals públics (case-insensitive). Si està eliminat fa <7 dies
@@ -225,7 +238,7 @@ export function useChannels(user) {
   }
 
   return {
-    myChannels, joinedChannels, memberCounts, loading,
+    myChannels, joinedChannels, memberCounts, lastMessages, loading,
     createChannel, deleteChannel, updateChannel, searchChannels, findChannelByCode,
     joinChannel, leaveChannel, refetch: fetchChannels,
     MAX_OWN_CHANNELS, MAX_JOINED_CHANNELS

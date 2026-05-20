@@ -94,7 +94,9 @@ export default function Register({ navigate, login }) {
             <div className="input-with-icon">
               <span className="input-prefix">@</span>
               <Input className="has-prefix" placeholder="tuusuario"
-                value={form.user} onChange={e => update('user', e.target.value.replace('@', ''))} />
+                value={form.user}
+                onChange={e => update('user', e.target.value.replace('@', '').replace(/[^a-z0-9_]/gi, '').toLowerCase())}
+                maxLength={20} />
             </div>
           </motion.div>
 

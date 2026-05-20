@@ -313,12 +313,6 @@ export default function MiPerfil({ user, onNavigate, onAvatarUpdated, onNavigate
   const displayName = username
   const avatarUrl = profile?.avatar_url || null
 
-  const tierLabel = stats.total >= 150 && stats.yieldVal >= 15 ? '💎 Elite'
-    : stats.total >= 80 && stats.yieldVal >= 10 ? '🥇 Gold'
-    : stats.total >= 30 && stats.yieldVal >= 5 ? '🥈 Silver'
-    : stats.total >= 10 ? '🥉 Bronze'
-    : null
-
   const currentDmOption = DM_OPTIONS.find(o => o.id === dmSetting)
 
   return (
@@ -374,11 +368,6 @@ export default function MiPerfil({ user, onNavigate, onAvatarUpdated, onNavigate
             <div style={{ marginTop: '-40px' }}>
               <Avatar url={avatarUrl} name={displayName} size={80} fontSize={32} />
             </div>
-            {tierLabel && (
-              <span style={{ fontSize: '12px', padding: '4px 12px', borderRadius: 'var(--radius-full)', background: 'var(--color-primary-light)', color: 'var(--color-primary)', border: '0.5px solid var(--color-primary-border)', fontWeight: 700 }}>
-                {tierLabel}
-              </span>
-            )}
           </div>
 
           <div style={{ fontWeight: 700, fontSize: '22px', marginBottom: profile?.bio ? '8px' : '16px' }}>@{username}</div>

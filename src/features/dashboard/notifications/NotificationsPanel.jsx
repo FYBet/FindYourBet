@@ -18,12 +18,13 @@ function timeAgo(ts) {
 
 function notifText(n) {
   switch (n.type) {
-    case 'like':         return `le dio like a tu pick${n.preview ? ` · ${n.preview}` : ''}.`
-    case 'comment':      return `comentó: "${n.preview}".`
-    case 'follow':       return 'empezó a seguirte.'
-    case 'channel_join': return 'se unió a tu canal.'
-    case 'dm':           return 'te envió un mensaje.'
-    default:             return (n.preview || 'Nueva notificación') + '.'
+    case 'like':            return `le dio like a tu pick${n.preview ? ` · ${n.preview}` : ''}.`
+    case 'comment':         return `comentó: "${n.preview}".`
+    case 'follow':          return 'empezó a seguirte.'
+    case 'channel_join':    return 'se unió a tu canal.'
+    case 'dm':              return 'te envió un mensaje.'
+    case 'channel_message': return `envió un mensaje${n.preview ? `: "${n.preview}"` : ' en un canal'}.`
+    default:                return (n.preview || 'Nueva notificación') + '.'
   }
 }
 

@@ -145,7 +145,7 @@ export default function Social({ user, initialDMUserId }) {
                     {(u.username || u.name || '?')[0].toUpperCase()}
                   </div>
                   <div onClick={() => { handleOpenProfile(u.id); setSearchQuery(''); setSearchResults([]) }} style={{ flex: 1, cursor: 'pointer' }}>
-                    <div style={{ fontWeight: 600, fontSize: '14px' }}>@{u.username}</div>
+                    <div style={{ fontWeight: 600, fontSize: '14px' }}>{u.username}</div>
                   </div>
                   <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
                     <button
