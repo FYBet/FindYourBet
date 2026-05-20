@@ -85,7 +85,7 @@ function renderContent(content, isOwn, onViewProfile) {
           {(profileUsername || '?')[0].toUpperCase()}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--color-text)' }}>@{profileUsername}</div>
+          <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--color-text)' }}>{profileUsername}</div>
           <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Tipster · FYB</div>
         </div>
         <button onClick={() => onViewProfile?.(profileId)}
@@ -461,7 +461,7 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
       {/* BANNER PENDENT */}
       {pendingLocked && (
         <div style={{ marginTop: '12px', textAlign: 'center', fontSize: '13px', color: 'var(--color-text-muted)', padding: '12px', background: 'var(--color-bg-soft)', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-border)' }}>
-          ⏳ Esperando que @{conversation.otherUsername} acepte la conversación
+          ⏳ Esperando que {conversation.otherUsername} acepte la conversación
         </div>
       )}
 
@@ -469,7 +469,7 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
       {needsAccept && (
         <div style={{ marginTop: '12px', padding: '16px', background: 'var(--color-bg-soft)', borderRadius: 'var(--radius-lg)', border: '0.5px solid var(--color-border)', textAlign: 'center' }}>
           <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>
-            @{conversation.otherUsername} quiere enviarte un mensaje
+            {conversation.otherUsername} quiere enviarte un mensaje
           </div>
           <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
             <button onClick={() => onBlock?.(conversation.id)}
@@ -560,7 +560,7 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
           {isPending && (
             <div style={{ marginBottom: '8px', padding: '8px 14px', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span>⚠️</span>
-              <span>Puedes enviar {2 - ownSentCount} mensaje{2 - ownSentCount !== 1 ? 's' : ''} más antes de que @{conversation.otherUsername} acepte la conversación.</span>
+              <span>Puedes enviar {2 - ownSentCount} mensaje{2 - ownSentCount !== 1 ? 's' : ''} más antes de que {conversation.otherUsername} acepte la conversación.</span>
             </div>
           )}
           {uploadError && (

@@ -378,7 +378,7 @@ export default function Canales({ user, initialCanalCode, onCanalCodeUsed, onAdd
                               {c.language && <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-full)', padding: '1px 7px' }}>{c.language}</span>}
                             </div>
                             {prof?.username && (
-                              <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>@{prof.username}</div>
+                              <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>{prof.username}</div>
                             )}
                             {c.description && (
                               <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{c.description}</div>

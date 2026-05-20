@@ -73,7 +73,7 @@ export function ProfileCard({ profileId, profileUsername, onViewProfile, timeStr
           {(profileUsername || '?')[0].toUpperCase()}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--color-text)' }}>@{profileUsername}</div>
+          <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--color-text)' }}>{profileUsername}</div>
           <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Tipster · FYB</div>
         </div>
         <button onClick={() => onViewProfile?.(profileId)}

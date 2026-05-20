@@ -79,7 +79,7 @@ function MemberRow({ profile, userId, isChannelOwner, isMemberAdmin, canKick, on
       </div>
       <div onClick={() => onViewProfile?.(userId)} style={{ flex: 1, minWidth: 0, cursor: onViewProfile ? 'pointer' : 'default' }}>
         <div style={{ fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-          @{profile?.username || userId?.slice(0, 8) || '?'}
+          {profile?.username || userId?.slice(0, 8) || '?'}
           {isChannelOwner && <span style={{ fontSize: '10px', background: 'rgba(245,158,11,0.15)', color: 'var(--color-warning)', padding: '1px 7px', borderRadius: 'var(--radius-full)', fontWeight: 700, border: '0.5px solid rgba(245,158,11,0.3)' }}>Creador</span>}
           {isMemberAdmin && !isChannelOwner && <span style={{ fontSize: '10px', background: 'var(--color-primary-light)', color: 'var(--color-primary)', padding: '1px 7px', borderRadius: 'var(--radius-full)', fontWeight: 700, border: '0.5px solid var(--color-primary-border)' }}>Admin</span>}
         </div>
@@ -437,7 +437,7 @@ function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, 
             <motion.div initial={{ opacity: 0, scale: 0.95, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
               onClick={e => e.stopPropagation()}
               style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-error-border)', borderRadius: 'var(--radius-lg)', padding: '24px', width: '100%', maxWidth: '300px' }}>
-              <div style={{ fontWeight: 700, fontSize: '15px', marginBottom: '4px' }}>⛔ Vetar a @{banModal.username}</div>
+              <div style={{ fontWeight: 700, fontSize: '15px', marginBottom: '4px' }}>⛔ Vetar a {banModal.username}</div>
               <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>Selecciona la duración del veto</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {[

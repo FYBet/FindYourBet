@@ -47,7 +47,6 @@ function TipsterCard({ tipster, isFollowing, isMutual, onClick }) {
             <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', padding: '2px 8px', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-full)' }}>Siguiendo</span>
           )}
         </div>
-        {tipster.username && <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>@{tipster.username}</div>}
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px', flexShrink: 0 }}>

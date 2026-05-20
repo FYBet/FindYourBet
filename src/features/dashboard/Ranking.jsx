@@ -190,7 +190,7 @@ function useRanking(period, selectedSports, scope = 'public') {
 
     setRanking(entries.map(e => ({
       ...e,
-      username: profileMap[e.userId] ? `@${profileMap[e.userId]}` : `@${e.userId.slice(0, 6)}`
+      username: profileMap[e.userId] ? profileMap[e.userId] : e.userId.slice(0, 6)
     })))
     } catch (e) {
       // silent — no bloqueja la UI
