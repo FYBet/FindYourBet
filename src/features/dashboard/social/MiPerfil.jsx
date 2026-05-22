@@ -373,7 +373,7 @@ export default function MiPerfil({ user, onNavigate, onAvatarUpdated, onNavigate
             </div>
           </div>
 
-          <div style={{ fontWeight: 700, fontSize: '22px', marginBottom: profile?.bio ? '8px' : '16px' }}>@{username}</div>
+          <div style={{ fontWeight: 700, fontSize: '22px', marginBottom: profile?.bio ? '8px' : '16px' }}>{username}</div>
           {profile?.bio && (
             <div style={{ fontSize: '14px', color: 'var(--color-text-soft)', marginBottom: '16px', lineHeight: 1.5 }}>{profile.bio}</div>
           )}
