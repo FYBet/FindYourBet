@@ -18,18 +18,24 @@ function timeAgo(ts) {
 function formatLastMsg(content) {
   if (!content) return ''
   if (content === '[DELETED]') return '🗑 Mensaje eliminado'
-  if (content.startsWith('[IMAGE]:')) return '📷 Imagen'
-  if (content.startsWith('[STICKER]:')) return '🎭 Sticker'
-  if (content.startsWith('[VOICE]:')) return '🎙 Audio'
-  if (content.startsWith('[GIF]:')) return '🎬 GIF'
-  if (content.startsWith('[PROFILE]:')) return '👤 Perfil compartido'
-  if (content.startsWith('[BET]:')) return '🎯 Pick'
-  const stripped = content
+  const isForwarded = content.startsWith('[FWD')
+  const inner = content
     .replace(/^\[FWD[^\]]*\]:/, '')
     .replace(/^\[REPLY:[^\]]*\]:/, '')
     .replace(/\[EDITED\]$/, '')
     .trim()
-  return stripped.slice(0, 60)
+  const prefix = isForwarded ? '↩ ' : ''
+  if (inner.startsWith('[IMAGE]:')) return prefix + '📷 Imagen'
+  if (inner.startsWith('[IMG_MSG]:')) {
+    try { const d = JSON.parse(inner.replace('[IMG_MSG]:', '')); return prefix + '📷 ' + (d.text || 'Imagen') } catch { return prefix + '📷 Imagen' }
+  }
+  if (inner.startsWith('[STICKER]:')) return prefix + '🎭 Sticker'
+  if (inner.startsWith('[VOICE]:')) return prefix + '🎙 Mensaje de voz'
+  if (inner.startsWith('[GIF]:')) return prefix + '🎬 GIF'
+  if (inner.startsWith('[PROFILE]:')) return prefix + '👤 Perfil compartido'
+  if (inner.startsWith('[BET]:')) return prefix + '🎯 Pick'
+  if (inner.startsWith('[POLL]:')) return prefix + '📊 Encuesta'
+  return (prefix + inner).slice(0, 60)
 }
 
 function MuteMenu({ muteKey, isMuted, muteLabel, onMute, onUnmute, onClose }) {

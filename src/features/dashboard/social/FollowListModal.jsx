@@ -78,8 +78,12 @@ export default function FollowListModal({ type, profileUserId, currentUser, onCl
             return (
               <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 20px', borderBottom: i < users.length - 1 ? '0.5px solid var(--color-border)' : 'none' }}>
                 <div onClick={() => { onViewProfile?.(u.id); onClose() }}
-                  style={{ width: '44px', height: '44px', borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden', cursor: 'pointer' }}>
-                  {u.avatar_url ? <img src={u.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (u.username || '?')[0].toUpperCase()}
+                  style={{ width: '44px', height: '44px', borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden', cursor: 'pointer', position: 'relative' }}>
+                  {(u.username || '?')[0].toUpperCase()}
+                  {u.avatar_url && (
+                    <img src={u.avatar_url} alt="" onError={e => { e.currentTarget.style.display = 'none' }}
+                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                  )}
                 </div>
                 <div onClick={() => { onViewProfile?.(u.id); onClose() }} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
                   <div style={{ fontWeight: 600, fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.username}</div>

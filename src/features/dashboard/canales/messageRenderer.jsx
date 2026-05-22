@@ -1,7 +1,32 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
 import { VoicePlayer } from '../VoiceMessage'
+
+export function ImageMessage({ url, isGif }) {
+  const [open, setOpen] = useState(false)
+  const imgStyle = isGif
+    ? { display: 'block', maxWidth: '240px', maxHeight: '200px', borderRadius: 'var(--radius-md)', objectFit: 'contain', cursor: 'zoom-in' }
+    : { display: 'block', minWidth: '160px', minHeight: '120px', maxWidth: '100%', maxHeight: '340px', borderRadius: 'var(--radius-md)', cursor: 'zoom-in' }
+  return (
+    <>
+      <img src={url} alt={isGif ? 'gif' : 'img'} style={imgStyle} onClick={() => setOpen(true)} />
+      {open && createPortal(
+        <div onClick={() => setOpen(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out', padding: '20px' }}>
+          <img src={url} alt=""
+            style={{ maxWidth: '95vw', maxHeight: '95vh', objectFit: 'contain', borderRadius: 'var(--radius-md)', boxShadow: '0 8px 40px rgba(0,0,0,0.6)' }} />
+          <button onClick={() => setOpen(false)}
+            style={{ position: 'fixed', top: '16px', right: '16px', background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: '50%', width: '36px', height: '36px', cursor: 'pointer', fontSize: '18px', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(6px)' }}>
+            ×
+          </button>
+        </div>,
+        document.body
+      )}
+    </>
+  )
+}
 
 export function parseBetMessage(content) {
   try { return JSON.parse(content.replace('[BET]:', '')) } catch { return null }
@@ -20,36 +45,50 @@ export function BetCard({ bet, timeStr }) {
   const statusLabel = liveStatus === 'won' ? '✓ Ganada' : liveStatus === 'lost' ? '✗ Perdida' : '⏳ Pendiente'
   const statusBg = liveStatus === 'won' ? 'var(--color-primary-light)' : liveStatus === 'lost' ? 'var(--color-error-light)' : 'var(--color-bg-soft)'
 
+  const isPhoto = !!bet.imageUrl
+
+  const statsItems = [
+    !isPhoto && bet.pick && bet.pick !== '-' ? { label: 'Pick', value: bet.pick } : null,
+    { label: 'Cuota', value: parseFloat(bet.odds).toFixed(2) },
+    { label: 'Stake', value: `${bet.stake}` },
+    !isPhoto ? { label: 'Fecha', value: new Date(bet.date).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) } : null,
+    bet.bookie ? { label: 'Bookie', value: bet.bookie } : null,
+  ].filter(Boolean)
+
   return (
-    <div style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-primary-border)', borderRadius: 'var(--radius-lg)', padding: '14px 16px', minWidth: '240px', maxWidth: '300px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-        <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '1px' }}>📊 Pick</span>
-        <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: 'var(--radius-full)', background: statusBg, color: statusColor, fontWeight: 700, border: `0.5px solid ${statusColor}` }}>
-          {statusLabel}
-        </span>
-      </div>
-      <div style={{ fontWeight: 700, fontSize: '14px', marginBottom: '4px' }}>{bet.event}</div>
-      <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '10px' }}>
-        {bet.sport} · {bet.market}
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-        {[
-          { label: 'Pick', value: bet.pick },
-          { label: 'Cuota', value: parseFloat(bet.odds).toFixed(2) },
-          { label: 'Stake', value: `${bet.stake}` },
-          { label: 'Fecha', value: new Date(bet.date).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) },
-        ].map((s, i) => (
-          <div key={i} style={{ background: 'var(--color-bg-soft)', borderRadius: 'var(--radius-sm)', padding: '6px 8px', textAlign: 'center' }}>
-            <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>{s.label}</div>
-            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text)', marginTop: '2px' }}>{s.value}</div>
-          </div>
-        ))}
-      </div>
-      {timeStr && (
-        <div style={{ textAlign: 'right', marginTop: '10px', fontSize: '10px', color: 'var(--color-text-muted)', opacity: 0.65 }}>
-          {timeStr}
-        </div>
+    <div style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-primary-border)', borderRadius: 'var(--radius-lg)', minWidth: '240px', maxWidth: '300px', overflow: 'hidden' }}>
+      {isPhoto && (
+        <img src={bet.imageUrl} alt="ticket" style={{ display: 'block', width: '100%', maxHeight: '200px', objectFit: 'cover' }} />
       )}
+      <div style={{ padding: '14px 16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+          <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '1px' }}>📊 Pick</span>
+          <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: 'var(--radius-full)', background: statusBg, color: statusColor, fontWeight: 700, border: `0.5px solid ${statusColor}` }}>
+            {statusLabel}
+          </span>
+        </div>
+        {!isPhoto && (
+          <>
+            <div style={{ fontWeight: 700, fontSize: '14px', marginBottom: '4px' }}>{bet.event}</div>
+            <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '10px' }}>
+              {bet.sport} · {bet.market}
+            </div>
+          </>
+        )}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+          {statsItems.map((s, i) => (
+            <div key={i} style={{ background: 'var(--color-bg-soft)', borderRadius: 'var(--radius-sm)', padding: '6px 8px', textAlign: 'center' }}>
+              <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>{s.label}</div>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text)', marginTop: '2px' }}>{s.value}</div>
+            </div>
+          ))}
+        </div>
+        {timeStr && (
+          <div style={{ textAlign: 'right', marginTop: '10px', fontSize: '10px', color: 'var(--color-text-muted)', opacity: 0.65 }}>
+            {timeStr}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -65,10 +104,11 @@ export function isSingleEmoji(content) {
   }
 }
 
-export function ProfileCard({ profileId, profileUsername, onViewProfile, timeStr }) {
+export function ProfileCard({ profileId, profileUsername, onViewProfile, timeStr, viewCount = 0 }) {
+  const hasMeta = timeStr || viewCount > 0
   return (
     <div style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '12px 14px', minWidth: '220px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: timeStr ? '8px' : '0' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: hasMeta ? '8px' : '0' }}>
         <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0 }}>
           {(profileUsername || '?')[0].toUpperCase()}
         </div>
@@ -81,16 +121,16 @@ export function ProfileCard({ profileId, profileUsername, onViewProfile, timeStr
           Ver →
         </button>
       </div>
-      {timeStr && (
+      {hasMeta && (
         <div style={{ textAlign: 'right', fontSize: '10px', color: 'var(--color-text-muted)', opacity: 0.7 }}>
-          {timeStr}
+          {viewCount > 0 ? `👁 ${viewCount} · ` : ''}{timeStr}
         </div>
       )}
     </div>
   )
 }
 
-export function renderMessage(content, onInternalLink, isOwnerMsg = false, onViewProfile = null, timeStr = '') {
+export function renderMessage(content, onInternalLink, isOwnerMsg = false, onViewProfile = null, timeStr = '', viewCount = 0) {
   const linkColor = isOwnerMsg ? '#010906' : 'var(--color-primary)'
 
   if (content.startsWith('[PROFILE]:')) {
@@ -98,7 +138,17 @@ export function renderMessage(content, onInternalLink, isOwnerMsg = false, onVie
     const idx = rest.indexOf(':')
     const profileId = idx >= 0 ? rest.slice(0, idx) : rest
     const profileUsername = idx >= 0 ? rest.slice(idx + 1) : '?'
-    return <ProfileCard profileId={profileId} profileUsername={profileUsername} onViewProfile={onViewProfile} timeStr={timeStr} />
+    return <ProfileCard profileId={profileId} profileUsername={profileUsername} onViewProfile={onViewProfile} timeStr={timeStr} viewCount={viewCount} />
+  }
+  if (content.startsWith('[IMG_MSG]:')) {
+    const data = parseImgTextMessage(content)
+    if (!data) return null
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '180px' }}>
+        <span style={{ fontSize: '14px', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{data.text}</span>
+        <ImageMessage url={data.url} />
+      </div>
+    )
   }
   if (content.startsWith('[STICKER]:')) {
     return <span style={{ fontSize: '56px', lineHeight: 1.1 }}>{content.replace('[STICKER]:', '')}</span>
@@ -112,10 +162,10 @@ export function renderMessage(content, onInternalLink, isOwnerMsg = false, onVie
     return null
   }
   if (content.startsWith('[GIF]:')) {
-    return <img src={content.replace('[GIF]:', '')} alt="gif" style={{ display: 'block', maxWidth: '240px', maxHeight: '200px', borderRadius: 'var(--radius-md)', objectFit: 'contain' }} />
+    return <ImageMessage url={content.replace('[GIF]:', '')} isGif />
   }
   if (content.startsWith('[IMAGE]:')) {
-    return <img src={content.replace('[IMAGE]:', '')} alt="img" style={{ display: 'block', minWidth: '160px', minHeight: '120px', maxWidth: '100%', maxHeight: '340px', borderRadius: 'var(--radius-md)' }} />
+    return <ImageMessage url={content.replace('[IMAGE]:', '')} />
   }
   if (content.startsWith('[FILE:')) {
     const match = content.match(/\[FILE:(.*?)\]:(.*)/)
@@ -172,6 +222,14 @@ export function isBetMessage(content) { return content?.startsWith('[BET]:') }
 export function isStickerMessage(content) { return content?.startsWith('[STICKER]:') }
 export function isVoiceMessage(content) { return content?.startsWith('[VOICE]:') }
 export function isProfileMessage(content) { return content?.startsWith('[PROFILE]:') }
+export function isPollMessage(content) { return content?.startsWith('[POLL]:') }
+export function parsePollMessage(content) {
+  try { return JSON.parse(content.replace('[POLL]:', '')) } catch { return null }
+}
+export function isImgTextMessage(content) { return content?.startsWith('[IMG_MSG]:') }
+export function parseImgTextMessage(content) {
+  try { return JSON.parse(content.replace('[IMG_MSG]:', '')) } catch { return null }
+}
 
 // Detecta missatges reenviats: [FWD:NomCanal]:contingut o [FWD]:contingut
 export function parseForward(content) {

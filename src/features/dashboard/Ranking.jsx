@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { fadeUp, stagger } from '../../lib/animations'
 import { supabase } from '../../lib/supabase'
+import { useProfileNav } from '../../contexts/ProfileNavContext'
 import './dashboard.css'
 
 export const MIN_BETS = 10
@@ -177,15 +178,20 @@ export function useRanking(period, selectedSports, scope = 'public', filterUserI
 
     const userIds = entries.map(e => e.userId)
     const { data: profiles } = await supabase
-      .from('profiles').select('id, username').in('id', userIds)
+      .from('profiles').select('id, username, hide_from_ranking').in('id', userIds)
 
     const profileMap = {}
-    profiles?.forEach(p => { profileMap[p.id] = p.username })
+    const hiddenSet = new Set()
+    profiles?.forEach(p => {
+      if (p.hide_from_ranking) hiddenSet.add(p.id)
+      else profileMap[p.id] = p.username
+    })
 
-    setRanking(entries.map(e => ({
-      ...e,
-      username: profileMap[e.userId] ? profileMap[e.userId] : e.userId.slice(0, 6)
-    })))
+    setRanking(
+      entries
+        .filter(e => !hiddenSet.has(e.userId))
+        .map(e => ({ ...e, username: profileMap[e.userId] ?? e.userId.slice(0, 6) }))
+    )
     } catch (e) {
       // silent — no bloqueja la UI
     } finally {
@@ -341,10 +347,24 @@ export function SportDropdown({ selectedSports, toggleSport, onSelectAll, isTodo
 }
 
 export default function Ranking({ user }) {
+  const openProfile = useProfileNav()
   const [period, setPeriod] = useState('trimestral')
   const [selectedSports, setSelectedSports] = useState([])
   const [scope, setScope] = useState('public')
+  const [hideMe, setHideMe] = useState(false)
   const { ranking, loading } = useRanking(period, selectedSports, scope)
+
+  useEffect(() => {
+    if (!user?.id) return
+    supabase.from('profiles').select('hide_from_ranking').eq('id', user.id).single()
+      .then(({ data }) => { if (data) setHideMe(data.hide_from_ranking ?? false) })
+  }, [user?.id])
+
+  const toggleHideMe = async () => {
+    const next = !hideMe
+    setHideMe(next)
+    await supabase.from('profiles').update({ hide_from_ranking: next }).eq('id', user.id)
+  }
 
   const toggleSport = (sport) => {
     setSelectedSports(prev =>
@@ -421,7 +441,7 @@ export default function Ranking({ user }) {
 
                   <div className="tipster-info-rank">
                     <div className="tipster-name-rank" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                      {t.username}
+                      <span onClick={() => openProfile(t.userId)} style={{ cursor: 'pointer' }}>{t.username}</span>
                       {user?.id === t.userId && (
                         <span style={{ fontSize: '10px', background: 'var(--color-primary-light)', color: 'var(--color-primary)', padding: '2px 8px', borderRadius: 'var(--radius-full)', border: '0.5px solid var(--color-primary-border)', fontWeight: 600 }}>
                           Tu

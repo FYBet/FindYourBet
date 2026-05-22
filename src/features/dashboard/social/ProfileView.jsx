@@ -6,8 +6,9 @@ import FollowListModal from './FollowListModal'
 import { useMutes, MUTE_DURATIONS } from '../../../hooks/useMutes'
 
 function Avatar({ url, name, size = 80, fontSize = 32 }) {
-  if (url) return (
-    <img src={url} alt="avatar"
+  const [imgError, setImgError] = useState(false)
+  if (url && !imgError) return (
+    <img src={url} alt="avatar" onError={() => setImgError(true)}
       style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--color-bg)', display: 'block' }} />
   )
   return (
@@ -54,6 +55,7 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
 
   // 3-dot menu
   const [showMenu, setShowMenu] = useState(false)
+  const [isBlockedByThem, setIsBlockedByThem] = useState(false)
 
   // Enviar perfil modal
   const [showSendProfile, setShowSendProfile] = useState(false)
@@ -72,17 +74,19 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
     setLoading(true)
     const safetyTimer = setTimeout(() => setLoading(false), 10000)
     try {
-      const [{ data: prof }, { data: resolvedBets }, { count: fersCount }, { count: fingCount }, { data: blockRow }, { data: activeOffers }] = await Promise.all([
+      const [{ data: prof }, { data: resolvedBets }, { count: fersCount }, { count: fingCount }, { data: blockRow }, { data: activeOffers }, { data: blockByThemRow }] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', userId).single(),
         supabase.from('bets').select('*, channel:channels(id, name, is_private, deleted_at)').eq('user_id', userId).neq('status', 'pending').order('created_at', { ascending: false }),
         supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', userId),
         supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId),
         currentUser?.id ? supabase.from('blocks').select('id').eq('blocker_id', currentUser.id).eq('blocked_id', userId).maybeSingle() : Promise.resolve({ data: null }),
         supabase.from('offers').select('channel_id').eq('active', true),
+        currentUser?.id ? supabase.from('blocks').select('id').eq('blocker_id', userId).eq('blocked_id', currentUser.id).maybeSingle() : Promise.resolve({ data: null }),
       ])
       setPremiumChannelIds(new Set((activeOffers || []).map(o => o.channel_id)))
       setProfile(prof)
       setIsBlocked(!!blockRow)
+      setIsBlockedByThem(!!blockByThemRow)
       setFollowersCount(fersCount || 0)
       setFollowingCount(fingCount || 0)
 
@@ -131,6 +135,12 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
 
   const handleBlock = async () => {
     await supabase.from('blocks').upsert({ blocker_id: currentUser.id, blocked_id: userId })
+    const { data: myChannels } = await supabase.from('channels').select('id').eq('owner_id', currentUser.id)
+    if (myChannels?.length) {
+      await supabase.from('channel_members').delete()
+        .in('channel_id', myChannels.map(c => c.id))
+        .eq('user_id', userId)
+    }
     setIsBlocked(true)
     setShowMenu(false)
     onBlock?.(userId)
@@ -201,8 +211,18 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
   if (loading) return (
     <div style={{ textAlign: 'center', padding: '60px', color: 'var(--color-text-muted)' }}>⏳ Cargando perfil...</div>
   )
-  if (!profile) return (
-    <div style={{ textAlign: 'center', padding: '60px', color: 'var(--color-text-muted)' }}>Usuario no encontrado</div>
+  if (!profile || isBlockedByThem) return (
+    <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+        <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', color: 'var(--color-text-muted)' }}>←</button>
+        <div style={{ fontWeight: 700, fontSize: '16px' }}>Perfil</div>
+      </div>
+      <div style={{ textAlign: 'center', padding: '60px', color: 'var(--color-text-muted)' }}>
+        <div style={{ fontSize: '40px', marginBottom: '12px' }}>🚫</div>
+        <div style={{ fontWeight: 600, fontSize: '16px', marginBottom: '6px' }}>Usuario no encontrado</div>
+        <div style={{ fontSize: '13px' }}>Este usuario no está disponible.</div>
+      </div>
+    </motion.div>
   )
 
   if (isBlocked) {

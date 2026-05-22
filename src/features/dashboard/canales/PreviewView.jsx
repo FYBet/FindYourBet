@@ -9,12 +9,30 @@ import {
 } from './messageRenderer'
 
 export default function PreviewView({ channel, user, onBack, onJoin, joining, memberCount }) {
-  const { messages, loading } = useMessages(channel.id)
+  const { messages, loading, recordView } = useMessages(channel.id, user?.id)
   const bottomRef = useRef(null)
+  const scrollRef = useRef(null)
+  const observerRef = useRef(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'instant' })
   }, [messages])
+
+  useEffect(() => {
+    const container = scrollRef.current
+    if (!container) return
+    observerRef.current?.disconnect()
+    observerRef.current = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const msgId = entry.target.dataset.msgid
+          if (msgId) recordView(msgId)
+        }
+      })
+    }, { root: container, threshold: 0.1 })
+    container.querySelectorAll('[data-msgid]').forEach(el => observerRef.current.observe(el))
+    return () => observerRef.current?.disconnect()
+  }, [messages, recordView])
 
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
@@ -32,7 +50,7 @@ export default function PreviewView({ channel, user, onBack, onJoin, joining, me
         </span>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {loading ? (
           <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '40px' }}>⏳ Cargando mensajes...</div>
         ) : messages.length === 0 ? (
@@ -52,7 +70,7 @@ export default function PreviewView({ channel, user, onBack, onJoin, joining, me
           const prev = messages[i - 1]
           const showDaySep = !prev || getDayLabel(m.created_at) !== getDayLabel(prev.created_at)
           return (
-            <div key={m.id}>
+            <div key={m.id} data-msgid={m.id}>
               {showDaySep && <DaySeparator label={getDayLabel(m.created_at) ?? ''} />}
               <div style={{ display: 'flex', justifyContent: (isBet || isVoice || isProfile) ? 'flex-start' : isOwn ? 'flex-end' : 'flex-start' }}>
                 <div style={{ maxWidth: isBet || isProfile ? '320px' : isNobubble ? 'fit-content' : isVoice ? '280px' : '70%' }}>
@@ -62,7 +80,7 @@ export default function PreviewView({ channel, user, onBack, onJoin, joining, me
                     color: 'var(--color-text)',
                     padding: isNobubble ? '0' : isImage ? '6px' : isVoice ? '10px 12px 22px 12px' : '7px 12px 19px 12px',
                     borderRadius: isNobubble || isImage ? 'var(--radius-lg)' : '4px 16px 16px 16px',
-                    minWidth: !isNobubble && !isImage && !isVoice ? '56px' : undefined,
+                    minWidth: !isNobubble && !isImage && !isVoice ? '63px' : undefined,
                     fontSize: '14px', lineHeight: 1.5, whiteSpace: 'pre-wrap', textAlign: 'left',
                     border: isNobubble ? 'none' : '0.5px solid var(--color-border)',
                   }}>
@@ -74,13 +92,13 @@ export default function PreviewView({ channel, user, onBack, onJoin, joining, me
                         color: 'var(--color-text-muted)',
                         whiteSpace: 'nowrap',
                       }}>
-                        {timeStr}
+                        {m.view_count > 0 ? `👁 ${m.view_count} · ` : ''}{timeStr}
                       </span>
                     )}
                   </div>
                   {(isNobubble || isImage) && (
                     <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '3px', textAlign: 'left' }}>
-                      {timeStr}
+                      {m.view_count > 0 ? `👁 ${m.view_count} · ` : ''}{timeStr}
                     </div>
                   )}
                 </div>

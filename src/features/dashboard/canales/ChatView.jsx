@@ -9,14 +9,24 @@ import ProfileView from '../social/ProfileView'
 import OfferManager from '../payments/OfferManager'
 import ForwardModal from '../social/ForwardModal'
 import {
-  parseBetMessage,
+  parseBetMessage, parsePollMessage,
   renderMessage, parseForward, parseReply, parseEdited, parsePinnedValue,
-  isBetMessage, isImageMessage, isStickerMessage, isProfileMessage, isVoiceMessage,
+  isBetMessage, isImageMessage, isStickerMessage, isProfileMessage, isVoiceMessage, isPollMessage,
+  isImgTextMessage, parseImgTextMessage, ImageMessage,
   formatMsgTime, getDayLabel, DaySeparator,
 } from './messageRenderer'
+
+function readableContent(content) {
+  if (content?.startsWith('[IMG_MSG]:')) {
+    try { return parseImgTextMessage(content)?.text || '📷 Imagen' } catch { return '📷 Imagen' }
+  }
+  return content ?? ''
+}
 import PinDurationModal from './PinDurationModal'
 import PostModal from '../feed/PostModal'
 import ChannelBetPost from './ChannelBetPost'
+import PollCard from './PollCard'
+import PollCreatorModal from './PollCreatorModal'
 import { insertNotification } from '../notifications/useNotifications'
 
 function isLinkMessage(content) { return content.startsWith('http://') || content.startsWith('https://') }
@@ -75,8 +85,12 @@ function MemberRow({ profile, userId, isChannelOwner, isMemberAdmin, canKick, on
   const [showMenu, setShowMenu] = useState(false)
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 0', borderBottom: '0.5px solid var(--color-border)' }}>
-      <div onClick={() => onViewProfile?.(userId)} style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden', cursor: onViewProfile ? 'pointer' : 'default' }}>
-        {profile?.avatar_url ? <img src={profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initial}
+      <div onClick={() => onViewProfile?.(userId)} style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden', cursor: onViewProfile ? 'pointer' : 'default', position: 'relative' }}>
+        {initial}
+        {profile?.avatar_url && (
+          <img src={profile.avatar_url} alt="" onError={e => { e.currentTarget.style.display = 'none' }}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+        )}
       </div>
       <div onClick={() => onViewProfile?.(userId)} style={{ flex: 1, minWidth: 0, cursor: onViewProfile ? 'pointer' : 'default' }}>
         <div style={{ fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
@@ -386,7 +400,6 @@ function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, 
             <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Cargando...</div>
           ) : (isOwner || isAdmin) ? (
             <>
-              {/* Barra de cerca — solo owner/admin */}
               <input
                 type="text"
                 placeholder="Buscar por @usuario..."
@@ -395,7 +408,6 @@ function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, 
                 style={{ width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '12px', padding: '7px 10px', borderRadius: 'var(--radius-md)', outline: 'none', boxSizing: 'border-box', marginBottom: '8px' }}
               />
               <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {/* El propietari sempre apareix primer */}
                 {(!memberSearch || (ownerProfile?.username || '').toLowerCase().includes(memberSearch.toLowerCase())) && (
                   <MemberRow profile={ownerProfile} userId={channel.owner_id} isChannelOwner canKick={false} canPromote={false} canDemote={false} canBan={false} onViewProfile={setProfileOverlay} />
                 )}
@@ -424,7 +436,35 @@ function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, 
                 )}
               </div>
             </>
-          ) : null}
+          ) : (
+            /* Vista llegida per a membres normals: creador + admins */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              {[
+                { profile: ownerProfile, userId: channel.owner_id, badge: '👑 Creador' },
+                ...members.filter(m => m.role === 'admin').map(m => ({ profile: m.profile, userId: m.user_id, badge: '🛡 Admin' })),
+              ].map(({ profile, userId, badge }) => {
+                const initial = (profile?.username || userId?.slice(0, 2) || '?')[0].toUpperCase()
+                return (
+                  <div key={userId} onClick={() => setProfileOverlay(userId)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 0', borderBottom: '0.5px solid var(--color-border)', cursor: 'pointer' }}>
+                    <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden', position: 'relative' }}>
+                      {initial}
+                      {profile?.avatar_url && (
+                        <img src={profile.avatar_url} alt="" onError={e => { e.currentTarget.style.display = 'none' }}
+                          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                      )}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>{profile?.username || '—'}</div>
+                    </div>
+                    <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-primary)', background: 'var(--color-primary-light)', border: '0.5px solid var(--color-primary-border)', borderRadius: 'var(--radius-full)', padding: '2px 8px', flexShrink: 0 }}>
+                      {badge}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </InfoSection>
 
         {/* MODAL DE VET */}
@@ -577,7 +617,7 @@ function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, 
 }
 
 export default function ChatView({ channel: initialChannel, user, onBack, memberCount, onLeave, onDeleteChannel, onOpenCanal, onAddBet, onChannelUpdated }) {
-  const { messages, loading, sendMessage } = useMessages(initialChannel.id)
+  const { messages, loading, sendMessage, recordView } = useMessages(initialChannel.id, user?.id)
   const [channel, setChannel] = useState(initialChannel)
   const [text, setText] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -592,12 +632,15 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
   const bottomRef = useRef(null)
   const prevCountRef = useRef(0)
   const wasAtBottomRef = useRef(true)
+  const observerRef = useRef(null)
   const isOwner = channel.owner_id === user.id
   const isDeleted = !!channel.deleted_at
   const [isAdmin, setIsAdmin] = useState(false)
   const [liveBetStatuses, setLiveBetStatuses] = useState({})
+  const [deletedMessageIds, setDeletedMessageIds] = useState(new Set())
   const [profileModal, setProfileModal] = useState(null)
   const [hoveredMsgId, setHoveredMsgId] = useState(null)
+  const [pastedImage, setPastedImage] = useState(null)
   const [forwardMsg, setForwardMsg] = useState(null)
   const [msgMenu, setMsgMenu] = useState(null)
   const [replyTo, setReplyTo] = useState(null)
@@ -607,6 +650,7 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
   const [pinDurationFor, setPinDurationFor] = useState(null)
   const [highlightedMsgId, setHighlightedMsgId] = useState(null)
   const [postModalMessageId, setPostModalMessageId] = useState(null)
+  const [showPollCreator, setShowPollCreator] = useState(false)
 
   // Sincronitza pinned_message des de la BD en obrir el canal (per si el channel prop arriba sense el camp)
   useEffect(() => {
@@ -656,9 +700,28 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
     prevCountRef.current = newCount
   }, [messages])
 
+  // IntersectionObserver: registra vista quan el missatge apareix a pantalla
+  useEffect(() => {
+    const container = scrollRef.current
+    if (!container) return
+    observerRef.current?.disconnect()
+    observerRef.current = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const msgId = entry.target.dataset.msgid
+          if (msgId) recordView(msgId)
+        }
+      })
+    }, { root: container, threshold: 0.1 })
+    container.querySelectorAll('[data-msgid]').forEach(el => observerRef.current.observe(el))
+    return () => observerRef.current?.disconnect()
+  }, [messages, recordView])
+
+  const removeFromView = (msgId) => setDeletedMessageIds(prev => { const n = new Set(prev); n.add(msgId); return n })
+
   const handleDelete = async (msgId) => {
-    await supabase.from('channel_messages').update({ content: '[DELETED]' }).eq('id', msgId)
-    setEditedMap(prev => ({ ...prev, [msgId]: '[DELETED]' }))
+    await supabase.from('channel_messages').delete().eq('id', msgId)
+    removeFromView(msgId)
     setMsgMenu(null)
   }
 
@@ -686,7 +749,7 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
   }
 
   const handleSend = async () => {
-    if (!text.trim()) return
+    if (!text.trim() && !pastedImage) return
     if (editingMsg) {
       const saved = text + '[EDITED]'
       await supabase.from('channel_messages').update({ content: saved }).eq('id', editingMsg.id)
@@ -695,7 +758,34 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
       setText('')
       return
     }
-    let content = text
+
+    let imageUrl = null
+    if (pastedImage) {
+      setUploading(true)
+      setUploadError('')
+      try {
+        imageUrl = await uploadToStorage(pastedImage.file)
+      } catch (err) {
+        setUploadError(`Error al subir: ${err.message || 'Error inesperado.'}`)
+        setUploading(false)
+        return
+      } finally {
+        URL.revokeObjectURL(pastedImage.previewUrl)
+        setPastedImage(null)
+      }
+      setUploading(false)
+    }
+
+    const trimmedText = text.trim()
+    let content
+    if (imageUrl && trimmedText) {
+      content = `[IMG_MSG]:${JSON.stringify({ url: imageUrl, text: trimmedText })}`
+    } else if (imageUrl) {
+      content = `[IMAGE]:${imageUrl}`
+    } else {
+      content = trimmedText
+    }
+
     if (replyTo) content = `[REPLY:${replyTo.id}|${replyTo.preview}]:${content}`
     setText('')
     setReplyTo(null)
@@ -710,7 +800,13 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
       ...(members || []).map(m => m.user_id),
       initialChannel.owner_id,
     ].filter((id, i, arr) => id !== user.id && arr.indexOf(id) === i)
-    const preview = content.replace(/^\[FWD[^\]]*\]:/, '').replace(/^\[REPLY:[^\]]*\]:/, '').slice(0, 80)
+    const stripped = content.replace(/^\[FWD[^\]]*\]:/, '').replace(/^\[REPLY:[^\]]*\]:/, '')
+    let preview
+    if (stripped.startsWith('[IMG_MSG]:')) {
+      try { preview = '📷 ' + (JSON.parse(stripped.replace('[IMG_MSG]:', '')).text || 'Imagen') } catch { preview = '📷 Imagen' }
+    } else {
+      preview = stripped.slice(0, 80)
+    }
     await Promise.all(recipientIds.map(uid =>
       insertNotification({
         userId: uid,
@@ -737,26 +833,35 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
     if (e.ctrlKey) { setText(prev => prev + '\n') } else { handleSend() }
   }
 
-  const handleFile = async (e) => {
-    const file = e.target.files[0]
-    if (!file) return
+  const uploadToStorage = async (file) => {
+    const ext = (file.name?.split('.').pop() || 'png').toLowerCase()
+    const path = `${channel.id}/${Date.now()}.${ext}`
+    const { error } = await supabase.storage.from('channel-files').upload(path, file, { upsert: true })
+    if (error) throw new Error(error.message)
+    const { data: urlData } = supabase.storage.from('channel-files').getPublicUrl(path)
+    return urlData.publicUrl
+  }
+
+  const uploadFile = async (file) => {
     setUploading(true)
     setUploadError('')
     try {
-      const ext = file.name.split('.').pop().toLowerCase()
-      const path = `${channel.id}/${Date.now()}.${ext}`
-      const { error } = await supabase.storage.from('channel-files').upload(path, file, { upsert: true })
-      if (error) { setUploadError(`Error al subir: ${error.message}`); return }
-      const { data: urlData } = supabase.storage.from('channel-files').getPublicUrl(path)
-      const isImage = /^image\/(jpeg|png|gif|webp)$/.test(file.type) || /\.(jpg|jpeg|png|gif|webp)$/i.test(file.name)
-      const content = isImage ? `[IMAGE]:${urlData.publicUrl}` : `[FILE:${file.name}]:${urlData.publicUrl}`
+      const url = await uploadToStorage(file)
+      const isImg = /^image\/(jpeg|png|gif|webp)$/.test(file.type) || /\.(jpg|jpeg|png|gif|webp)$/i.test(file.name || '')
+      const content = isImg ? `[IMAGE]:${url}` : `[FILE:${file.name}]:${url}`
       await sendMessage(content, user.id)
     } catch (err) {
-      setUploadError('Error inesperado al subir el archivo.')
+      setUploadError(`Error al subir: ${err.message || 'Error inesperado.'}`)
     } finally {
       setUploading(false)
-      e.target.value = ''
     }
+  }
+
+  const handleFile = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    await uploadFile(file)
+    e.target.value = ''
   }
 
   const handleInternalLink = (code) => { onOpenCanal?.(code) }
@@ -855,7 +960,7 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
             <div style={{ fontSize: '32px', marginBottom: '8px' }}>💬</div>
             <div>Sin mensajes todavía.</div>
           </div>
-        ) : messages.map((m, i) => {
+        ) : messages.filter(m => !deletedMessageIds.has(m.id)).map((m, i) => {
           const isOwn = m.user_id === user.id
           const rawContent = editedMap[m.id] ?? m.content
           const isDeletedMsg = rawContent === '[DELETED]'
@@ -863,11 +968,12 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
           const { replyId, replyPreview, inner: noReply } = parseReply(noFwd)
           const { edited, content: displayContent } = parseEdited(noReply)
           const isBet = isBetMessage(displayContent)
+          const isPoll = isPollMessage(displayContent)
           const isImage = isImageMessage(displayContent)
           const isSticker = isStickerMessage(displayContent)
           const isProfile = isProfileMessage(displayContent)
           const isVoice = isVoiceMessage(displayContent)
-          const isNobubble = isSticker || isBet || isProfile
+          const isNobubble = isSticker || isBet || isProfile || isPoll
           const timeStr = formatMsgTime(m.created_at)
           const prev = messages[i - 1]
           const showDaySep = !prev || getDayLabel(m.created_at) !== getDayLabel(prev.created_at)
@@ -875,7 +981,7 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
           const isMenuOpen = msgMenu?.id === m.id
           const isHighlighted = highlightedMsgId === m.id
           return (
-            <div key={m.id} id={`msg-${m.id}`}
+            <div key={m.id} id={`msg-${m.id}`} data-msgid={m.id}
               onMouseEnter={() => setHoveredMsgId(m.id)}
               onMouseLeave={() => { if (!isMenuOpen) setHoveredMsgId(null) }}
               style={{ borderRadius: 'var(--radius-md)', padding: '1px 2px', margin: '-1px -2px', transition: 'background 0.4s', background: isHighlighted ? 'rgba(15,110,86,0.13)' : 'transparent' }}>
@@ -902,18 +1008,16 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
                         color: isOwn ? '#010906' : 'var(--color-text)',
                         padding: isNobubble ? '0' : isImage ? '6px' : isVoice ? '10px 12px 22px 12px' : '7px 12px 19px 12px',
                         borderRadius: isNobubble || isImage ? 'var(--radius-lg)' : isOwn ? '16px 16px 4px 16px' : '4px 16px 16px 16px',
-                        minWidth: !isNobubble && !isImage && !isVoice ? '56px' : undefined,
+                        minWidth: !isNobubble && !isImage && !isVoice ? '63px' : undefined,
                         fontSize: '14px', lineHeight: 1.5, whiteSpace: 'pre-wrap', textAlign: 'left',
                         border: isOwn || isNobubble ? 'none' : '0.5px solid var(--color-border)',
                       }}>
-                      {/* Botó ▾ invisible fins hover — dins la bombolla, no desplaça res */}
-                      {!isNobubble && (
-                        <button
-                          onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMsgMenu(isMenuOpen ? null : { id: m.id, x: r.left, y: r.bottom }) }}
-                          style={{ position: 'absolute', top: '4px', right: '4px', opacity: isHovered || isMenuOpen ? 1 : 0, pointerEvents: isHovered || isMenuOpen ? 'auto' : 'none', transition: 'opacity 0.15s', background: isOwn ? 'rgba(1,9,6,0.15)' : 'rgba(0,0,0,0.08)', border: 'none', borderRadius: 'var(--radius-full)', width: '20px', height: '20px', cursor: 'pointer', fontSize: '10px', color: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1 }}>
-                          ▾
-                        </button>
-                      )}
+                      {/* Botó ▾ invisible fins hover — sempre dins la bombolla */}
+                      <button
+                        onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMsgMenu(isMenuOpen ? null : { id: m.id, x: r.left, y: r.bottom }) }}
+                        style={{ position: 'absolute', top: '4px', right: '4px', opacity: isHovered || isMenuOpen ? 1 : 0, pointerEvents: isHovered || isMenuOpen ? 'auto' : 'none', transition: 'opacity 0.15s', background: isOwn && !isNobubble ? 'rgba(1,9,6,0.15)' : 'rgba(0,0,0,0.08)', border: 'none', borderRadius: 'var(--radius-full)', width: '20px', height: '20px', cursor: 'pointer', fontSize: '10px', color: isOwn && !isNobubble ? '#010906' : 'var(--color-text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
+                        ▾
+                      </button>
                       {replyPreview && (
                         <div onClick={() => replyId && scrollToMessage(replyId)}
                           style={{ background: isOwn ? 'rgba(1,9,6,0.12)' : 'rgba(0,0,0,0.06)', borderLeft: `3px solid ${isOwn ? 'rgba(1,9,6,0.35)' : 'var(--color-primary)'}`, borderRadius: '4px', padding: '5px 8px', marginBottom: '8px', fontSize: '12px', opacity: 0.85, overflow: 'hidden', maxHeight: '52px', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: replyId ? 'pointer' : 'default' }}>
@@ -928,31 +1032,46 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
                             currentUser={user}
                             onOpenPost={() => setPostModalMessageId(m.id)}
                             timeStr={timeStr}
+                            viewCount={m.view_count || 0}
                           />
-                        : renderMessage(displayContent, handleInternalLink, isOwn, setProfileModal)}
+                        : isPoll
+                        ? <PollCard
+                            messageId={m.id}
+                            poll={parsePollMessage(displayContent)}
+                            currentUser={user}
+                            timeStr={timeStr}
+                            viewCount={m.view_count || 0}
+                            isCreator={isOwn}
+                            onFinalize={async () => {
+                              const pollData = parsePollMessage(displayContent)
+                              const newContent = `[POLL]:${JSON.stringify({ ...pollData, closed: true })}`
+                              await supabase.from('channel_messages').update({ content: newContent }).eq('id', m.id)
+                              setEditedMap(prev => ({ ...prev, [m.id]: newContent }))
+                            }}
+                          />
+                        : isImage
+                        ? (
+                            <div style={{ position: 'relative', display: 'inline-block', maxWidth: '100%' }}>
+                              <ImageMessage url={displayContent.replace('[IMAGE]:', '')} />
+                              <span style={{ position: 'absolute', bottom: '8px', right: '8px', background: 'rgba(0,0,0,0.45)', color: '#fff', borderRadius: '6px', padding: '2px 6px', fontSize: '10px', fontWeight: 500, whiteSpace: 'nowrap', backdropFilter: 'blur(4px)' }}>
+                                {m.view_count > 0 ? `👁 ${m.view_count} · ` : ''}{timeStr}
+                              </span>
+                            </div>
+                          )
+                        : renderMessage(displayContent, handleInternalLink, isOwn, setProfileModal, timeStr, m.view_count || 0)}
                       {edited && !isNobubble && !isImage && (
                         <span style={{ fontSize: '10px', opacity: 0.55, fontStyle: 'italic', marginLeft: '4px' }}>(editado)</span>
                       )}
                       {!isNobubble && !isImage && (
                         <span style={{ position: 'absolute', bottom: '5px', right: '10px', fontSize: '10px', fontWeight: 500, color: isOwn ? 'rgba(1,9,6,0.65)' : 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
-                          {timeStr}
+                          {m.view_count > 0 ? `👁 ${m.view_count} · ` : ''}{timeStr}
                         </span>
                       )}
                     </div>
-                    {(isNobubble || isImage) && (
-                      <>
-                        {/* Botó ▾ per a nobubble — fora de la bombolla transparent */}
-                        <button
-                          onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMsgMenu(isMenuOpen ? null : { id: m.id, x: r.left, y: r.bottom }) }}
-                          style={{ display: 'block', opacity: isHovered || isMenuOpen ? 1 : 0, pointerEvents: isHovered || isMenuOpen ? 'auto' : 'none', transition: 'opacity 0.15s', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-full)', width: '20px', height: '20px', cursor: 'pointer', fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '2px', alignItems: 'center', justifyContent: 'center' }}>
-                          ▾
-                        </button>
-                        {!isBet && (
-                          <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '3px', textAlign: isProfile ? 'left' : isOwn ? 'right' : 'left' }}>
-                            {timeStr}
-                          </div>
-                        )}
-                      </>
+                    {isSticker && (
+                      <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '3px', textAlign: isOwn ? 'right' : 'left' }}>
+                        {timeStr}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -985,6 +1104,18 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
             </div>
           )}
 
+          {/* Preview imatge enganxada */}
+          {pastedImage && (
+            <div style={{ position: 'relative', display: 'inline-block', marginBottom: '8px' }}>
+              <img src={pastedImage.previewUrl} alt="preview"
+                style={{ maxHeight: '120px', maxWidth: '220px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-primary-border)', objectFit: 'cover', display: 'block' }} />
+              <button onClick={() => { URL.revokeObjectURL(pastedImage.previewUrl); setPastedImage(null) }}
+                style={{ position: 'absolute', top: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', border: 'none', borderRadius: '50%', width: '22px', height: '22px', cursor: 'pointer', fontSize: '13px', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
+                ×
+              </button>
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-end' }}>
             <input type="file" ref={fileInputRef} onChange={handleFile} accept="image/jpeg,image/png,image/gif,image/webp,.pdf" style={{ display: 'none' }} />
 
@@ -1005,9 +1136,15 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
                         <span>{uploading ? '⏳' : '📎'}</span><span>Adjuntar archivo</span>
                       </button>
                       <button onClick={() => { onAddBet?.(channel.id); setShowExtras(false) }}
-                        style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '12px 16px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', color: 'var(--color-primary)', fontWeight: 700, fontFamily: 'var(--font-sans)', textAlign: 'left' }}>
+                        style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '12px 16px', background: 'none', border: 'none', borderBottom: (isOwner || isAdmin) ? '0.5px solid var(--color-border)' : 'none', cursor: 'pointer', fontSize: '14px', color: 'var(--color-primary)', fontWeight: 700, fontFamily: 'var(--font-sans)', textAlign: 'left' }}>
                         <span>📊</span><span>Añadir apuesta</span>
                       </button>
+                      {(isOwner || isAdmin) && (
+                        <button onClick={() => { setShowPollCreator(true); setShowExtras(false) }}
+                          style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '12px 16px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', textAlign: 'left' }}>
+                          <span>🗳️</span><span>Crear encuesta</span>
+                        </button>
+                      )}
                     </motion.div>
                   </>
                 )}
@@ -1018,6 +1155,14 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
 
             <textarea value={text} onChange={e => setText(e.target.value)} onKeyDown={handleKey}
               placeholder="Envía un mensaje" rows={2}
+              onPaste={e => {
+                const item = Array.from(e.clipboardData?.items || []).find(i => i.type.startsWith('image/'))
+                if (item) {
+                  e.preventDefault()
+                  const file = item.getAsFile()
+                  if (file) setPastedImage({ file, previewUrl: URL.createObjectURL(file) })
+                }
+              }}
               style={{ flex: 1, minWidth: 0, background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '14px', padding: '12px 14px', borderRadius: 'var(--radius-md)', outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
 
             <div style={{ position: 'relative', flexShrink: 0 }}>
@@ -1030,7 +1175,7 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
               </AnimatePresence>
             </div>
 
-            <Button onClick={handleSend} disabled={!text.trim()}>Enviar</Button>
+            <Button onClick={handleSend} disabled={!text.trim() && !pastedImage}>Enviar</Button>
           </div>
         </div>
       ) : (
@@ -1060,21 +1205,24 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
           const isOwnMsg = msg.user_id === user.id
           const isBetMsg = isBetMessage(displayContent)
           const isImgMsg = isImageMessage(displayContent)
+          const isImgTextMsg = isImgTextMessage(displayContent)
           const isStkMsg = isStickerMessage(displayContent)
           const isVoiceMsg = isVoiceMessage(displayContent)
           const isProfMsg = isProfileMessage(displayContent)
+          const isPollMsg = isPollMessage(displayContent)
           const canFwd = channel.is_private ? isOwner : channel.allow_forward !== false
-          const canEdit = isOwnMsg && !forwardedFrom && !isBetMsg && !isImgMsg && !isStkMsg && !isVoiceMsg && !isProfMsg
+          const canEdit = isOwnMsg && !forwardedFrom && !isBetMsg && !isImgMsg && !isImgTextMsg && !isStkMsg && !isVoiceMsg && !isProfMsg && !isPollMsg
           const canDel = isOwnMsg || isOwner || isAdmin
           const canPin = isOwner || isAdmin
+          const readable = readableContent(displayContent)
 
           const items = [
-            { icon: '📋', label: 'Copiar', action: () => { navigator.clipboard.writeText(displayContent); setMsgMenu(null) } },
-            { icon: '↩', label: 'Responder', action: () => { setReplyTo({ id: msg.id, preview: displayContent.slice(0, 80) }); setMsgMenu(null) } },
+            { icon: '📋', label: 'Copiar', action: () => { navigator.clipboard.writeText(readable); setMsgMenu(null) } },
+            { icon: '↩', label: 'Responder', action: () => { setReplyTo({ id: msg.id, preview: readable.slice(0, 80) }); setMsgMenu(null) } },
             canFwd && { icon: '↗️', label: 'Reenviar', action: () => { setForwardMsg({ content: displayContent, fromChannelName: channel.name }); setMsgMenu(null) } },
             canPin && { icon: '📌', label: pinnedMsg?.rawContent === rawContent ? 'Desfijar' : 'Fijar', action: () => { if (pinnedMsg?.rawContent === rawContent) { handlePin(rawContent, null) } else { setPinDurationFor(rawContent); setMsgMenu(null) } } },
             canEdit && { icon: '✏️', label: 'Editar', action: () => { setEditingMsg({ id: msg.id }); setText(displayContent); setMsgMenu(null) } },
-            canDel && { icon: '🗑', label: 'Eliminar', action: () => handleDelete(msg.id), danger: true },
+            canDel && !isBetMsg && { icon: '🗑', label: 'Eliminar', action: () => handleDelete(msg.id), danger: true },
           ].filter(Boolean)
 
           const menuH = items.length * 44
@@ -1144,6 +1292,18 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
       <AnimatePresence>
         {postModalMessageId && (
           <PostModal messageId={postModalMessageId} currentUser={user} onClose={() => setPostModalMessageId(null)} />
+        )}
+      </AnimatePresence>
+
+      {/* Modal creació d'enquesta */}
+      <AnimatePresence>
+        {showPollCreator && (
+          <PollCreatorModal
+            channelId={channel.id}
+            userId={user.id}
+            onClose={() => setShowPollCreator(false)}
+            onSent={() => {}}
+          />
         )}
       </AnimatePresence>
     </motion.div>

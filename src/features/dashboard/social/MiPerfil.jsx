@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
 import PostModal from '../feed/PostModal'
 import FollowListModal from './FollowListModal'
+import { useProfileNav } from '../../../contexts/ProfileNavContext'
 
 const DM_OPTIONS = [
   { id: 'followers', icon: '🔒', label: 'Solo seguidores mutuos', desc: 'Solo quien te siga y tú le sigas puede escribirte' },
@@ -26,8 +27,9 @@ function StatPill({ label, value, color, onClick }) {
 }
 
 function Avatar({ url, name, size = 80, fontSize = 32 }) {
-  if (url) return (
-    <img src={url} alt="avatar"
+  const [imgError, setImgError] = useState(false)
+  if (url && !imgError) return (
+    <img src={url} alt="avatar" onError={() => setImgError(true)}
       style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--color-bg)', display: 'block' }} />
   )
   return (
@@ -38,6 +40,7 @@ function Avatar({ url, name, size = 80, fontSize = 32 }) {
 }
 
 export default function MiPerfil({ user, onNavigate, onAvatarUpdated, onNavigateToChannel }) {
+  const openProfile = useProfileNav()
   const [profile, setProfile] = useState(null)
   const [stats, setStats] = useState({ total: 0, won: 0, lost: 0, yieldVal: 0, avgOdds: '—' })
   const [followersCount, setFollowersCount] = useState(0)
@@ -697,7 +700,7 @@ export default function MiPerfil({ user, onNavigate, onAvatarUpdated, onNavigate
             profileUserId={user.id}
             currentUser={user}
             onClose={() => setFollowListType(null)}
-            onViewProfile={null}
+            onViewProfile={(uid) => { setFollowListType(null); openProfile(uid) }}
           />
         )}
       </AnimatePresence>

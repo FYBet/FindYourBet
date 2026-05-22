@@ -6,6 +6,7 @@ import { VoicePlayer, VoiceRecordButton } from '../VoiceMessage'
 import { usePolling } from '../../../hooks/usePolling'
 import ForwardModal from './ForwardModal'
 import PinDurationModal from '../canales/PinDurationModal'
+import { ImageMessage } from '../canales/messageRenderer'
 
 function getDayLabel(ts) {
   if (!ts) return null
@@ -74,6 +75,17 @@ function isSingleEmoji(content) {
 
 function renderContent(content, isOwn, onViewProfile) {
   if (!content) return null
+  if (content.startsWith('[IMG_MSG]:')) {
+    try {
+      const { url, text } = JSON.parse(content.replace('[IMG_MSG]:', ''))
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '180px' }}>
+          <span style={{ fontSize: '14px', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{text}</span>
+          <ImageMessage url={url} />
+        </div>
+      )
+    } catch { return null }
+  }
   if (content.startsWith('[PROFILE]:')) {
     const rest = content.replace('[PROFILE]:', '')
     const idx = rest.indexOf(':')
@@ -103,12 +115,10 @@ function renderContent(content, isOwn, onViewProfile) {
     return <VoicePlayer url={url} isOwn={isOwn} />
   }
   if (content.startsWith('[GIF]:')) {
-    const url = content.replace('[GIF]:', '')
-    return <img src={url} alt="gif" style={{ display: 'block', maxWidth: '240px', maxHeight: '200px', borderRadius: 'var(--radius-md)', objectFit: 'contain' }} />
+    return <ImageMessage url={content.replace('[GIF]:', '')} isGif />
   }
   if (content.startsWith('[IMAGE]:')) {
-    const url = content.replace('[IMAGE]:', '')
-    return <img src={url} alt="img" style={{ display: 'block', minWidth: '160px', minHeight: '120px', maxWidth: '100%', maxHeight: '340px', borderRadius: 'var(--radius-md)' }} />
+    return <ImageMessage url={content.replace('[IMAGE]:', '')} />
   }
   if (content.startsWith('[FILE:')) {
     const match = content.match(/\[FILE:(.*?)\]:(.*)/)
@@ -143,6 +153,7 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
   const [muted, setMuted] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
+  const [pastedImage, setPastedImage] = useState(null)
   const [hoveredMsgId, setHoveredMsgId] = useState(null)
   const [forwardMsg, setForwardMsg] = useState(null)
   const [msgMenu, setMsgMenu] = useState(null)
@@ -152,17 +163,29 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
   const [pinnedMsg, setPinnedMsg] = useState(() => parsePinnedValue(conversation.pinned_message))
   const [pinDurationFor, setPinDurationFor] = useState(null)
   const [highlightedMsgId, setHighlightedMsgId] = useState(null)
+  const [blockedStatus, setBlockedStatus] = useState(null) // null | 'blocked_by_me' | 'blocked_by_them'
   const scrollRef = useRef(null)
   const bottomRef = useRef(null)
   const prevCountRef = useRef(0)
   const wasAtBottomRef = useRef(true)
   const fileInputRef = useRef(null)
 
-  // Sincronitza pinned_message des de la BD en obrir la conversa
   useEffect(() => {
-    supabase.from('dm_conversations').select('pinned_message').eq('id', conversation.id).single()
-      .then(({ data }) => { if (data) setPinnedMsg(parsePinnedValue(data.pinned_message)) })
-  }, [conversation.id])
+    if (!conversation.otherId || !currentUser?.id) return
+    Promise.all([
+      supabase.from('blocks').select('id').eq('blocker_id', currentUser.id).eq('blocked_id', conversation.otherId).maybeSingle(),
+      supabase.from('blocks').select('id').eq('blocker_id', conversation.otherId).eq('blocked_id', currentUser.id).maybeSingle(),
+    ]).then(([{ data: iBlocked }, { data: theyBlocked }]) => {
+      if (iBlocked) setBlockedStatus('blocked_by_me')
+      else if (theyBlocked) setBlockedStatus('blocked_by_them')
+      else setBlockedStatus(null)
+    })
+  }, [conversation.otherId, currentUser?.id])
+
+  const handleUnblockFromDM = async () => {
+    await supabase.from('blocks').delete().eq('blocker_id', currentUser.id).eq('blocked_id', conversation.otherId)
+    setBlockedStatus(null)
+  }
 
   const isNearBottom = () => {
     const el = scrollRef.current
@@ -171,8 +194,12 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
   }
 
   const loadMessages = useCallback(async () => {
-    const data = await onFetchMessages(conversation.id)
+    const [data, { data: convData }] = await Promise.all([
+      onFetchMessages(conversation.id),
+      supabase.from('dm_conversations').select('pinned_message').eq('id', conversation.id).single()
+    ])
     setMessages(data)
+    if (convData !== undefined) setPinnedMsg(parsePinnedValue(convData?.pinned_message))
     setLoading(false)
   }, [conversation.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -206,8 +233,8 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
   }
 
   const handleDeleteMsg = async (msgId) => {
-    await supabase.from('direct_messages').update({ content: '[DELETED]' }).eq('id', msgId)
-    setEditedMap(prev => ({ ...prev, [msgId]: '[DELETED]' }))
+    await supabase.from('direct_messages').delete().eq('id', msgId)
+    setMessages(prev => prev.filter(m => m.id !== msgId))
     setMsgMenu(null)
   }
 
@@ -225,8 +252,33 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
     setPinDurationFor(null)
   }
 
+  const uploadToStorage = async (file) => {
+    const ext = (file.name?.split('.').pop() || 'png').toLowerCase()
+    const path = `dm/${currentUser.id}/${Date.now()}.${ext}`
+    const { error } = await supabase.storage.from('channel-files').upload(path, file, { upsert: true })
+    if (error) throw new Error(error.message)
+    const { data: urlData } = supabase.storage.from('channel-files').getPublicUrl(path)
+    return urlData.publicUrl
+  }
+
+  const uploadFile = async (file) => {
+    setUploading(true)
+    setUploadError('')
+    try {
+      const url = await uploadToStorage(file)
+      const isImg = /^image\/(jpeg|png|gif|webp)$/.test(file.type) || /\.(jpg|jpeg|png|gif|webp)$/i.test(file.name || '')
+      const content = isImg ? `[IMAGE]:${url}` : `[FILE:${file.name}]:${url}`
+      await onSend(conversation.id, content)
+      await refreshMessages()
+    } catch (err) {
+      setUploadError(`Error al subir: ${err.message || 'Error inesperado.'}`)
+    } finally {
+      setUploading(false)
+    }
+  }
+
   const handleSend = async () => {
-    if (!text.trim()) return
+    if (!text.trim() && !pastedImage) return
     if (editingMsg) {
       const saved = text + '[EDITED]'
       await supabase.from('direct_messages').update({ content: saved }).eq('id', editingMsg.id)
@@ -235,7 +287,34 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
       setText('')
       return
     }
-    let content = text
+
+    let imageUrl = null
+    if (pastedImage) {
+      setUploading(true)
+      setUploadError('')
+      try {
+        imageUrl = await uploadToStorage(pastedImage.file)
+      } catch (err) {
+        setUploadError(`Error al subir: ${err.message || 'Error inesperado.'}`)
+        setUploading(false)
+        return
+      } finally {
+        URL.revokeObjectURL(pastedImage.previewUrl)
+        setPastedImage(null)
+      }
+      setUploading(false)
+    }
+
+    const trimmedText = text.trim()
+    let content
+    if (imageUrl && trimmedText) {
+      content = `[IMG_MSG]:${JSON.stringify({ url: imageUrl, text: trimmedText })}`
+    } else if (imageUrl) {
+      content = `[IMAGE]:${imageUrl}`
+    } else {
+      content = trimmedText
+    }
+
     if (replyTo) content = `[REPLY:${replyTo.id}|${replyTo.preview}]:${content}`
     setText('')
     setReplyTo(null)
@@ -262,24 +341,8 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
   const handleFile = async (e) => {
     const file = e.target.files[0]
     if (!file) return
-    setUploading(true)
-    setUploadError('')
-    try {
-      const ext = file.name.split('.').pop().toLowerCase()
-      const path = `dm/${currentUser.id}/${Date.now()}.${ext}`
-      const { error } = await supabase.storage.from('channel-files').upload(path, file, { upsert: true })
-      if (error) { setUploadError(`Error al subir: ${error.message}`); return }
-      const { data: urlData } = supabase.storage.from('channel-files').getPublicUrl(path)
-      const isImage = /^image\/(jpeg|png|gif|webp)$/.test(file.type) || /\.(jpg|jpeg|png|gif|webp)$/i.test(file.name)
-      const content = isImage ? `[IMAGE]:${urlData.publicUrl}` : `[FILE:${file.name}]:${urlData.publicUrl}`
-      await onSend(conversation.id, content)
-      await refreshMessages()
-    } catch {
-      setUploadError('Error inesperado al subir el archivo.')
-    } finally {
-      setUploading(false)
-      e.target.value = ''
-    }
+    await uploadFile(file)
+    e.target.value = ''
   }
 
   const menuItems = [
@@ -348,10 +411,30 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
         )
       })()}
 
+      {/* BANNER BLOQUEADO POR MÍ */}
+      {blockedStatus === 'blocked_by_me' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', marginBottom: '8px' }}>
+          <span style={{ fontSize: '18px', flexShrink: 0 }}>🚫</span>
+          <div style={{ flex: 1, fontSize: '13px', color: 'var(--color-text-muted)', fontWeight: 500 }}>
+            Has bloqueado a este usuario. No puedes enviar mensajes.
+          </div>
+          <button onClick={handleUnblockFromDM}
+            style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '6px 14px', cursor: 'pointer', fontSize: '12px', fontWeight: 700, color: 'var(--color-text)', fontFamily: 'var(--font-sans)', flexShrink: 0 }}>
+            Desbloquear
+          </button>
+        </div>
+      )}
+
       {/* MISSATGES */}
       <div ref={scrollRef} onScroll={() => { wasAtBottomRef.current = isNearBottom() }}
         style={{ flex: 1, overflowY: 'auto', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {loading ? (
+        {blockedStatus === 'blocked_by_them' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '12px', color: 'var(--color-text-muted)', textAlign: 'center' }}>
+            <div style={{ fontSize: '40px' }}>🚫</div>
+            <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--color-text)' }}>Usuario no encontrado</div>
+            <div style={{ fontSize: '13px' }}>No puedes enviar mensajes a este usuario.</div>
+          </div>
+        ) : loading ? (
           <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '40px' }}>⏳ Cargando...</div>
         ) : messages.length === 0 ? (
           <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '40px' }}>
@@ -495,18 +578,21 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
           const { content: displayContent } = parseEdited(noReply)
           const isOwnMsg = msg.sender_id === currentUser.id
           const isImgMsg = displayContent?.startsWith('[IMAGE]:')
+          const isImgTextMsg = displayContent?.startsWith('[IMG_MSG]:')
           const isStkMsg = displayContent?.startsWith('[STICKER]:')
           const isVoiceMsg = displayContent?.startsWith('[VOICE]:')
           const isProfMsg = displayContent?.startsWith('[PROFILE]:')
-          const canEdit = isOwnMsg && !isImgMsg && !isStkMsg && !isVoiceMsg && !isProfMsg
-
+          const isBetMsg = displayContent?.startsWith('[BET]:')
+          const isPollMsgDM = displayContent?.startsWith('[POLL]:')
+          const canEdit = isOwnMsg && !isImgMsg && !isImgTextMsg && !isStkMsg && !isVoiceMsg && !isProfMsg && !isBetMsg && !isPollMsgDM
+          const readableDM = isImgTextMsg ? (() => { try { return JSON.parse(displayContent.replace('[IMG_MSG]:', '')).text || '📷 Imagen' } catch { return '📷 Imagen' } })() : (displayContent ?? '')
           const items = [
-            { icon: '📋', label: 'Copiar', action: () => { navigator.clipboard.writeText(displayContent); setMsgMenu(null) } },
-            { icon: '↩', label: 'Responder', action: () => { setReplyTo({ id: msg.id, preview: displayContent.slice(0, 80) }); setMsgMenu(null) } },
+            { icon: '📋', label: 'Copiar', action: () => { navigator.clipboard.writeText(readableDM); setMsgMenu(null) } },
+            { icon: '↩', label: 'Responder', action: () => { setReplyTo({ id: msg.id, preview: readableDM.slice(0, 80) }); setMsgMenu(null) } },
             { icon: '↗️', label: 'Reenviar', action: () => { setForwardMsg({ content: displayContent }); setMsgMenu(null) } },
             { icon: '📌', label: pinnedMsg?.rawContent === rawContent ? 'Desfijar' : 'Fijar', action: () => { if (pinnedMsg?.rawContent === rawContent) { handlePin(rawContent, null) } else { setPinDurationFor(rawContent); setMsgMenu(null) } } },
             canEdit && { icon: '✏️', label: 'Editar', action: () => { setEditingMsg({ id: msg.id }); setText(displayContent); setMsgMenu(null) } },
-            isOwnMsg && { icon: '🗑', label: 'Eliminar', action: () => handleDeleteMsg(msg.id), danger: true },
+            isOwnMsg && !isBetMsg && { icon: '🗑', label: 'Eliminar', action: () => handleDeleteMsg(msg.id), danger: true },
           ].filter(Boolean)
 
           const menuH = items.length * 44
@@ -555,7 +641,7 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
       </AnimatePresence>
 
       {/* INPUT */}
-      {!needsAccept && !pendingLocked && (
+      {!needsAccept && !pendingLocked && !blockedStatus && (
         <div style={{ marginTop: '12px' }}>
           {isPending && (
             <div style={{ marginBottom: '8px', padding: '8px 14px', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: '12px', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -578,6 +664,16 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
             </div>
           )}
 
+          {pastedImage && (
+            <div style={{ position: 'relative', display: 'inline-block', marginBottom: '8px' }}>
+              <img src={pastedImage.previewUrl} alt="preview"
+                style={{ maxHeight: '120px', maxWidth: '220px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-primary-border)', objectFit: 'cover', display: 'block' }} />
+              <button onClick={() => { URL.revokeObjectURL(pastedImage.previewUrl); setPastedImage(null) }}
+                style={{ position: 'absolute', top: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', border: 'none', borderRadius: '50%', width: '22px', height: '22px', cursor: 'pointer', fontSize: '13px', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
+                ×
+              </button>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
             <input type="file" ref={fileInputRef} onChange={handleFile} accept="image/jpeg,image/png,image/gif,image/webp,.pdf" style={{ display: 'none' }} />
             <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
@@ -587,6 +683,14 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
             <VoiceRecordButton userId={currentUser.id} onSend={async content => { await onSend(conversation.id, content); await refreshMessages() }} />
             <textarea value={text} onChange={e => setText(e.target.value)} onKeyDown={handleKey}
               placeholder="Envía un mensaje" rows={2}
+              onPaste={e => {
+                const item = Array.from(e.clipboardData?.items || []).find(i => i.type.startsWith('image/'))
+                if (item) {
+                  e.preventDefault()
+                  const file = item.getAsFile()
+                  if (file) setPastedImage({ file, previewUrl: URL.createObjectURL(file) })
+                }
+              }}
               style={{ flex: 1, background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '14px', padding: '12px 14px', borderRadius: 'var(--radius-md)', outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
             <div style={{ position: 'relative', flexShrink: 0 }}>
               <button onClick={() => setShowStickers(v => !v)}
@@ -597,8 +701,8 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
                 {showStickers && <StickerPicker onSelect={handleSendSticker} onSendGif={handleSendGif} onClose={() => setShowStickers(false)} user={currentUser} />}
               </AnimatePresence>
             </div>
-            <button onClick={handleSend} disabled={!text.trim()}
-              style={{ background: text.trim() ? 'var(--color-primary)' : 'var(--color-bg-soft)', color: text.trim() ? '#010906' : 'var(--color-text-muted)', border: 'none', padding: '12px 18px', borderRadius: 'var(--radius-md)', cursor: text.trim() ? 'pointer' : 'default', fontWeight: 700, fontSize: '13px', fontFamily: 'var(--font-sans)', flexShrink: 0 }}>
+            <button onClick={handleSend} disabled={!text.trim() && !pastedImage}
+              style={{ background: (text.trim() || pastedImage) ? 'var(--color-primary)' : 'var(--color-bg-soft)', color: (text.trim() || pastedImage) ? '#010906' : 'var(--color-text-muted)', border: 'none', padding: '12px 18px', borderRadius: 'var(--radius-md)', cursor: (text.trim() || pastedImage) ? 'pointer' : 'default', fontWeight: 700, fontSize: '13px', fontFamily: 'var(--font-sans)', flexShrink: 0 }}>
               Enviar
             </button>
           </div>

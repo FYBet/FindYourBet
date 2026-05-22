@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
 import { insertNotification } from '../notifications/useNotifications'
 import ForwardModal from '../social/ForwardModal'
+import { useProfileNav } from '../../../contexts/ProfileNavContext'
 
 function timeAgo(ts) {
   if (!ts) return ''
@@ -16,30 +17,50 @@ function timeAgo(ts) {
   return new Date(ts).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })
 }
 
+function fmtTime(ts) {
+  if (!ts) return ''
+  return new Date(ts).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+}
+
 const STATUS_CFG = {
   won:     { label: 'Ganada',    color: 'var(--color-primary)',    bg: 'var(--color-primary-light)',  border: 'var(--color-primary-border)' },
   lost:    { label: 'Perdida',   color: 'var(--color-error)',      bg: 'var(--color-error-light)',    border: 'var(--color-error-border)' },
   pending: { label: 'Pendiente', color: 'var(--color-text-muted)', bg: 'var(--color-bg-soft)',        border: 'var(--color-border)' },
 }
 
-function CommentItem({ comment, likeInfo, onLike, onReply, isReply, reported, onReport }) {
+function CommentItem({ comment, likeInfo, onLike, onReply, isReply, reported, onReport,
+                       isOwnComment, isPostCreator, isPinned, onPin, onDelete }) {
+  const openProfile = useProfileNav()
   const likeCount = likeInfo?.count || 0
   const hasLiked = likeInfo?.hasLiked || false
+  const creatorLiked = likeInfo?.creatorLiked || false
   const avatarSize = isReply ? '24px' : '32px'
+  const canDelete = isOwnComment || isPostCreator
+  const canPin = isPostCreator && !isReply
+
   return (
     <div style={{ display: 'flex', gap: '9px' }}>
-      <div style={{ width: avatarSize, height: avatarSize, borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isReply ? '9px' : '12px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden' }}>
+      <div onClick={() => openProfile(comment.user_id)} style={{ width: avatarSize, height: avatarSize, borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isReply ? '9px' : '12px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden', cursor: 'pointer' }}>
         {comment.profile?.avatar_url
           ? <img src={comment.profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : (comment.profile?.username || '?')[0].toUpperCase()}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '2px' }}>
-          <span style={{ fontSize: isReply ? '12px' : '13px', fontWeight: 700 }}>{comment.profile?.username || 'usuario'}</span>
-          <span style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>{timeAgo(comment.created_at)}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '2px', flexWrap: 'wrap' }}>
+          <span onClick={() => openProfile(comment.user_id)} style={{ fontSize: isReply ? '12px' : '13px', fontWeight: 700, cursor: 'pointer' }}>
+            {comment.profile?.username || 'usuario'}
+          </span>
+          <span style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>
+            {timeAgo(comment.created_at)} · {fmtTime(comment.created_at)}
+          </span>
+          {creatorLiked && !isReply && (
+            <span style={{ fontSize: '10px', background: 'var(--color-primary-light)', color: 'var(--color-primary)', border: '0.5px solid var(--color-primary-border)', borderRadius: 'var(--radius-full)', padding: '1px 7px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '2px', lineHeight: 1.4 }}>
+              ❤️ Creador
+            </span>
+          )}
         </div>
         <div style={{ fontSize: isReply ? '12px' : '13px', lineHeight: 1.5, color: 'var(--color-text)', marginBottom: '5px' }}>{comment.content}</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '2px', flexWrap: 'wrap' }}>
           <motion.button whileTap={{ scale: 0.85 }} onClick={onLike}
             style={{ display: 'flex', alignItems: 'center', gap: '3px', padding: '2px 6px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '11px', color: hasLiked ? 'var(--color-primary)' : 'var(--color-text-muted)', fontFamily: 'var(--font-sans)', fontWeight: hasLiked ? 700 : 400, borderRadius: 'var(--radius-sm)' }}>
             <span>{hasLiked ? '❤️' : '🤍'}</span>
@@ -49,6 +70,18 @@ function CommentItem({ comment, likeInfo, onLike, onReply, isReply, reported, on
             <button onClick={onReply}
               style={{ padding: '2px 6px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '11px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-sans)', borderRadius: 'var(--radius-sm)' }}>
               ↩ Responder
+            </button>
+          )}
+          {canPin && onPin && (
+            <button onClick={onPin}
+              style={{ padding: '2px 6px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '11px', color: isPinned ? 'var(--color-primary)' : 'var(--color-text-muted)', fontFamily: 'var(--font-sans)', borderRadius: 'var(--radius-sm)' }}>
+              {isPinned ? '📌 Desfij.' : '📌'}
+            </button>
+          )}
+          {canDelete && onDelete && (
+            <button onClick={onDelete}
+              style={{ padding: '2px 6px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '11px', color: 'var(--color-error)', fontFamily: 'var(--font-sans)', borderRadius: 'var(--radius-sm)', opacity: 0.65 }}>
+              🗑
             </button>
           )}
           <button onClick={onReport}
@@ -121,11 +154,14 @@ async function fetchPostData(messageId, currentUserId) {
       commentLikesData = cl || []
     } catch { /* taula comment_likes pot no existir encara */ }
   }
+
+  const postCreatorId = msg.user_id
   const commentLikesMap = {}
   for (const cl of commentLikesData) {
-    if (!commentLikesMap[cl.comment_id]) commentLikesMap[cl.comment_id] = { count: 0, hasLiked: false }
+    if (!commentLikesMap[cl.comment_id]) commentLikesMap[cl.comment_id] = { count: 0, hasLiked: false, creatorLiked: false }
     commentLikesMap[cl.comment_id].count++
     if (cl.user_id === currentUserId) commentLikesMap[cl.comment_id].hasLiked = true
+    if (cl.user_id === postCreatorId) commentLikesMap[cl.comment_id].creatorLiked = true
   }
 
   const liveStatus = betRow?.status ?? bet.status
@@ -146,10 +182,13 @@ async function fetchPostData(messageId, currentUserId) {
     restricted,
     wasPrivate,
     channelDeleted: !!channel?.deleted_at,
+    pinnedCommentId: msg.pinned_comment_id || null,
+    postCreatorId,
   }
 }
 
 export default function PostModal({ messageId: initialMessageId, betId, currentUser, onClose }) {
+  const openProfile = useProfileNav()
   const [resolvedMessageId, setResolvedMessageId] = useState(initialMessageId || null)
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -158,12 +197,13 @@ export default function PostModal({ messageId: initialMessageId, betId, currentU
   const [commentText, setCommentText] = useState('')
   const [comments, setComments] = useState([])
   const [commentLikesMap, setCommentLikesMap] = useState({})
-  const [replyingTo, setReplyingTo] = useState(null) // { id, username }
+  const [replyingTo, setReplyingTo] = useState(null)
   const [replyText, setReplyText] = useState('')
   const [reportedComments, setReportedComments] = useState(new Set())
   const [showMenu, setShowMenu] = useState(false)
   const [showForward, setShowForward] = useState(false)
   const [reported, setReported] = useState(false)
+  const [pinnedCommentId, setPinnedCommentId] = useState(null)
   const commentsEndRef = useRef(null)
 
   const messageId = resolvedMessageId
@@ -186,6 +226,7 @@ export default function PostModal({ messageId: initialMessageId, betId, currentU
           setLikeCount(d.likeCount)
           setComments(d.comments)
           setCommentLikesMap(d.commentLikesMap || {})
+          setPinnedCommentId(d.pinnedCommentId)
           setLoading(false)
           return
         }
@@ -218,6 +259,8 @@ export default function PostModal({ messageId: initialMessageId, betId, currentU
             restricted, wasPrivate,
             channelDeleted: !betRow.channel || !!betRow.channel?.deleted_at,
             noMessage: true,
+            postCreatorId: betRow.user_id,
+            pinnedCommentId: null,
           })
         }
       }
@@ -252,14 +295,25 @@ export default function PostModal({ messageId: initialMessageId, betId, currentU
     setComments(prev => [...prev, newComment])
     setTimeout(() => commentsEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
     if (!messageId) return
-    await supabase.from('post_comments').insert({ message_id: messageId, user_id: currentUser.id, content: text, created_at: new Date().toISOString() })
+    const { data: inserted } = await supabase.from('post_comments').insert({ message_id: messageId, user_id: currentUser.id, content: text, created_at: new Date().toISOString() }).select('id').single()
+    if (inserted?.id) setComments(prev => prev.map(c => c.id === newComment.id ? { ...c, id: inserted.id } : c))
     await insertNotification({ userId: data.message.user_id, type: 'comment', fromUserId: currentUser.id, fromUsername: currentUser.username || currentUser.name || 'alguien', messageId, preview: text.slice(0, 60) })
   }
 
   const handleCommentLike = async (commentId) => {
-    const current = commentLikesMap[commentId] || { count: 0, hasLiked: false }
+    if (commentId.startsWith('tmp-')) return
+    const current = commentLikesMap[commentId] || { count: 0, hasLiked: false, creatorLiked: false }
     const nowLiked = !current.hasLiked
-    setCommentLikesMap(prev => ({ ...prev, [commentId]: { count: current.count + (nowLiked ? 1 : -1), hasLiked: nowLiked } }))
+    const isCreator = currentUser?.id === data?.postCreatorId
+    setCommentLikesMap(prev => ({
+      ...prev,
+      [commentId]: {
+        ...current,
+        count: current.count + (nowLiked ? 1 : -1),
+        hasLiked: nowLiked,
+        creatorLiked: isCreator ? nowLiked : current.creatorLiked,
+      }
+    }))
     try {
       if (nowLiked) {
         await supabase.from('comment_likes').insert({ comment_id: commentId, user_id: currentUser.id })
@@ -267,7 +321,6 @@ export default function PostModal({ messageId: initialMessageId, betId, currentU
         await supabase.from('comment_likes').delete().eq('comment_id', commentId).eq('user_id', currentUser.id)
       }
     } catch {
-      // revert si la taula no existeix
       setCommentLikesMap(prev => ({ ...prev, [commentId]: current }))
     }
   }
@@ -287,6 +340,24 @@ export default function PostModal({ messageId: initialMessageId, betId, currentU
     await supabase.from('post_comments').insert({ message_id: messageId, user_id: currentUser.id, content: text, parent_id: parentId, created_at: new Date().toISOString() })
   }
 
+  const handleDeleteComment = async (commentId) => {
+    if (commentId.startsWith('tmp-')) { setComments(prev => prev.filter(c => c.id !== commentId)); return }
+    setComments(prev => prev.filter(c => c.id !== commentId && c.parent_id !== commentId))
+    if (pinnedCommentId === commentId) {
+      setPinnedCommentId(null)
+      if (messageId) await supabase.from('channel_messages').update({ pinned_comment_id: null }).eq('id', messageId)
+    }
+    try { await supabase.from('post_comments').delete().eq('id', commentId) } catch {}
+  }
+
+  const handlePinComment = async (commentId) => {
+    const newPinned = pinnedCommentId === commentId ? null : commentId
+    setPinnedCommentId(newPinned)
+    if (messageId) {
+      try { await supabase.from('channel_messages').update({ pinned_comment_id: newPinned }).eq('id', messageId) } catch {}
+    }
+  }
+
   const forwardContent = data
     ? `[BET]:${JSON.stringify({ id: data.bet?.id, event: data.bet?.event, pick: data.bet?.pick, odds: data.bet?.odds, stake: data.bet?.stake, sport: data.bet?.sport, market: data.bet?.market, date: data.bet?.date, status: data.bet?.status })}`
     : ''
@@ -294,6 +365,8 @@ export default function PostModal({ messageId: initialMessageId, betId, currentU
   const cfg = STATUS_CFG[data?.bet?.status] ?? STATUS_CFG.pending
   const topLevelComments = comments.filter(c => !c.parent_id)
   const getReplies = (commentId) => comments.filter(c => c.parent_id === commentId)
+  const isPostCreator = data?.postCreatorId === currentUser?.id
+  const pinnedComment = pinnedCommentId ? comments.find(c => c.id === pinnedCommentId) : null
 
   return (
     <>
@@ -316,15 +389,15 @@ export default function PostModal({ messageId: initialMessageId, betId, currentU
             <>
               {/* HEADER */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '14px 16px', borderBottom: '0.5px solid var(--color-border)', flexShrink: 0 }}>
-                <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden' }}>
+                <div onClick={() => openProfile(data.message.user_id)} style={{ width: '38px', height: '38px', borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden', cursor: 'pointer' }}>
                   {data.posterProfile?.avatar_url
                     ? <img src={data.posterProfile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     : (data.posterProfile?.username || '?')[0].toUpperCase()}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: '14px' }}>{data.posterProfile?.username || 'usuario'}</div>
+                  <div onClick={() => openProfile(data.message.user_id)} style={{ fontWeight: 700, fontSize: '14px', cursor: 'pointer', display: 'inline-block' }}>{data.posterProfile?.username || 'usuario'}</div>
                   <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <span>{timeAgo(data.message.created_at)}</span>
+                    <span>{timeAgo(data.message.created_at)} · {fmtTime(data.message.created_at)}</span>
                     {data.channel && (
                       <>
                         <span>·</span>
@@ -392,15 +465,20 @@ export default function PostModal({ messageId: initialMessageId, betId, currentU
                           <div style={{ fontWeight: 700, fontSize: '15px', lineHeight: 1.3, flex: 1 }}>{data.bet.event}</div>
                           <span style={{ flexShrink: 0, padding: '3px 10px', borderRadius: 'var(--radius-full)', fontSize: '11px', fontWeight: 700, background: cfg.bg, color: cfg.color, border: `0.5px solid ${cfg.border}` }}>{cfg.label}</span>
                         </div>
-                        <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginBottom: '12px' }}>
-                          {[data.bet.sport, data.bet.market].filter(Boolean).map((t, i) => (
-                            <span key={i} style={{ padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', fontSize: '10px', color: 'var(--color-text-muted)', fontWeight: 500 }}>{t}</span>
-                          ))}
-                          {data.bet.pick && (
-                            <span style={{ padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--color-primary-light)', border: '0.5px solid var(--color-primary-border)', fontSize: '10px', color: 'var(--color-primary)', fontWeight: 700 }}>{data.bet.pick}</span>
-                          )}
-                        </div>
-                        <div style={{ display: 'flex', gap: '24px' }}>
+                        {data.bet.imageUrl && (
+                          <img src={data.bet.imageUrl} alt="Pick" style={{ display: 'block', width: '100%', maxHeight: '260px', objectFit: 'cover', borderRadius: 'var(--radius-md)', marginBottom: '12px' }} />
+                        )}
+                        {!data.bet.imageUrl && (
+                          <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                            {[data.bet.sport, data.bet.market].filter(Boolean).map((t, i) => (
+                              <span key={i} style={{ padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', fontSize: '10px', color: 'var(--color-text-muted)', fontWeight: 500 }}>{t}</span>
+                            ))}
+                            {data.bet.pick && data.bet.pick !== '-' && (
+                              <span style={{ padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--color-primary-light)', border: '0.5px solid var(--color-primary-border)', fontSize: '10px', color: 'var(--color-primary)', fontWeight: 700 }}>{data.bet.pick}</span>
+                            )}
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
                           <div>
                             <div style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '2px' }}>Cuota</div>
                             <div style={{ fontWeight: 700, fontSize: '16px' }}>{parseFloat(data.bet.odds || 0).toFixed(2)}</div>
@@ -409,12 +487,20 @@ export default function PostModal({ messageId: initialMessageId, betId, currentU
                             <div style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '2px' }}>Stake</div>
                             <div style={{ fontWeight: 700, fontSize: '16px' }}>{data.bet.stake}</div>
                           </div>
-                          <div>
-                            <div style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '2px' }}>Fecha</div>
-                            <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-                              {data.bet.date ? new Date(data.bet.date).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                          {!data.bet.imageUrl && (
+                            <div>
+                              <div style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '2px' }}>Fecha</div>
+                              <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                                {data.bet.date ? new Date(data.bet.date).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                              </div>
                             </div>
-                          </div>
+                          )}
+                          {data.bet.bookie && (
+                            <div>
+                              <div style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '2px' }}>Bookie</div>
+                              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text)', marginTop: '2px' }}>{data.bet.bookie}</div>
+                            </div>
+                          )}
                         </div>
                       </>
                     )}
@@ -446,64 +532,98 @@ export default function PostModal({ messageId: initialMessageId, betId, currentU
                     <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '12px', padding: '12px 0', fontStyle: 'italic' }}>
                       Los comentarios solo son visibles para miembros del canal.
                     </div>
-                  ) : topLevelComments.length === 0 ? (
-                    <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '13px', padding: '12px 0' }}>
-                      Sin comentarios. ¡Sé el primero!
-                    </div>
-                  ) : topLevelComments.map((c, i) => {
-                    const replies = getReplies(c.id)
-                    const isReplyingToThis = replyingTo?.id === c.id
-                    return (
-                      <div key={c.id || i} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        <CommentItem
-                          comment={c}
-                          likeInfo={commentLikesMap[c.id]}
-                          onLike={() => handleCommentLike(c.id)}
-                          onReply={() => setReplyingTo(isReplyingToThis ? null : { id: c.id, username: c.profile?.username })}
-                          reported={reportedComments.has(c.id)}
-                          onReport={() => setReportedComments(prev => new Set([...prev, c.id]))}
-                        />
+                  ) : (
+                    <>
+                      {/* COMENTARI FIXAT */}
+                      {pinnedComment && (
+                        <div style={{ background: 'var(--color-primary-light)', border: '0.5px solid var(--color-primary-border)', borderRadius: 'var(--radius-md)', padding: '10px 12px' }}>
+                          <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-primary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            📌 Comentario fijado
+                          </div>
+                          <CommentItem
+                            comment={pinnedComment}
+                            likeInfo={commentLikesMap[pinnedComment.id]}
+                            onLike={() => handleCommentLike(pinnedComment.id)}
+                            isOwnComment={pinnedComment.user_id === currentUser?.id}
+                            isPostCreator={isPostCreator}
+                            isPinned
+                            onPin={() => handlePinComment(pinnedComment.id)}
+                            onDelete={() => handleDeleteComment(pinnedComment.id)}
+                            reported={reportedComments.has(pinnedComment.id)}
+                            onReport={() => setReportedComments(prev => new Set([...prev, pinnedComment.id]))}
+                          />
+                        </div>
+                      )}
 
-                        {/* Respostes */}
-                        {(replies.length > 0 || isReplyingToThis) && (
-                          <div style={{ paddingLeft: '18px', borderLeft: '1.5px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            {replies.map((reply, j) => (
-                              <CommentItem
-                                key={reply.id || j}
-                                comment={reply}
-                                likeInfo={commentLikesMap[reply.id]}
-                                onLike={() => handleCommentLike(reply.id)}
-                                isReply
-                                reported={reportedComments.has(reply.id)}
-                                onReport={() => setReportedComments(prev => new Set([...prev, reply.id]))}
-                              />
-                            ))}
+                      {topLevelComments.length === 0 && !pinnedComment ? (
+                        <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '13px', padding: '12px 0' }}>
+                          Sin comentarios. ¡Sé el primero!
+                        </div>
+                      ) : topLevelComments.map((c, i) => {
+                        const replies = getReplies(c.id)
+                        const isReplyingToThis = replyingTo?.id === c.id
+                        const isAlreadyPinned = c.id === pinnedCommentId
+                        return (
+                          <div key={c.id || i} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <CommentItem
+                              comment={c}
+                              likeInfo={commentLikesMap[c.id]}
+                              onLike={() => handleCommentLike(c.id)}
+                              onReply={() => setReplyingTo(isReplyingToThis ? null : { id: c.id, username: c.profile?.username })}
+                              reported={reportedComments.has(c.id)}
+                              onReport={() => setReportedComments(prev => new Set([...prev, c.id]))}
+                              isOwnComment={c.user_id === currentUser?.id}
+                              isPostCreator={isPostCreator}
+                              isPinned={isAlreadyPinned}
+                              onPin={() => handlePinComment(c.id)}
+                              onDelete={() => handleDeleteComment(c.id)}
+                            />
 
-                            {/* Input resposta */}
-                            {isReplyingToThis && (
-                              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                                <input
-                                  autoFocus
-                                  value={replyText}
-                                  onChange={e => setReplyText(e.target.value)}
-                                  onKeyDown={e => {
-                                    if (e.key === 'Enter') handleReply(c.id)
-                                    if (e.key === 'Escape') { setReplyingTo(null); setReplyText('') }
-                                  }}
-                                  placeholder={`Responder a ${replyingTo.username || 'usuario'}...`}
-                                  style={{ flex: 1, background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '12px', padding: '7px 10px', borderRadius: 'var(--radius-md)', outline: 'none' }}
-                                />
-                                <button onClick={() => handleReply(c.id)} disabled={!replyText.trim()}
-                                  style={{ background: replyText.trim() ? 'var(--color-primary)' : 'var(--color-bg-soft)', color: replyText.trim() ? '#010906' : 'var(--color-text-muted)', border: 'none', padding: '7px 12px', borderRadius: 'var(--radius-md)', cursor: replyText.trim() ? 'pointer' : 'default', fontWeight: 700, fontSize: '13px', fontFamily: 'var(--font-sans)', flexShrink: 0, transition: 'all 0.15s' }}>
-                                  ↩
-                                </button>
+                            {/* Respostes */}
+                            {(replies.length > 0 || isReplyingToThis) && (
+                              <div style={{ paddingLeft: '18px', borderLeft: '1.5px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                {replies.map((reply, j) => (
+                                  <CommentItem
+                                    key={reply.id || j}
+                                    comment={reply}
+                                    likeInfo={commentLikesMap[reply.id]}
+                                    onLike={() => handleCommentLike(reply.id)}
+                                    isReply
+                                    reported={reportedComments.has(reply.id)}
+                                    onReport={() => setReportedComments(prev => new Set([...prev, reply.id]))}
+                                    isOwnComment={reply.user_id === currentUser?.id}
+                                    isPostCreator={isPostCreator}
+                                    onDelete={() => handleDeleteComment(reply.id)}
+                                  />
+                                ))}
+
+                                {/* Input resposta */}
+                                {isReplyingToThis && (
+                                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                    <input
+                                      autoFocus
+                                      value={replyText}
+                                      onChange={e => setReplyText(e.target.value)}
+                                      onKeyDown={e => {
+                                        if (e.key === 'Enter') handleReply(c.id)
+                                        if (e.key === 'Escape') { setReplyingTo(null); setReplyText('') }
+                                      }}
+                                      placeholder={`Responder a ${replyingTo.username || 'usuario'}...`}
+                                      style={{ flex: 1, background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '12px', padding: '7px 10px', borderRadius: 'var(--radius-md)', outline: 'none' }}
+                                    />
+                                    <button onClick={() => handleReply(c.id)} disabled={!replyText.trim()}
+                                      style={{ background: replyText.trim() ? 'var(--color-primary)' : 'var(--color-bg-soft)', color: replyText.trim() ? '#010906' : 'var(--color-text-muted)', border: 'none', padding: '7px 12px', borderRadius: 'var(--radius-md)', cursor: replyText.trim() ? 'pointer' : 'default', fontWeight: 700, fontSize: '13px', fontFamily: 'var(--font-sans)', flexShrink: 0, transition: 'all 0.15s' }}>
+                                      ↩
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
-                        )}
-                      </div>
-                    )
-                  })}
+                        )
+                      })}
+                    </>
+                  )}
                   <div ref={commentsEndRef} />
                 </div>
               </div>

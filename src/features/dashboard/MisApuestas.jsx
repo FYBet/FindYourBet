@@ -304,68 +304,12 @@ function StatsPanel({ allBets }) {
   )
 }
 
-// ── Modal d'edició ────────────────────────────────────────────────────────────
-
-const inputSt = { width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '13px', padding: '9px 12px', borderRadius: 'var(--radius-md)', outline: 'none', boxSizing: 'border-box' }
-const selectSt = { ...inputSt, cursor: 'pointer' }
-const labelSt = { fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '6px', display: 'block' }
-
-function EditBetModal({ bet, onSave, onClose }) {
-  const [form, setForm] = useState({ event: bet.event || '', pick: bet.pick || '', odds: bet.odds || '', stake: bet.stake || 5, sport: bet.sport || 'Fútbol', market: bet.market || '1X2', date: bet.date ? bet.date.slice(0, 16) : '', analysis: bet.analysis || '' })
-  const [saving, setSaving] = useState(false)
-  const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
-
-  const handleSave = async () => {
-    if (!form.event || !form.pick || !form.odds || !form.date) return
-    setSaving(true)
-    await onSave(bet.id, { ...form, odds: parseFloat(form.odds), stake: Number(form.stake) })
-    setSaving(false)
-    onClose()
-  }
-
-  return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
-      onClick={onClose}>
-      <motion.div initial={{ opacity: 0, y: 24, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 24, scale: 0.96 }}
-        onClick={e => e.stopPropagation()}
-        style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '24px', width: '100%', maxWidth: '480px', maxHeight: '90vh', overflowY: 'auto', boxSizing: 'border-box' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <div style={{ fontWeight: 700, fontSize: '16px' }}>Editar apuesta</div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', color: 'var(--color-text-muted)' }}>×</button>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div><label style={labelSt}>Evento *</label><input style={inputSt} value={form.event} onChange={e => set('event', e.target.value)} placeholder="ej. Real Madrid vs Barcelona" /></div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-            <div><label style={labelSt}>Pick *</label><input style={inputSt} value={form.pick} onChange={e => set('pick', e.target.value)} /></div>
-            <div><label style={labelSt}>Cuota *</label><input style={inputSt} type="number" step="0.01" min="1" value={form.odds} onChange={e => set('odds', e.target.value)} /></div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-            <div><label style={labelSt}>Sport</label><select style={selectSt} value={form.sport} onChange={e => set('sport', e.target.value)}>{SPORTS.map(s => <option key={s}>{s}</option>)}</select></div>
-            <div><label style={labelSt}>Mercado</label><select style={selectSt} value={form.market} onChange={e => set('market', e.target.value)}>{MARKETS.map(m => <option key={m}>{m}</option>)}</select></div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-            <div><label style={labelSt}>Stake</label><input style={inputSt} type="number" min="1" max="10" value={form.stake} onChange={e => set('stake', e.target.value)} /></div>
-            <div><label style={labelSt}>Fecha y hora *</label><input style={inputSt} type="datetime-local" value={form.date} onChange={e => set('date', e.target.value)} /></div>
-          </div>
-          <div><label style={labelSt}>Análisis (opcional)</label><textarea style={{ ...inputSt, resize: 'vertical', minHeight: '70px' }} value={form.analysis} onChange={e => set('analysis', e.target.value)} /></div>
-        </div>
-        <div style={{ display: 'flex', gap: '8px', marginTop: '20px' }}>
-          <Button onClick={handleSave} disabled={saving || !form.event || !form.pick || !form.odds || !form.date}>{saving ? 'Guardando...' : '✓ Guardar cambios'}</Button>
-          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-        </div>
-      </motion.div>
-    </motion.div>
-  )
-}
-
 // ── Carta d'aposta ────────────────────────────────────────────────────────────
 
-function BetCard({ b, onResolveBet, onDeleteBet, onEditBet, onViewPost }) {
+function BetCard({ b, onResolveBet, onViewPost }) {
   const started = hasMatchStarted(b)
   const cfg = STATUS_CONFIG[b.status] ?? STATUS_CONFIG.pending
   const isLive = b.status === 'pending' && started
-  const canEdit = b.status === 'pending' && !started
 
   const dateStr = new Date(b.date).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
@@ -405,12 +349,6 @@ function BetCard({ b, onResolveBet, onDeleteBet, onEditBet, onViewPost }) {
 
         {/* Botons */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', marginTop: 'auto' }}>
-          {canEdit && (
-            <div style={{ display: 'flex', gap: '5px' }}>
-              <motion.button whileTap={{ scale: 0.95 }} onClick={(e) => { e.stopPropagation(); onEditBet(b) }} style={{ flex: 1, background: 'var(--color-bg-soft)', color: 'var(--color-text)', border: '0.5px solid var(--color-border)', padding: '6px 0', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: '11px', fontWeight: 600, fontFamily: 'var(--font-sans)' }}>✏️ Editar</motion.button>
-              <motion.button whileTap={{ scale: 0.95 }} onClick={(e) => { e.stopPropagation(); onDeleteBet(b.id) }} style={{ flex: 1, background: 'var(--color-error-light)', color: 'var(--color-error)', border: '0.5px solid var(--color-error-border)', padding: '6px 0', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: '11px', fontWeight: 600, fontFamily: 'var(--font-sans)' }}>🗑 Borrar</motion.button>
-            </div>
-          )}
           {b.status === 'pending' && started && (
             <div style={{ display: 'flex', gap: '5px' }}>
               <motion.button whileTap={{ scale: 0.95 }} onClick={(e) => { e.stopPropagation(); onResolveBet(b.id, 'won') }} style={{ flex: 1, background: 'var(--color-primary)', color: '#010906', border: 'none', padding: '7px 0', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontSize: '12px', fontWeight: 700, fontFamily: 'var(--font-sans)' }}>✓ Win</motion.button>
@@ -426,10 +364,9 @@ function BetCard({ b, onResolveBet, onDeleteBet, onEditBet, onViewPost }) {
 
 // ── Component principal ───────────────────────────────────────────────────────
 
-export default function MisApuestas({ bets: allBets, loadingBets, onNewBet, onResolveBet, onDeleteBet, onUpdateBet, user }) {
+export default function MisApuestas({ bets: allBets, loadingBets, onNewBet, onResolveBet, user }) {
   const [period, setPeriod] = useState('trimestral')
   const [offset, setOffset] = useState(0)
-  const [editingBet, setEditingBet] = useState(null)
   const [postModalBetId, setPostModalBetId] = useState(null)
 
   const handlePeriodChange = (p) => { setPeriod(p); setOffset(0) }
@@ -457,7 +394,7 @@ export default function MisApuestas({ bets: allBets, loadingBets, onNewBet, onRe
         <div>
           <div style={{ marginBottom: '16px' }}>
             <h2 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '2px' }}>Historial de Apuestas</h2>
-            <p style={{ color: 'var(--color-text-muted)', fontSize: '12px' }}>Una vez empieza el partido, no se pueden modificar.</p>
+            <p style={{ color: 'var(--color-text-muted)', fontSize: '12px' }}>Los picks son permanentes una vez publicados.</p>
           </div>
 
           {/* KPI strip */}
@@ -522,7 +459,7 @@ export default function MisApuestas({ bets: allBets, loadingBets, onNewBet, onRe
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <AnimatePresence>
                 {bets.map(b => (
-                  <BetCard key={b.id} b={b} onResolveBet={onResolveBet} onDeleteBet={onDeleteBet} onEditBet={setEditingBet} onViewPost={setPostModalBetId} />
+                  <BetCard key={b.id} b={b} onResolveBet={onResolveBet} onViewPost={setPostModalBetId} />
                 ))}
               </AnimatePresence>
             </div>
@@ -532,12 +469,6 @@ export default function MisApuestas({ bets: allBets, loadingBets, onNewBet, onRe
         {/* Columna dreta: stats */}
         <StatsPanel allBets={allBets} />
       </div>
-
-      <AnimatePresence>
-        {editingBet && (
-          <EditBetModal bet={editingBet} onSave={onUpdateBet} onClose={() => setEditingBet(null)} />
-        )}
-      </AnimatePresence>
 
       <AnimatePresence>
         {postModalBetId && user && (

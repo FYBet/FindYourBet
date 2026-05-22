@@ -29,11 +29,12 @@ function notifText(n) {
 }
 
 function Avatar({ profile, size = 36 }) {
+  const [imgError, setImgError] = useState(false)
   const initial = (profile?.username || '?')[0].toUpperCase()
   return (
     <div style={{ width: size, height: size, borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden' }}>
-      {profile?.avatar_url
-        ? <img src={profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      {profile?.avatar_url && !imgError
+        ? <img src={profile.avatar_url} alt="" onError={() => setImgError(true)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         : initial}
     </div>
   )

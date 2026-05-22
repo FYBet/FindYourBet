@@ -21,6 +21,7 @@ import { useNotifications } from './notifications/useNotifications'
 import NotificationsPanel from './notifications/NotificationsPanel'
 import Configuracion from './Configuracion'
 import Faqs from './Faqs'
+import { ProfileNavContext } from '../../contexts/ProfileNavContext'
 import './dashboard.css'
 
 const SHORTCUT_OPTIONS = [
@@ -228,7 +229,7 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
   const navigate = useNavigate()
   const {
     bets, allBets, loadingBets, showModal, setShowModal,
-    form, setForm, submitBet, resolveBet, deleteBet, updateBet,
+    form, setForm, submitBet, resolveBet,
     won, lost, yieldVal, avgOdds,
     period, setPeriod
   } = useBets(user)
@@ -266,6 +267,7 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
   }
 
   return (
+    <ProfileNavContext.Provider value={setNotifProfileUserId}>
     <>
     <div className="dashboard">
       <BetModal
@@ -413,7 +415,6 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
               <Historial
                 bets={allBets} loadingBets={loadingBets}
                 onNewBet={() => setShowModal(true)} onResolveBet={resolveBet}
-                onDeleteBet={deleteBet} onUpdateBet={updateBet}
                 user={user}
               />
             </div>
@@ -509,5 +510,6 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
       )}
     </AnimatePresence>
     </>
+    </ProfileNavContext.Provider>
   )
 }

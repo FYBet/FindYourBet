@@ -84,6 +84,25 @@
 }
 .input::placeholder { color: var(--color-text-muted); }
 
+/* ── Select ── */
+select.input {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7' viewBox='0 0 12 7'%3E%3Cpath d='M1 1l5 5 5-5' stroke='rgba(224%2C245%2C235%2C0.4)' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-color: rgba(0, 255, 135, 0.03);
+  padding-right: 36px;
+  cursor: pointer;
+}
+select.input:focus {
+  background-color: rgba(0, 255, 135, 0.05);
+}
+select.input option {
+  background-color: #041410;
+  color: #e0f5eb;
+}
+
 /* ── FormLabel ── */
 .form-label {
   display: block;

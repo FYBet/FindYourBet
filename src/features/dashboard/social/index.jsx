@@ -174,13 +174,13 @@ export default function Social({ user, initialDMUserId }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {pending.map(c => (
               <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px', background: 'var(--color-bg)', border: '0.5px solid var(--color-primary-border)', borderRadius: 'var(--radius-lg)' }}>
-                <div style={{ width: '40px', height: '40px', background: 'var(--color-primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden' }}>
+                <div onClick={() => handleOpenProfile(c.otherId)} style={{ width: '40px', height: '40px', background: 'var(--color-primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden', cursor: 'pointer' }}>
                   {c.otherAvatarUrl
                     ? <img src={c.otherAvatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     : (c.otherUsername || '?')[0].toUpperCase()}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: '14px' }}>{c.otherUsername}</div>
+                  <div onClick={() => handleOpenProfile(c.otherId)} style={{ fontWeight: 600, fontSize: '14px', cursor: 'pointer', display: 'inline-block' }}>{c.otherUsername}</div>
                   <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>quiere enviarte un mensaje</div>
                 </div>
                 <div style={{ display: 'flex', gap: '6px' }}>

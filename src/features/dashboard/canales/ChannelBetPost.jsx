@@ -9,7 +9,7 @@ const STATUS_CFG = {
   pending: { label: 'Pendiente', color: 'var(--color-text-muted)', bg: 'var(--color-bg-soft)',        border: 'var(--color-border)' },
 }
 
-export default function ChannelBetPost({ messageId, bet, liveStatus, currentUser, onOpenPost, timeStr }) {
+export default function ChannelBetPost({ messageId, bet, liveStatus, currentUser, onOpenPost, timeStr, viewCount = 0 }) {
   const [likeCount, setLikeCount] = useState(0)
   const [hasLiked, setHasLiked] = useState(false)
   const [commentCount, setCommentCount] = useState(0)
@@ -42,10 +42,13 @@ export default function ChannelBetPost({ messageId, bet, liveStatus, currentUser
     }
   }
 
+  const isPhoto = !!bet.imageUrl
+
   const forwardContent = `[BET]:${JSON.stringify({
     id: bet.id, event: bet.event, pick: bet.pick,
     odds: bet.odds, stake: bet.stake, sport: bet.sport,
     market: bet.market, date: bet.date, status: bet.status,
+    bookie: bet.bookie || null, imageUrl: bet.imageUrl || null,
   })}`
 
   return (
@@ -63,6 +66,15 @@ export default function ChannelBetPost({ messageId, bet, liveStatus, currentUser
           overflow: 'hidden',
         }}
       >
+        {/* Foto del ticket — visible directament al chat */}
+        {isPhoto && (
+          <img
+            src={bet.imageUrl}
+            alt="ticket"
+            style={{ display: 'block', width: '100%', maxHeight: '200px', objectFit: 'cover' }}
+          />
+        )}
+
         {/* BET INFO */}
         <div style={{ padding: '12px 14px 10px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
@@ -72,29 +84,43 @@ export default function ChannelBetPost({ messageId, bet, liveStatus, currentUser
             </span>
           </div>
 
-          <div style={{ fontWeight: 700, fontSize: '13px', lineHeight: 1.3, marginBottom: '6px' }}>{bet.event}</div>
-
-          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '10px' }}>
-            {[bet.sport, bet.market].filter(Boolean).map((t, i) => (
-              <span key={i} style={{ padding: '1px 6px', borderRadius: 'var(--radius-sm)', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', fontSize: '10px', color: 'var(--color-text-muted)', fontWeight: 500 }}>{t}</span>
-            ))}
-            {bet.pick && (
-              <span style={{ padding: '1px 6px', borderRadius: 'var(--radius-sm)', background: 'var(--color-primary-light)', border: '0.5px solid var(--color-primary-border)', fontSize: '10px', color: 'var(--color-primary)', fontWeight: 700 }}>{bet.pick}</span>
-            )}
-          </div>
-
-          <div style={{ display: 'flex', gap: '16px' }}>
-            {[
-              { label: 'Cuota', value: parseFloat(bet.odds || 0).toFixed(2), big: true },
-              { label: 'Stake', value: `${bet.stake}`, big: true },
-              { label: 'Fecha', value: bet.date ? new Date(bet.date).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—', big: false },
-            ].map((s, i) => (
-              <div key={i}>
-                <div style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '1px' }}>{s.label}</div>
-                <div style={{ fontWeight: s.big ? 700 : 400, fontSize: s.big ? '14px' : '11px', color: s.big ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{s.value}</div>
+          {!isPhoto && (
+            <>
+              <div style={{ fontWeight: 700, fontSize: '13px', lineHeight: 1.3, marginBottom: '6px' }}>{bet.event}</div>
+              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                {[bet.sport, bet.market].filter(Boolean).map((t, i) => (
+                  <span key={i} style={{ padding: '1px 6px', borderRadius: 'var(--radius-sm)', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', fontSize: '10px', color: 'var(--color-text-muted)', fontWeight: 500 }}>{t}</span>
+                ))}
+                {bet.pick && bet.pick !== '-' && (
+                  <span style={{ padding: '1px 6px', borderRadius: 'var(--radius-sm)', background: 'var(--color-primary-light)', border: '0.5px solid var(--color-primary-border)', fontSize: '10px', color: 'var(--color-primary)', fontWeight: 700 }}>{bet.pick}</span>
+                )}
               </div>
-            ))}
-          </div>
+            </>
+          )}
+
+          {(() => {
+            const fmtDate = (d) => {
+              const dt = new Date(d)
+              const pad = n => String(n).padStart(2, '0')
+              return `${pad(dt.getDate())}/${pad(dt.getMonth() + 1)} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`
+            }
+            const stats = [
+              { label: 'Cuota', value: parseFloat(bet.odds || 0).toFixed(2) },
+              { label: 'Stake', value: `${bet.stake}` },
+              ...(bet.date ? [{ label: 'Fecha', value: fmtDate(bet.date) }] : []),
+              ...(bet.bookie ? [{ label: 'Bookie', value: bet.bookie }] : []),
+            ]
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${stats.length}, 1fr)` }}>
+                {stats.map((s, i) => (
+                  <div key={i} style={{ textAlign: 'center', padding: '2px 0' }}>
+                    <div style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '3px' }}>{s.label}</div>
+                    <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--color-text)' }}>{s.value}</div>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
         </div>
 
         {/* ACTION BAR */}
@@ -115,7 +141,9 @@ export default function ChannelBetPost({ messageId, bet, liveStatus, currentUser
             <span>Reenviar</span>
           </button>
           {timeStr && (
-            <span style={{ marginLeft: 'auto', fontSize: '10px', color: 'var(--color-text-muted)', opacity: 0.6, paddingRight: '4px' }}>{timeStr}</span>
+            <span style={{ marginLeft: 'auto', fontSize: '10px', color: 'var(--color-text-muted)', opacity: 0.6, paddingRight: '4px' }}>
+              {viewCount > 0 ? `👁 ${viewCount} · ` : ''}{timeStr}
+            </span>
           )}
         </div>
       </div>

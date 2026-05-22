@@ -131,7 +131,7 @@ function AppRoutes() {
           await supabase.auth.signOut()
         } else if (session?.user) {
           try { setUser(await buildUser(session.user)) } catch {
-            setUser({ id: session.user.id, name: session.user.email, email: session.user.email, avatar_url: null })
+            setUser(prev => prev ?? { id: session.user.id, name: session.user.email, email: session.user.email, avatar_url: null })
           }
         }
       } catch {
@@ -148,7 +148,18 @@ function AppRoutes() {
       // ha de re-avaluar needsOnboarding perquè pot arribar amb perfil incomplet.
       if (_event === 'INITIAL_SESSION' || _event === 'TOKEN_REFRESHED') return
       if (session?.user) {
-        try { setUser(await buildUser(session.user)) } catch { setUser({ id: session.user.id, name: session.user.email, email: session.user.email, avatar_url: null }) }
+        try {
+          const built = await buildUser(session.user)
+          // Si el perfil no s'ha pogut carregar (username null), conservem el que ja teníem
+          setUser(prev => ({
+            ...built,
+            username: built.username ?? prev?.username ?? null,
+            name: built.username ? built.name : (prev?.name ?? built.name),
+            avatar_url: built.avatar_url ?? prev?.avatar_url ?? null,
+          }))
+        } catch {
+          setUser(prev => prev ?? { id: session.user.id, name: session.user.email, email: session.user.email, avatar_url: null })
+        }
       } else {
         setUser(null)
       }

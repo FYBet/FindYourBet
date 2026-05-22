@@ -113,10 +113,12 @@ export default function ForwardModal({ content, fromChannelName, currentUser, on
               return (
                 <button key={conv.id} onClick={() => forwardToDM(conv)}
                   style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%', padding: '12px 20px', background: sent ? 'var(--color-primary-light)' : 'none', border: 'none', borderBottom: '0.5px solid var(--color-border)', cursor: sent ? 'default' : 'pointer', fontFamily: 'var(--font-sans)', textAlign: 'left', boxSizing: 'border-box', transition: 'background 0.15s' }}>
-                  <div style={{ width: '38px', height: '38px', borderRadius: '50%', overflow: 'hidden', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0 }}>
-                    {conv.profile?.avatar_url
-                      ? <img src={conv.profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      : username[0]?.toUpperCase()}
+                  <div style={{ width: '38px', height: '38px', borderRadius: '50%', overflow: 'hidden', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, position: 'relative' }}>
+                    {username[0]?.toUpperCase()}
+                    {conv.profile?.avatar_url && (
+                      <img src={conv.profile.avatar_url} alt="" onError={e => { e.currentTarget.style.display = 'none' }}
+                        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                    )}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{username}</div>
@@ -139,10 +141,12 @@ export default function ForwardModal({ content, fromChannelName, currentUser, on
               return (
                 <button key={ch.id} onClick={() => forwardToChannel(ch)}
                   style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%', padding: '12px 20px', background: sent ? 'var(--color-primary-light)' : 'none', border: 'none', borderBottom: '0.5px solid var(--color-border)', cursor: sent ? 'default' : 'pointer', fontFamily: 'var(--font-sans)', textAlign: 'left', boxSizing: 'border-box', transition: 'background 0.15s' }}>
-                  <div style={{ width: '38px', height: '38px', borderRadius: '50%', overflow: 'hidden', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0 }}>
-                    {ch.avatar_url
-                      ? <img src={ch.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      : ch.name[0]?.toUpperCase()}
+                  <div style={{ width: '38px', height: '38px', borderRadius: '50%', overflow: 'hidden', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, position: 'relative' }}>
+                    {ch.name[0]?.toUpperCase()}
+                    {ch.avatar_url && (
+                      <img src={ch.avatar_url} alt="" onError={e => { e.currentTarget.style.display = 'none' }}
+                        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                    )}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ch.name}</div>

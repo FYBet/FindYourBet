@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import ForwardModal from '../social/ForwardModal'
+import PostModal from './PostModal'
+import { useProfileNav } from '../../../contexts/ProfileNavContext'
 
 function timeAgo(ts) {
   if (!ts) return ''
@@ -20,24 +22,12 @@ const STATUS_CFG = {
   pending: { label: 'Pendiente', color: 'var(--color-text-muted)', bg: 'var(--color-bg-soft)',        border: 'var(--color-border)' },
 }
 
-function ActionBtn({ icon, label, onClick, active }) {
-  return (
-    <motion.button whileTap={{ scale: 0.88 }} onClick={onClick}
-      style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 10px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: active ? 'var(--color-primary)' : 'var(--color-text-muted)', fontFamily: 'var(--font-sans)', fontWeight: active ? 700 : 400, borderRadius: 'var(--radius-md)', transition: 'color 0.15s' }}>
-      <span style={{ fontSize: '15px', lineHeight: 1 }}>{icon}</span>
-      {label !== '' && label !== undefined && label !== null && <span>{label}</span>}
-    </motion.button>
-  )
-}
-
-export default function FeedCard({ post, currentUser, onLike, onComment, onNavigateToChannel, onReport }) {
-  const [showComments, setShowComments] = useState(false)
+export default function FeedCard({ post, currentUser, onLike, onNavigateToChannel, onReport }) {
+  const [showModal, setShowModal] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
   const [showForward, setShowForward] = useState(false)
-  const [comments, setComments] = useState(null)
-  const [commentText, setCommentText] = useState('')
-  const [loadingComments, setLoadingComments] = useState(false)
 
+  const openProfile = useProfileNav()
   const { bet, profile, channel, likeCount, commentCount, hasLiked, created_at } = post
   const cfg = STATUS_CFG[bet?.status] ?? STATUS_CFG.pending
   const initials = (profile?.username || '?')[0].toUpperCase()
@@ -45,32 +35,8 @@ export default function FeedCard({ post, currentUser, onLike, onComment, onNavig
   const forwardContent = `[BET]:${JSON.stringify({
     id: bet?.id, event: bet?.event, pick: bet?.pick,
     odds: bet?.odds, stake: bet?.stake, sport: bet?.sport,
-    market: bet?.market, date: bet?.date, status: bet?.status
+    market: bet?.market, date: bet?.date, status: bet?.status,
   })}`
-
-  const handleOpenComments = async () => {
-    setShowComments(true)
-    if (comments === null) {
-      setLoadingComments(true)
-      const data = await onComment.fetch(post.id)
-      setComments(data)
-      setLoadingComments(false)
-    }
-  }
-
-  const handleAddComment = async () => {
-    if (!commentText.trim()) return
-    const text = commentText.trim()
-    setCommentText('')
-    await onComment.add(post.id, text)
-    setComments(prev => [...(prev || []), {
-      id: `tmp-${Date.now()}`,
-      user_id: currentUser?.id,
-      content: text,
-      created_at: new Date().toISOString(),
-      profile: null,
-    }])
-  }
 
   return (
     <>
@@ -80,13 +46,19 @@ export default function FeedCard({ post, currentUser, onLike, onComment, onNavig
 
         {/* HEADER */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '14px 16px 10px' }}>
-          <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden' }}>
-            {profile?.avatar_url
-              ? <img src={profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              : initials}
+          <div onClick={() => openProfile(post.user_id)}
+            style={{ width: '38px', height: '38px', borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden', cursor: 'pointer', position: 'relative' }}>
+            {initials}
+            {profile?.avatar_url && (
+              <img src={profile.avatar_url} alt="" onError={e => { e.currentTarget.style.display = 'none' }}
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+            )}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 700, fontSize: '14px', lineHeight: 1.2 }}>{profile?.username || 'usuario'}</div>
+            <div onClick={() => openProfile(post.user_id)}
+              style={{ fontWeight: 700, fontSize: '14px', lineHeight: 1.2, cursor: 'pointer', display: 'inline-block' }}>
+              {profile?.username || 'usuario'}
+            </div>
             <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', display: 'flex', gap: '6px', alignItems: 'center' }}>
               <span>{timeAgo(created_at)}</span>
               {channel && (
@@ -120,8 +92,12 @@ export default function FeedCard({ post, currentUser, onLike, onComment, onNavig
           </div>
         </div>
 
-        {/* BET CARD */}
-        <div style={{ margin: '0 12px 10px', background: 'var(--color-bg-soft)', border: `0.5px solid ${cfg.border}`, borderRadius: 'var(--radius-md)', borderLeft: `3px solid ${cfg.color}`, overflow: 'hidden' }}>
+        {/* BET CARD — clickable to open PostModal */}
+        <div onClick={() => setShowModal(true)}
+          style={{ margin: '0 12px 10px', background: 'var(--color-bg-soft)', border: `0.5px solid ${cfg.border}`, borderRadius: 'var(--radius-md)', borderLeft: `3px solid ${cfg.color}`, overflow: 'hidden', cursor: 'pointer' }}>
+          {bet?.imageUrl && (
+            <img src={bet.imageUrl} alt="Pick" style={{ display: 'block', width: '100%', maxHeight: '220px', objectFit: 'cover' }} />
+          )}
           <div style={{ padding: '14px 16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '10px' }}>
               <div style={{ fontWeight: 700, fontSize: '14px', lineHeight: 1.3, flex: 1 }}>{bet?.event}</div>
@@ -129,14 +105,16 @@ export default function FeedCard({ post, currentUser, onLike, onComment, onNavig
                 {cfg.label}
               </span>
             </div>
-            <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginBottom: '10px' }}>
-              {[bet?.sport, bet?.market].filter(Boolean).map((t, i) => (
-                <span key={i} style={{ padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', fontSize: '10px', color: 'var(--color-text-muted)', fontWeight: 500 }}>{t}</span>
-              ))}
-              {bet?.pick && (
-                <span style={{ padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--color-primary-light)', border: '0.5px solid var(--color-primary-border)', fontSize: '10px', color: 'var(--color-primary)', fontWeight: 700 }}>{bet.pick}</span>
-              )}
-            </div>
+            {!bet?.imageUrl && (
+              <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                {[bet?.sport, bet?.market].filter(Boolean).map((t, i) => (
+                  <span key={i} style={{ padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', fontSize: '10px', color: 'var(--color-text-muted)', fontWeight: 500 }}>{t}</span>
+                ))}
+                {bet?.pick && bet.pick !== '-' && (
+                  <span style={{ padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--color-primary-light)', border: '0.5px solid var(--color-primary-border)', fontSize: '10px', color: 'var(--color-primary)', fontWeight: 700 }}>{bet.pick}</span>
+                )}
+              </div>
+            )}
             <div style={{ display: 'flex', gap: '20px' }}>
               <div>
                 <div style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '2px' }}>Cuota</div>
@@ -146,21 +124,41 @@ export default function FeedCard({ post, currentUser, onLike, onComment, onNavig
                 <div style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '2px' }}>Stake</div>
                 <div style={{ fontWeight: 700, fontSize: '15px' }}>{bet?.stake}</div>
               </div>
-              <div>
-                <div style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '2px' }}>Fecha</div>
-                <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-                  {bet?.date ? new Date(bet.date).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+              {!bet?.imageUrl && (
+                <div>
+                  <div style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '2px' }}>Fecha</div>
+                  <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                    {bet?.date ? new Date(bet.date).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                  </div>
                 </div>
-              </div>
+              )}
+              {bet?.bookie && (
+                <div>
+                  <div style={{ fontSize: '9px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '2px' }}>Bookie</div>
+                  <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text)', marginTop: '2px' }}>{bet.bookie}</div>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
         {/* ACTION BAR */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '2px', padding: '6px 8px 10px', borderTop: '0.5px solid var(--color-border)' }}>
-          <ActionBtn active={hasLiked} icon={hasLiked ? '❤️' : '🤍'} label={likeCount || ''} onClick={() => onLike(post.id, hasLiked)} />
-          <ActionBtn icon="💬" label={commentCount || ''} onClick={handleOpenComments} />
-          <ActionBtn icon="↩" label="Reenviar" onClick={() => setShowForward(true)} />
+          <motion.button whileTap={{ scale: 0.88 }} onClick={() => onLike(post.id, hasLiked)}
+            style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 10px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '15px', color: hasLiked ? 'var(--color-primary)' : 'var(--color-text-muted)', fontFamily: 'var(--font-sans)', fontWeight: hasLiked ? 700 : 400, borderRadius: 'var(--radius-md)' }}>
+            <span>{hasLiked ? '❤️' : '🤍'}</span>
+            {likeCount > 0 && <span style={{ fontSize: '13px' }}>{likeCount}</span>}
+          </motion.button>
+          <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowModal(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 10px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '15px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-sans)', borderRadius: 'var(--radius-md)' }}>
+            <span>💬</span>
+            {commentCount > 0 && <span style={{ fontSize: '13px' }}>{commentCount}</span>}
+          </motion.button>
+          <motion.button whileTap={{ scale: 0.88 }} onClick={() => setShowForward(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 10px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-sans)', borderRadius: 'var(--radius-md)' }}>
+            <span style={{ fontSize: '15px' }}>↩</span>
+            <span>Reenviar</span>
+          </motion.button>
           {channel && (
             <button onClick={() => onNavigateToChannel?.(channel)}
               style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', background: 'var(--color-primary-light)', border: '0.5px solid var(--color-primary-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: 'var(--color-primary)', fontFamily: 'var(--font-sans)' }}>
@@ -170,66 +168,10 @@ export default function FeedCard({ post, currentUser, onLike, onComment, onNavig
         </div>
       </motion.div>
 
-      {/* COMMENTS SLIDE-UP */}
+      {/* POST MODAL */}
       <AnimatePresence>
-        {showComments && (
-          <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 0.5 }} exit={{ opacity: 0 }}
-              onClick={() => setShowComments(false)}
-              style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 50 }} />
-            <motion.div
-              initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 30, stiffness: 320 }}
-              style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 51, background: 'var(--color-bg)', borderRadius: '20px 20px 0 0', padding: '0 0 16px', maxHeight: '65vh', display: 'flex', flexDirection: 'column' }}>
-
-              <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 4px' }}>
-                <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'var(--color-border)' }} />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 20px 14px' }}>
-                <div style={{ fontWeight: 700, fontSize: '16px' }}>Comentarios {commentCount > 0 && `(${commentCount})`}</div>
-                <button onClick={() => setShowComments(false)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', color: 'var(--color-text-muted)', padding: '2px 4px' }}>×</button>
-              </div>
-
-              <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                {loadingComments ? (
-                  <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '24px' }}>⏳ Cargando...</div>
-                ) : (comments || []).length === 0 ? (
-                  <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '24px' }}>
-                    <div style={{ fontSize: '24px', marginBottom: '6px' }}>💬</div>
-                    <div>Sin comentarios aún. ¡Sé el primero!</div>
-                  </div>
-                ) : (comments || []).map((c, i) => (
-                  <div key={c.id || i} style={{ display: 'flex', gap: '10px' }}>
-                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden' }}>
-                      {c.profile?.avatar_url
-                        ? <img src={c.profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        : (c.profile?.username || '?')[0].toUpperCase()}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '2px' }}>
-                        <span style={{ fontSize: '13px', fontWeight: 700 }}>{c.profile?.username || 'usuario'}</span>
-                        <span style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>{timeAgo(c.created_at)}</span>
-                      </div>
-                      <div style={{ fontSize: '13px', lineHeight: 1.5, color: 'var(--color-text)' }}>{c.content}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div style={{ display: 'flex', gap: '8px', padding: '14px 20px 0', borderTop: '0.5px solid var(--color-border)', marginTop: '14px' }}>
-                <input value={commentText} onChange={e => setCommentText(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleAddComment()}
-                  placeholder="Añade un comentario..."
-                  style={{ flex: 1, background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '13px', padding: '10px 14px', borderRadius: 'var(--radius-md)', outline: 'none' }} />
-                <button onClick={handleAddComment} disabled={!commentText.trim()}
-                  style={{ background: commentText.trim() ? 'var(--color-primary)' : 'var(--color-bg-soft)', color: commentText.trim() ? '#010906' : 'var(--color-text-muted)', border: 'none', padding: '10px 16px', borderRadius: 'var(--radius-md)', cursor: commentText.trim() ? 'pointer' : 'default', fontWeight: 700, fontSize: '13px', fontFamily: 'var(--font-sans)', flexShrink: 0, transition: 'all 0.15s' }}>
-                  Enviar
-                </button>
-              </div>
-            </motion.div>
-          </>
+        {showModal && (
+          <PostModal messageId={post.id} currentUser={currentUser} onClose={() => setShowModal(false)} />
         )}
       </AnimatePresence>
 

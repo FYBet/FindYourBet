@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useFeed } from './hooks/useFeed'
 import FeedCard from './FeedCard'
@@ -8,11 +8,54 @@ const TABS = [
   { id: 'descubre', label: '🔥 Para ti' },
 ]
 
+// Marks post as seen only after being visible for 800ms (like a view count)
+function SeenObserver({ postId, onSeen, children }) {
+  const ref = useRef(null)
+  const seen = useRef(false)
+  const timer = useRef(null)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el || seen.current) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          // Start timer — only counts if still visible after 800ms
+          timer.current = setTimeout(() => {
+            if (!seen.current) {
+              seen.current = true
+              onSeen(postId)
+              observer.disconnect()
+            }
+          }, 800)
+        } else {
+          // Scrolled away before timer fired — cancel
+          clearTimeout(timer.current)
+        }
+      },
+      { threshold: 0.6 }
+    )
+    observer.observe(el)
+    return () => {
+      observer.disconnect()
+      clearTimeout(timer.current)
+    }
+  }, [postId, onSeen])
+
+  return <div ref={ref}>{children}</div>
+}
+
 export default function Feed({ user, onNavigateToChannel }) {
   const [activeTab, setActiveTab] = useState('siguiendo')
-  const { followingFeed, discoverFeed, loading, toggleLike, fetchComments, addComment } = useFeed(user?.id)
+  const {
+    followingFeed, discoverFeed, loading, toggleLike,
+    markSeen, followingAllSeen, discoverAllSeen,
+  } = useFeed(user?.id)
+
+  const stableMarkSeen = useCallback(markSeen, [markSeen])
 
   const posts = activeTab === 'siguiendo' ? followingFeed : discoverFeed
+  const allSeen = activeTab === 'siguiendo' ? followingAllSeen : discoverAllSeen
 
   return (
     <motion.div key="feed"
@@ -39,27 +82,34 @@ export default function Feed({ user, onNavigateToChannel }) {
         <div className="empty-state">
           <div className="empty-icon" style={{ fontSize: '40px' }}>{activeTab === 'siguiendo' ? '👥' : '🔥'}</div>
           <div className="empty-title">
-            {activeTab === 'siguiendo' ? 'Sin picks de seguidos' : 'Sin picks para ti aún'}
+            {activeTab === 'siguiendo' ? 'Sin picks pendientes de seguidos' : 'Sin picks para ti ahora'}
           </div>
           <div className="empty-sub">
             {activeTab === 'siguiendo'
-              ? 'Únete a canales de tipsters para ver sus picks aquí.'
-              : 'No hay picks públicos disponibles en este momento.'}
+              ? 'Los picks aparecerán aquí mientras estén pendientes de resolverse.'
+              : 'No hay picks públicos pendientes en este momento.'}
           </div>
         </div>
       ) : (
         <div style={{ maxWidth: '600px' }}>
+          {/* Banner: recycled posts */}
+          {allSeen && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', marginBottom: '16px', fontSize: '13px', color: 'var(--color-text-muted)' }}>
+              <span style={{ fontSize: '18px' }}>✅</span>
+              <span>Ya lo has visto todo — te mostramos picks anteriores.</span>
+            </div>
+          )}
           <AnimatePresence>
             {posts.map(post => (
-              <FeedCard
-                key={post.id}
-                post={post}
-                currentUser={user}
-                onLike={toggleLike}
-                onComment={{ fetch: fetchComments, add: addComment }}
-                onNavigateToChannel={onNavigateToChannel}
-                onReport={() => {}}
-              />
+              <SeenObserver key={post.id} postId={post.id} onSeen={stableMarkSeen}>
+                <FeedCard
+                  post={post}
+                  currentUser={user}
+                  onLike={toggleLike}
+                  onNavigateToChannel={onNavigateToChannel}
+                  onReport={() => {}}
+                />
+              </SeenObserver>
             ))}
           </AnimatePresence>
         </div>

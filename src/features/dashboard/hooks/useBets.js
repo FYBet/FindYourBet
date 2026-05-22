@@ -4,7 +4,19 @@ import { supabase } from '../../../lib/supabase'
 const EMPTY_FORM = {
   event: '', pick: '', odds: '', stake: 5,
   date: '', sport: 'Fútbol', market: '1X2', analysis: '',
-  channelIds: []
+  channelIds: [], bookie: '', betImageUrl: ''
+}
+
+// Converts a datetime-local string to ISO 8601 with local timezone offset
+// Avoids UTC↔local roundtrip errors when Supabase stores as timestamp without tz
+function toLocalISOString(localDateStr) {
+  const dt = new Date(localDateStr)
+  const pad = n => String(n).padStart(2, '0')
+  const offset = -dt.getTimezoneOffset()
+  const sign = offset >= 0 ? '+' : '-'
+  const oh = pad(Math.floor(Math.abs(offset) / 60))
+  const om = pad(Math.abs(offset) % 60)
+  return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}:00${sign}${oh}:${om}`
 }
 
 function getPeriodRange(period) {
@@ -68,8 +80,7 @@ export function hasMatchStarted(bet) {
   return new Date(bet.date) <= new Date()
 }
 
-// Envia l'aposta als canals seleccionats com a missatge especial
-async function sendBetToChannels(bet, channelIds) {
+async function sendBetToChannels(bet, channelIds, localDate) {
   if (!channelIds || channelIds.length === 0) return
   const content = `[BET]:${JSON.stringify({
     id: bet.id,
@@ -79,8 +90,10 @@ async function sendBetToChannels(bet, channelIds) {
     stake: bet.stake,
     sport: bet.sport,
     market: bet.market,
-    date: bet.date,
-    status: bet.status
+    date: localDate || bet.date,
+    status: bet.status,
+    bookie: bet.bookie || null,
+    imageUrl: bet.bet_image_url || null,
   })}`
   const sentAt = bet.created_at || new Date().toISOString()
   await Promise.all(channelIds.map(channelId =>
@@ -121,9 +134,18 @@ export function useBets(user) {
   }
 
   const submitBet = async (preselectedChannelId = null) => {
-    if (!form.event || !form.pick || !form.odds || !form.date) {
-      alert('Rellena todos los campos obligatorios'); return
+    const isPhotoMode = !!form.betImageUrl
+
+    if (isPhotoMode) {
+      if (!form.odds || !form.date) {
+        alert('Rellena la cuota y la fecha'); return
+      }
+    } else {
+      if (!form.event || !form.pick || !form.odds || !form.date) {
+        alert('Rellena todos los campos obligatorios'); return
+      }
     }
+
     if (new Date(form.date) <= new Date()) {
       alert('La fecha y hora del evento debe ser futura'); return
     }
@@ -136,7 +158,6 @@ export function useBets(user) {
       alert('Selecciona al menos un canal para publicar la apuesta'); return
     }
 
-    // Determina canal principal + privacitat: was_private només si TOTS els canals són privats
     const { data: ch } = await supabase
       .from('channels')
       .select('id, is_private')
@@ -144,18 +165,26 @@ export function useBets(user) {
     const allPrivate = (ch || []).length > 0 && ch.every(c => c.is_private)
 
     const newBet = {
-      user_id: user.id, event: form.event, pick: form.pick,
-      odds: parseFloat(form.odds), stake: form.stake,
-      date: new Date(form.date).toISOString(),
-      sport: form.sport, market: form.market, analysis: form.analysis,
-      status: 'pending', channel_ids: channelIds,
+      user_id: user.id,
+      event: isPhotoMode ? '📷 Pick fotográfico' : form.event,
+      pick: isPhotoMode ? '-' : form.pick,
+      odds: parseFloat(form.odds),
+      stake: form.stake,
+      date: toLocalISOString(form.date),
+      sport: isPhotoMode ? 'Otros' : form.sport,
+      market: isPhotoMode ? 'Otro' : form.market,
+      analysis: form.analysis,
+      status: 'pending',
+      channel_ids: channelIds,
       channel_id: channelIds[0],
       was_private: allPrivate,
+      bookie: form.bookie || null,
+      bet_image_url: form.betImageUrl || null,
     }
     const { data, error } = await supabase.from('bets').insert(newBet).select()
     if (!error && data?.[0]) {
       setBets(prev => [data[0], ...prev])
-      await sendBetToChannels(data[0], channelIds)
+      await sendBetToChannels(data[0], channelIds, form.date)
     }
     setShowModal(false)
     setForm(EMPTY_FORM)

@@ -4,10 +4,17 @@ import { supabase } from '../../../lib/supabase'
 import { useFollow } from '../social/hooks/useFollow'
 import ProfileView from '../social/ProfileView'
 
+const SORT_OPTIONS = [
+  { id: 'yield',   label: 'Yield' },
+  { id: 'bets',    label: 'Apuestas' },
+  { id: 'oldest',  label: 'Más antiguo' },
+  { id: 'avgOdds', label: 'Promedio' },
+]
 
 function Avatar({ url, name, size = 48, fontSize = 18 }) {
-  if (url) return (
-    <img src={url} alt="" style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--color-bg)', flexShrink: 0 }} />
+  const [imgError, setImgError] = useState(false)
+  if (url && !imgError) return (
+    <img src={url} alt="" onError={() => setImgError(true)} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--color-bg)', flexShrink: 0 }} />
   )
   return (
     <div style={{ width: size, height: size, borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize, fontWeight: 700, color: 'var(--color-primary)', border: '2px solid var(--color-bg)', flexShrink: 0 }}>
@@ -18,7 +25,6 @@ function Avatar({ url, name, size = 48, fontSize = 18 }) {
 
 function TipsterCard({ tipster, isFollowing, isMutual, onClick }) {
   const { stats } = tipster
-  const displayName = tipster.username
 
   return (
     <div onClick={onClick}
@@ -26,11 +32,11 @@ function TipsterCard({ tipster, isFollowing, isMutual, onClick }) {
       onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(15,110,86,0.08)' }}
       onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.boxShadow = 'none' }}>
 
-      <Avatar url={tipster.avatar_url} name={displayName} />
+      <Avatar url={tipster.avatar_url} name={tipster.username} />
 
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px', flexWrap: 'wrap' }}>
-          <span style={{ fontWeight: 700, fontSize: '14px' }}>{displayName}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 700, fontSize: '14px' }}>{tipster.username}</span>
           {isMutual ? (
             <span style={{ fontSize: '10px', color: 'var(--color-primary)', padding: '2px 8px', background: 'var(--color-primary-light)', border: '0.5px solid var(--color-primary-border)', borderRadius: 'var(--radius-full)', fontWeight: 700 }}>👥 Amigos</span>
           ) : isFollowing && (
@@ -46,7 +52,7 @@ function TipsterCard({ tipster, isFollowing, isMutual, onClick }) {
               {stats.yieldVal >= 0 ? '+' : ''}{stats.yieldVal.toFixed(1)}% yield
             </span>
             <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
-              {stats.won}W / {stats.lost}L · {stats.total} picks
+              {Math.round(stats.winRate)}% · {stats.total} picks
             </span>
           </>
         ) : (
@@ -60,39 +66,62 @@ function TipsterCard({ tipster, isFollowing, isMutual, onClick }) {
 function enrichWithStats(profiles, bets) {
   const statsMap = {}
   for (const b of (bets || [])) {
-    if (!statsMap[b.user_id]) statsMap[b.user_id] = { won: 0, lost: 0, total: 0, profit: 0, stakeSum: 0 }
+    if (!statsMap[b.user_id]) statsMap[b.user_id] = { won: 0, lost: 0, total: 0, profit: 0, stakeSum: 0, oddsSum: 0 }
     const s = statsMap[b.user_id]
     s.total++
     s.stakeSum += b.stake
+    s.oddsSum += b.odds || 0
     if (b.status === 'won') { s.won++; s.profit += b.stake * (b.odds - 1) }
     else { s.lost++; s.profit -= b.stake }
   }
   return profiles.map(p => {
-    const s = statsMap[p.id] || { won: 0, lost: 0, total: 0, profit: 0, stakeSum: 0 }
+    const s = statsMap[p.id] || { won: 0, lost: 0, total: 0, profit: 0, stakeSum: 0, oddsSum: 0 }
     const yieldVal = s.stakeSum > 0 ? (s.profit / s.stakeSum) * 100 : 0
-    return { ...p, stats: { ...s, yieldVal, winRate: s.total > 0 ? (s.won / s.total) * 100 : 0 } }
+    const winRate  = s.total > 0 ? (s.won / s.total) * 100 : 0
+    const avgOdds  = s.total > 0 ? s.oddsSum / s.total : 0
+    return { ...p, stats: { ...s, yieldVal, winRate, avgOdds } }
   })
 }
 
 function pickRandom20(pool) {
-  const shuffled = [...pool].sort(() => Math.random() - 0.5)
-  return shuffled.slice(0, 20)
+  return [...pool].sort(() => Math.random() - 0.5).slice(0, 20)
+}
+
+function sortFollowing(list, sort) {
+  return [...list].sort((a, b) => {
+    if (sort === 'yield')   return b.stats.yieldVal - a.stats.yieldVal
+    if (sort === 'bets')    return b.stats.total - a.stats.total
+    if (sort === 'oldest')  return new Date(a._followedAt) - new Date(b._followedAt)
+    if (sort === 'avgOdds') return b.stats.avgOdds - a.stats.avgOdds
+    return 0
+  })
 }
 
 export default function Tipsters({ user, onNavigateToChannel, onStartDM }) {
+  const [activeTab, setActiveTab] = useState('sugeridos')
   const [query, setQuery] = useState('')
+
+  // Sugeridos
   const [pool, setPool] = useState([])
   const [displayed, setDisplayed] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  // Siguiendo
+  const [following, setFollowing] = useState(null)   // null = not loaded yet
+  const [followingLoading, setFollowingLoading] = useState(false)
+  const [followingSort, setFollowingSort] = useState('yield')
+
+  // Search
   const [searchResults, setSearchResults] = useState([])
   const [searching, setSearching] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [selectedUserId, setSelectedUserId] = useState(null)
-  const { follow, unfollow, isFollowing, isFollower, isMutual } = useFollow(user?.id)
   const searchTimeout = useRef(null)
 
-  useEffect(() => { loadPopular() }, [])
+  const [selectedUserId, setSelectedUserId] = useState(null)
+  const { follow, unfollow, isFollowing, isFollower, isMutual } = useFollow(user?.id)
 
-  const loadPopular = async () => {
+  useEffect(() => { loadSugeridos() }, [])
+
+  const loadSugeridos = async () => {
     setLoading(true)
     const safetyTimer = setTimeout(() => setLoading(false), 10000)
     try {
@@ -120,21 +149,18 @@ export default function Tipsters({ user, onNavigateToChannel, onStartDM }) {
       const followingSet = new Set((myFollowing || []).map(f => f.following_id))
       const followerSet  = new Set((myFollowers || []).map(f => f.follower_id))
 
-      // 2ns grau: qui segueix la gent que jo segueixo
       const secondDegreeMap = {}
       if (followingSet.size > 0) {
         const { data: fof } = await supabase
           .from('follows').select('following_id')
           .in('follower_id', [...followingSet])
-          .neq('following_id', uid)
-          .limit(2000)
+          .neq('following_id', uid).limit(2000)
         for (const f of (fof || [])) {
           if (!followingSet.has(f.following_id))
             secondDegreeMap[f.following_id] = (secondDegreeMap[f.following_id] || 0) + 1
         }
       }
 
-      // Activitat recent (proxy: aposta o missatge en últims 7 dies)
       const recentlyActive = new Set([
         ...(recentBets || []).map(b => b.user_id),
         ...(recentMsgs || []).map(m => m.user_id),
@@ -151,39 +177,19 @@ export default function Tipsters({ user, onNavigateToChannel, onStartDM }) {
 
       const scored = profiles
         .map(p => {
-          // Filtre dur: inactiu els últims 7 dies o ja el segueixes
           if (!recentlyActive.has(p.id)) return null
           if (followingSet.has(p.id)) return null
 
           const s = statsMap[p.id] || { won: 0, lost: 0, total: 0, profit: 0, stakeSum: 0 }
           const yieldVal  = s.stakeSum > 0 ? (s.profit / s.stakeSum) * 100 : 0
           const winRate   = s.total > 0 ? (s.won / s.total) * 100 : 0
-
-          // 1. Puntuació social (0–100)
-          const isFollower   = followerSet.has(p.id)
-          const isMutual     = followingSet.has(p.id) && isFollower
-          const secondDegree = secondDegreeMap[p.id] || 0
-          const socialScore  = Math.min(100,
-            (isMutual ? 60 : isFollower ? 35 : 0) +
-            Math.min(40, secondDegree * 8)
-          )
-
-          // 2. Rendiment (0–100)
-          const perfScore = s.total >= 5
-            ? Math.min(100, Math.max(0, 50 + yieldVal * 2) * 0.55 + winRate * 0.45)
-            : s.total > 0 ? 15 : 5
-
-          // 3. Credibilitat per volum (0–100)
-          const credScore = Math.min(100, (s.total / 30) * 100)
-
-          // 4. Perfil complet (0–100)
+          const isFlwr    = followerSet.has(p.id)
+          const secondDeg = secondDegreeMap[p.id] || 0
+          const socialScore = Math.min(100, (isFlwr ? 35 : 0) + Math.min(40, secondDeg * 8))
+          const perfScore   = s.total >= 5 ? Math.min(100, Math.max(0, 50 + yieldVal * 2) * 0.55 + winRate * 0.45) : s.total > 0 ? 15 : 5
+          const credScore   = Math.min(100, (s.total / 30) * 100)
           const profileScore = (p.bio ? 50 : 0) + (p.avatar_url ? 50 : 0)
-
-          const finalScore =
-            socialScore  * 0.40 +
-            perfScore    * 0.35 +
-            credScore    * 0.15 +
-            profileScore * 0.10
+          const finalScore  = socialScore * 0.40 + perfScore * 0.35 + credScore * 0.15 + profileScore * 0.10
 
           return { ...p, stats: { ...s, yieldVal, winRate }, _score: finalScore }
         })
@@ -199,6 +205,39 @@ export default function Tipsters({ user, onNavigateToChannel, onStartDM }) {
     }
   }
 
+  const loadSiguiendo = async () => {
+    if (!user?.id) return
+    setFollowingLoading(true)
+    const { data: followRows } = await supabase
+      .from('follows')
+      .select('following_id, created_at')
+      .eq('follower_id', user.id)
+
+    if (!followRows?.length) { setFollowing([]); setFollowingLoading(false); return }
+
+    const ids = followRows.map(f => f.following_id)
+    const followDateMap = {}
+    followRows.forEach(f => { followDateMap[f.following_id] = f.created_at })
+
+    const [{ data: profiles }, { data: bets }] = await Promise.all([
+      supabase.from('profiles').select('id, username, avatar_url, bio').in('id', ids),
+      supabase.from('bets').select('user_id, stake, status, odds').in('user_id', ids).in('status', ['won', 'lost']).limit(2000),
+    ])
+
+    const enriched = enrichWithStats(profiles || [], bets || [])
+      .map(p => ({ ...p, _followedAt: followDateMap[p.id] }))
+
+    setFollowing(enriched)
+    setFollowingLoading(false)
+  }
+
+  const handleTabChange = (tab) => {
+    setActiveTab(tab)
+    setQuery('')
+    setSearchResults([])
+    if (tab === 'siguiendo' && following === null) loadSiguiendo()
+  }
+
   const handleSearch = (q) => {
     setQuery(q)
     clearTimeout(searchTimeout.current)
@@ -211,8 +250,7 @@ export default function Tipsters({ user, onNavigateToChannel, onStartDM }) {
     const { data: profiles } = await supabase
       .from('profiles').select('id, username, name, avatar_url, bio')
       .or(`username.ilike.%${q}%,name.ilike.%${q}%`)
-      .neq('id', user?.id || '')
-      .limit(20)
+      .neq('id', user?.id || '').limit(20)
 
     if (!profiles?.length) { setSearchResults([]); setSearching(false); return }
 
@@ -244,16 +282,30 @@ export default function Tipsters({ user, onNavigateToChannel, onStartDM }) {
   }
 
   const showSearch = query.trim().length > 0
-  const list = showSearch ? searchResults : displayed
+  const sortedFollowing = following ? sortFollowing(following, followingSort) : []
 
   return (
     <motion.div key="tipsters" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.3 }}>
 
-      <div style={{ marginBottom: '28px' }}>
+      <div style={{ marginBottom: '20px' }}>
         <h2 style={{ fontSize: 'clamp(20px, 2.5vw, 28px)', fontWeight: 700, marginBottom: '4px' }}>Tipsters</h2>
         <p style={{ color: 'var(--color-text-muted)', fontSize: '14px' }}>Descubre los mejores pronosticadores</p>
       </div>
 
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: '6px', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '4px', width: 'fit-content', marginBottom: '20px' }}>
+        {[
+          { id: 'sugeridos', label: '✨ Sugeridos' },
+          { id: 'siguiendo', label: '👤 Siguiendo' },
+        ].map(t => (
+          <button key={t.id} onClick={() => handleTabChange(t.id)}
+            style={{ padding: '8px 18px', borderRadius: 'var(--radius-md)', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 600, fontFamily: 'var(--font-sans)', background: activeTab === t.id ? 'var(--color-primary)' : 'transparent', color: activeTab === t.id ? '#010906' : 'var(--color-text-muted)', transition: 'all 0.15s' }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Search */}
       <div style={{ position: 'relative', marginBottom: '20px' }}>
         <input
           type="text"
@@ -267,58 +319,103 @@ export default function Tipsters({ user, onNavigateToChannel, onStartDM }) {
         <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', fontSize: '16px', pointerEvents: 'none', opacity: 0.5 }}>🔍</span>
       </div>
 
-      {searching && (
-        <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '13px', padding: '20px' }}>Buscando tipsters...</div>
-      )}
-
-      {!searching && (
+      {/* Search results */}
+      {showSearch && (
         <>
-          {!showSearch && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                ✨ Tipsters sugeridos
-              </div>
-              {pool.length > 0 && (
-                <button onClick={() => setDisplayed(pickRandom20(pool))}
-                  style={{ background: 'none', border: '0.5px solid var(--color-border)', color: 'var(--color-text-muted)', fontSize: '12px', fontWeight: 600, padding: '4px 10px', borderRadius: 'var(--radius-full)', cursor: 'pointer', fontFamily: 'var(--font-sans)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  🔄 Otros
-                </button>
-              )}
-            </div>
-          )}
-
-          {showSearch && searchResults.length === 0 && !searching && (
+          {searching && <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '13px', padding: '20px' }}>Buscando tipsters...</div>}
+          {!searching && searchResults.length === 0 && (
             <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '13px', padding: '40px 20px' }}>
               <div style={{ fontSize: '32px', marginBottom: '8px' }}>🔎</div>
               No se encontraron tipsters con ese nombre
             </div>
           )}
-
-          {loading && !showSearch && (
-            <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '13px', padding: '40px' }}>⏳ Cargando tipsters...</div>
-          )}
-
-          {!loading && !showSearch && displayed.length === 0 && (
-            <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '60px 20px' }}>
-              <div style={{ fontSize: '40px', marginBottom: '12px' }}>🎯</div>
-              <div style={{ fontWeight: 600 }}>Aún no hay tipsters registrados</div>
-            </div>
-          )}
-
-          <AnimatePresence>
+          {!searching && (
             <motion.div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {list.map((t, i) => (
+              {searchResults.map((t, i) => (
                 <motion.div key={t.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
-                  <TipsterCard
-                    tipster={t}
-                    isFollowing={isFollowing(t.id)}
-                    isMutual={isMutual(t.id)}
-                    onClick={() => setSelectedUserId(t.id)}
-                  />
+                  <TipsterCard tipster={t} isFollowing={isFollowing(t.id)} isMutual={isMutual(t.id)} onClick={() => setSelectedUserId(t.id)} />
                 </motion.div>
               ))}
             </motion.div>
-          </AnimatePresence>
+          )}
+        </>
+      )}
+
+      {/* Tab content */}
+      {!showSearch && (
+        <>
+          {/* ── SUGERIDOS ── */}
+          {activeTab === 'sugeridos' && (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                  Tipsters sugeridos
+                </div>
+                {pool.length > 0 && (
+                  <button onClick={() => setDisplayed(pickRandom20(pool))}
+                    style={{ background: 'none', border: '0.5px solid var(--color-border)', color: 'var(--color-text-muted)', fontSize: '12px', fontWeight: 600, padding: '4px 10px', borderRadius: 'var(--radius-full)', cursor: 'pointer', fontFamily: 'var(--font-sans)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    🔄 Otros
+                  </button>
+                )}
+              </div>
+
+              {loading && <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '13px', padding: '40px' }}>⏳ Cargando tipsters...</div>}
+
+              {!loading && displayed.length === 0 && (
+                <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '60px 20px' }}>
+                  <div style={{ fontSize: '40px', marginBottom: '12px' }}>🎯</div>
+                  <div style={{ fontWeight: 600 }}>Aún no hay tipsters registrados</div>
+                </div>
+              )}
+
+              <AnimatePresence>
+                <motion.div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {displayed.map((t, i) => (
+                    <motion.div key={t.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
+                      <TipsterCard tipster={t} isFollowing={isFollowing(t.id)} isMutual={isMutual(t.id)} onClick={() => setSelectedUserId(t.id)} />
+                    </motion.div>
+                  ))}
+                </motion.div>
+              </AnimatePresence>
+            </>
+          )}
+
+          {/* ── SIGUIENDO ── */}
+          {activeTab === 'siguiendo' && (
+            <>
+              {/* Sort pills */}
+              {!followingLoading && following !== null && following.length > 0 && (
+                <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                  {SORT_OPTIONS.map(opt => (
+                    <button key={opt.id} onClick={() => setFollowingSort(opt.id)}
+                      style={{ padding: '6px 14px', borderRadius: 'var(--radius-full)', border: `0.5px solid ${followingSort === opt.id ? 'var(--color-primary)' : 'var(--color-border)'}`, background: followingSort === opt.id ? 'var(--color-primary-light)' : 'var(--color-bg)', color: followingSort === opt.id ? 'var(--color-primary)' : 'var(--color-text-muted)', fontSize: '12px', fontWeight: followingSort === opt.id ? 700 : 500, cursor: 'pointer', fontFamily: 'var(--font-sans)', transition: 'all 0.15s' }}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {followingLoading && <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '13px', padding: '40px' }}>⏳ Cargando...</div>}
+
+              {!followingLoading && following !== null && following.length === 0 && (
+                <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '60px 20px' }}>
+                  <div style={{ fontSize: '40px', marginBottom: '12px' }}>👤</div>
+                  <div style={{ fontWeight: 600 }}>Aún no sigues a nadie</div>
+                  <div style={{ fontSize: '13px', marginTop: '6px' }}>Descubre tipsters en la pestaña Sugeridos</div>
+                </div>
+              )}
+
+              <AnimatePresence>
+                <motion.div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {sortedFollowing.map((t, i) => (
+                    <motion.div key={t.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}>
+                      <TipsterCard tipster={t} isFollowing={true} isMutual={isMutual(t.id)} onClick={() => setSelectedUserId(t.id)} />
+                    </motion.div>
+                  ))}
+                </motion.div>
+              </AnimatePresence>
+            </>
+          )}
         </>
       )}
     </motion.div>
