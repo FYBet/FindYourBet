@@ -132,7 +132,7 @@ export default function Faqs() {
 
       <div style={{ marginTop: '20px', padding: '16px 20px', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-primary-border)', borderRadius: 'var(--radius-md)', fontSize: '13px', color: 'var(--color-text-muted)' }}>
         ¿No encuentras lo que buscas? Escríbenos a{' '}
-        <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>soporte@fyourbet.com</span>
+        <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>fyourbet@gmail.com</span>
         {' '}y te respondemos en menos de 24h.
       </div>
 

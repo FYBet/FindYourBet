@@ -34,7 +34,7 @@ function RedesSoporte() {
         <div style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '24px' }}>
           <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>🛠️ Soporte</div>
           {[
-            { icon: '📧', label: 'Email', value: 'soporte@fyourbet.com' },
+            { icon: '📧', label: 'Email', value: 'fyourbet@gmail.com' },
             { icon: '⏱️', label: 'Horario', value: 'Lun–Vie, 9:00–18:00' },
             { icon: '⚡', label: 'Respuesta', value: 'Menos de 24h' },
           ].map((s, i) => (
