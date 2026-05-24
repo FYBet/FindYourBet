@@ -4,6 +4,10 @@ import { supabase } from '../../../lib/supabase'
 import PostModal from '../feed/PostModal'
 import FollowListModal from './FollowListModal'
 import { useProfileNav } from '../../../contexts/ProfileNavContext'
+import Username from '../../../components/ui/Username'
+import SharedAvatar from '../../../components/ui/Avatar'
+import { isReservedUsername, isUsernameBanned } from '../../../lib/reservedUsernames'
+import { useAdminMode } from '../../../contexts/AdminModeContext'
 
 const DM_OPTIONS = [
   { id: 'followers', icon: '🔒', label: 'Solo seguidores mutuos', desc: 'Solo quien te siga y tú le sigas puede escribirte' },
@@ -27,20 +31,16 @@ function StatPill({ label, value, color, onClick }) {
 }
 
 function Avatar({ url, name, size = 80, fontSize = 32 }) {
-  const [imgError, setImgError] = useState(false)
-  if (url && !imgError) return (
-    <img src={url} alt="avatar" onError={() => setImgError(true)}
-      style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--color-bg)', display: 'block' }} />
-  )
+  // Reutilitza el component compartit (gestiona errors d'imatge i reseteja quan canvia el URL)
   return (
-    <div style={{ width: size, height: size, background: 'var(--color-primary)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize, fontWeight: 700, color: '#010906', border: '3px solid var(--color-bg)', flexShrink: 0 }}>
-      {(name || '?')[0].toUpperCase()}
-    </div>
+    <SharedAvatar url={url} name={name} size={size} fontSize={fontSize}
+      borderWidth={3} bg="var(--color-primary)" fg="#010906" />
   )
 }
 
 export default function MiPerfil({ user, onNavigate, onAvatarUpdated, onNavigateToChannel }) {
   const openProfile = useProfileNav()
+  const { isAdmin, adminMode, toggleAdminMode } = useAdminMode()
   const [profile, setProfile] = useState(null)
   const [stats, setStats] = useState({ total: 0, won: 0, lost: 0, yieldVal: 0, avgOdds: '—' })
   const [followersCount, setFollowersCount] = useState(0)
@@ -74,10 +74,10 @@ export default function MiPerfil({ user, onNavigate, onAvatarUpdated, onNavigate
   }, [user])
 
   const fetchChannels = async () => {
-    if (loadingChannels || channels.length) return
+    if (loadingChannels) return
     setLoadingChannels(true)
     try {
-      const { data: chans } = await supabase.from('channels').select('*').eq('owner_id', user.id)
+      const { data: chans } = await supabase.from('channels').select('*').eq('owner_id', user.id).is('deleted_at', null)
       if (!chans?.length) { setChannels([]); return }
       const { data: mems } = await supabase
         .from('channel_members').select('channel_id')
@@ -92,30 +92,34 @@ export default function MiPerfil({ user, onNavigate, onAvatarUpdated, onNavigate
     }
   }
 
-  const fetchAll = async () => {
-    setLoading(true)
+  // `silent=true` evita mostrar "Cargando perfil..." en refrescos posteriors (després de guardar)
+  const fetchAll = async (silent = false) => {
+    if (!silent) setLoading(true)
     const safetyTimer = setTimeout(() => setLoading(false), 10000)
     try {
-      const [
-        { data: prof },
-        { data: bets },
-        { count: fersCount },
-        { count: fingCount },
-        { data: dmSet },
-        { data: activeOffers },
-      ] = await Promise.all([
+      // Promise.allSettled: si una query falla, les altres continuen funcionant
+      // (abans: Promise.all → si UNA fallava, tot el perfil quedava buit)
+      const [profRes, betsRes, fersRes, fingRes, dmRes, offersRes] = await Promise.allSettled([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
         supabase.from('bets').select('*, channel:channels(id, name, is_private, deleted_at)').eq('user_id', user.id).order('created_at', { ascending: false }),
         supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', user.id),
         supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', user.id),
-        supabase.from('dm_settings').select('allow_dms').eq('user_id', user.id).single(),
+        supabase.from('dm_settings').select('allow_dms').eq('user_id', user.id).maybeSingle(),
         supabase.from('offers').select('channel_id').eq('active', true),
       ])
 
-      setProfile(prof)
-      setFollowersCount(fersCount || 0)
-      setFollowingCount(fingCount || 0)
-      setPremiumChannelIds(new Set((activeOffers || []).map(o => o.channel_id)))
+      const prof = profRes.status === 'fulfilled' ? profRes.value.data : null
+      const bets = betsRes.status === 'fulfilled' ? betsRes.value.data : null
+      const fersCount = fersRes.status === 'fulfilled' ? fersRes.value.count : null
+      const fingCount = fingRes.status === 'fulfilled' ? fingRes.value.count : null
+      const dmSet = dmRes.status === 'fulfilled' ? dmRes.value.data : null
+      const activeOffers = offersRes.status === 'fulfilled' ? offersRes.value.data : null
+
+      // Només actualitza el state si la query ha retornat dades (no esborra valors antics si falla)
+      if (prof) setProfile(prof)
+      if (fersCount != null) setFollowersCount(fersCount || 0)
+      if (fingCount != null) setFollowingCount(fingCount || 0)
+      if (activeOffers) setPremiumChannelIds(new Set(activeOffers.map(o => o.channel_id)))
       if (dmSet) setDmSetting(dmSet.allow_dms)
       if (prof) setEditForm({ name: prof.name || '', username: prof.username || '', bio: prof.bio || '' })
 
@@ -185,6 +189,19 @@ export default function MiPerfil({ user, onNavigate, onAvatarUpdated, onNavigate
 
     // Validació de canvi de username
     if (usernameChanged) {
+      // Bloca usernames reservats (marca, rols admin, etc.)
+      if (isReservedUsername(newUsername)) {
+        setSaveError('Este username está reservado y no puede usarse.')
+        setSaving(false)
+        return
+      }
+      // Bloca usernames banejats per l'admin (taula banned_usernames)
+      if (await isUsernameBanned(supabase, newUsername)) {
+        setSaveError('Este username está bloqueado y no puede usarse.')
+        setSaving(false)
+        return
+      }
+
       // Comprova si el nou nom és un que tu mateix vas tenir (bypass del cooldown)
       const { data: ownReservation } = await supabase
         .from('username_reservations')
@@ -195,12 +212,13 @@ export default function MiPerfil({ user, onNavigate, onAvatarUpdated, onNavigate
         .maybeSingle()
       isRevert = !!ownReservation
 
-      // Cooldown 7 dies — només aplica si NO és tornar a un nom previ teu
-      if (!isRevert && profile?.username_changed_at) {
+      // Cooldown 7 dies — només aplica si NO és tornar a un nom previ teu I NO ve d'un reset admin.
+      // Quan l'admin reseteja el nom, l'usuari obté un canvi gratuit sense esperar.
+      if (!isRevert && !profile?.username_reset_pending && profile?.username_changed_at) {
         const daysSince = (Date.now() - new Date(profile.username_changed_at).getTime()) / 86400000
         if (daysSince < 7) {
           const daysLeft = Math.ceil(7 - daysSince)
-          setSaveError(`Solo puedes cambiar tu username cada 7 días. Podrás cambiarlo en ${daysLeft} día${daysLeft !== 1 ? 's' : ''}.`)
+          setSaveError(`Aún no puedes cambiar tu nombre de usuario. Podrás hacerlo en ${daysLeft} día${daysLeft !== 1 ? 's' : ''}.`)
           setSaving(false)
           return
         }
@@ -272,40 +290,63 @@ export default function MiPerfil({ user, onNavigate, onAvatarUpdated, onNavigate
     }
     if (usernameChanged) {
       profileUpdate.username_changed_at = new Date().toISOString()
+      // Si venia d'un reset admin, ara consum el canvi gratuit — el cooldown torna a aplicar
+      if (profile?.username_reset_pending) profileUpdate.username_reset_pending = false
     }
 
-    const { error } = await supabase.from('profiles').update(profileUpdate).eq('id', user.id)
-
-    if (error) {
-      setSaveError('Error al guardar los cambios')
+    // UPDATE amb .select() i timeout — si la xarxa penja, no deixem "Guardando..." infinit.
+    // El .select() força que retorni les files afectades (verifica que la UPDATE ha tingut efecte).
+    let updateResult
+    try {
+      updateResult = await Promise.race([
+        supabase.from('profiles').update(profileUpdate).eq('id', user.id).select().single(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
+      ])
+    } catch (e) {
+      setSaveError(e.message === 'timeout' ? 'La conexión ha tardado demasiado. Inténtalo de nuevo.' : 'Error al guardar')
+      setSaving(false)
+      return
+    }
+    if (updateResult.error) {
+      setSaveError('Error al guardar: ' + updateResult.error.message)
+      setSaving(false)
+      return
+    }
+    if (!updateResult.data) {
+      setSaveError('No se pudo guardar (sin permisos o sesión caducada).')
       setSaving(false)
       return
     }
 
+    // username_reservations: NO blocking — si falla no afecta l'usuari
     if (usernameChanged) {
-      // Reserva el nom vell 7 dies perquè cap altre el pugui agafar (et permet recuperar-lo)
       if (profile?.username) {
-        await supabase.from('username_reservations').insert({
+        supabase.from('username_reservations').insert({
           user_id: user.id,
           username: profile.username,
           expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
-        })
+        }).then().catch(() => {})
       }
-      // Si tornes a un nom que tenies reservat, allibera aquesta reserva
       if (isRevert) {
-        await supabase.from('username_reservations').delete()
+        supabase.from('username_reservations').delete()
           .eq('user_id', user.id).ilike('username', newUsername)
+          .then().catch(() => {})
       }
     }
 
-    await supabase.auth.updateUser({ data: { name: editForm.name.trim() } })
+    // No esperem updateUser ni fetchAll — fer-ho optimisticament tanca el modal a l'instant.
+    // L'estat local s'actualitza amb els valors que acabem de desar.
+    supabase.auth.updateUser({ data: { name: editForm.name.trim() } }).catch(() => {})
 
-    await fetchAll()
+    setProfile(prev => prev ? { ...prev, ...profileUpdate } : prev)
     onAvatarUpdated?.(avatarUrl)
     setShowEditModal(false)
     setAvatarFile(null)
     setAvatarPreview(null)
     setSaving(false)
+    // Refresca en segon pla per actualitzar el comptador de seguidors, bets, etc.
+    // `silent=true` perquè NO torni a mostrar "Cargando perfil..."
+    fetchAll(true).catch(() => {})
   }
 
   if (loading) return (
@@ -373,14 +414,28 @@ export default function MiPerfil({ user, onNavigate, onAvatarUpdated, onNavigate
             </div>
           </div>
 
-          <div style={{ fontWeight: 700, fontSize: '22px', marginBottom: profile?.bio ? '8px' : '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {username}
-            {profile?.is_verified && (
-              <span title="Verificado" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', borderRadius: '50%', background: 'var(--color-primary)', color: '#010906', fontSize: '11px', fontWeight: 900, flexShrink: 0 }}>✓</span>
-            )}
+          <div style={{ fontWeight: 700, fontSize: '22px', marginBottom: profile?.bio ? '8px' : '16px' }}>
+            <Username username={username} isVerified={profile?.is_verified} size="xl" />
           </div>
           {profile?.bio && (
             <div style={{ fontSize: '14px', color: 'var(--color-text-soft)', marginBottom: '16px', lineHeight: 1.5 }}>{profile.bio}</div>
+          )}
+
+          {/* TOGGLE MODO ADMIN — només visible per a fyourbet@gmail.com */}
+          {isAdmin && (
+            <button onClick={toggleAdminMode}
+              style={{
+                width: '100%', marginBottom: '16px', padding: '10px 14px',
+                borderRadius: 'var(--radius-md)',
+                border: `0.5px solid ${adminMode ? 'var(--color-error-border)' : 'var(--color-border)'}`,
+                background: adminMode ? 'var(--color-error-light)' : 'var(--color-bg-soft)',
+                color: adminMode ? 'var(--color-error)' : 'var(--color-text-muted)',
+                cursor: 'pointer', fontSize: '13px', fontWeight: 700,
+                fontFamily: 'var(--font-sans)', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', gap: '8px', transition: 'all 0.2s',
+              }}>
+              🛡️ {adminMode ? 'MODO ADMIN ACTIVO — Click para salir' : 'Activar modo admin'}
+            </button>
           )}
 
           {/* STATS SOCIALS */}

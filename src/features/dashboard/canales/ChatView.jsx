@@ -2,6 +2,9 @@ import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
 import { Button } from '../../../components/ui/Button'
+import Username, { VerifiedBadge } from '../../../components/ui/Username'
+import { isAdminUserId } from '../../../lib/adminUsers'
+import { useAdminMode } from '../../../contexts/AdminModeContext'
 import { useMessages } from './hooks/useMessages'
 import { StickerPicker } from '../StickerPicker'
 import { VoiceRecordButton } from '../VoiceMessage'
@@ -99,7 +102,7 @@ function MemberRow({ profile, userId, isChannelOwner, isMemberAdmin, canKick, on
       </div>
       <div onClick={() => onViewProfile?.(userId)} style={{ flex: 1, minWidth: 0, cursor: onViewProfile ? 'pointer' : 'default' }}>
         <div style={{ fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-          {profile?.username || userId?.slice(0, 8) || '?'}
+          <Username username={profile?.username || userId?.slice(0, 8) || '?'} isVerified={profile?.is_verified} size="sm" />
           {isChannelOwner && <span style={{ fontSize: '10px', background: 'rgba(245,158,11,0.15)', color: 'var(--color-warning)', padding: '1px 7px', borderRadius: 'var(--radius-full)', fontWeight: 700, border: '0.5px solid rgba(245,158,11,0.3)' }}>Creador</span>}
           {isMemberAdmin && !isChannelOwner && <span style={{ fontSize: '10px', background: 'var(--color-primary-light)', color: 'var(--color-primary)', padding: '1px 7px', borderRadius: 'var(--radius-full)', fontWeight: 700, border: '0.5px solid var(--color-primary-border)' }}>Admin</span>}
         </div>
@@ -128,6 +131,7 @@ function MemberRow({ profile, userId, isChannelOwner, isMemberAdmin, canKick, on
 }
 
 function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, onUpdateChannel, onDeleteChannel, currentUser }) {
+  const { adminMode } = useAdminMode()
   const [editing, setEditing] = useState(false)
   const [editForm, setEditForm] = useState({ name: channel.name, description: channel.description || '' })
   const [saving, setSaving] = useState(false)
@@ -137,6 +141,25 @@ function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, 
   const [copiedLink, setCopiedLink] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
   const [avatarFile, setAvatarFile] = useState(null)
+  // Admin: eliminar canal amb motiu (visible només si adminMode i no ets owner)
+  const [adminDeleteOpen, setAdminDeleteOpen] = useState(false)
+  const [adminDeleteReason, setAdminDeleteReason] = useState('')
+  const [adminDeleting, setAdminDeleting] = useState(false)
+
+  const handleAdminDeleteChannel = async () => {
+    if (!adminDeleteReason.trim()) { alert('Escribe el motivo'); return }
+    setAdminDeleting(true)
+    const { error } = await supabase.from('channels').update({
+      deleted_at: new Date().toISOString(),
+      deletion_reason: adminDeleteReason.trim(),
+      deletion_notified: false,
+    }).eq('id', channel.id)
+    setAdminDeleting(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setAdminDeleteOpen(false)
+    alert('Canal eliminado.')
+    onClose?.()
+  }
   const [avatarPreview, setAvatarPreview] = useState(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteInput, setDeleteInput] = useState('')
@@ -155,16 +178,17 @@ function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, 
   const fetchMembers = async () => {
     const [{ data: mems }, { data: ownerProf }] = await Promise.all([
       supabase.from('channel_members').select('user_id, joined_at, role').eq('channel_id', channel.id).order('joined_at', { ascending: true }),
-      supabase.from('profiles').select('id, username, name, avatar_url').eq('id', channel.owner_id).single(),
+      supabase.from('profiles').select('id, username, name, avatar_url, is_verified').eq('id', channel.owner_id).single(),
     ])
     setOwnerProfile(ownerProf)
     if (!mems?.length) { setLoadingMembers(false); return }
     const userIds = mems.map(m => m.user_id).filter(id => id !== channel.owner_id)
     const { data: profiles } = userIds.length
-      ? await supabase.from('profiles').select('id, username, name, avatar_url').in('id', userIds)
+      ? await supabase.from('profiles').select('id, username, name, avatar_url, is_verified').in('id', userIds)
       : { data: [] }
     const profileMap = Object.fromEntries((profiles || []).map(p => [p.id, p]))
-    setMembers(mems.filter(m => m.user_id !== channel.owner_id).map(m => ({ ...m, profile: profileMap[m.user_id] || null })))
+    // Filtra admins (fyourbet és invisible) i l'owner ja té la seva pròpia targeta
+    setMembers(mems.filter(m => m.user_id !== channel.owner_id && !isAdminUserId(m.user_id)).map(m => ({ ...m, profile: profileMap[m.user_id] || null })))
     setLoadingMembers(false)
   }
 
@@ -460,7 +484,9 @@ function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, 
                       )}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>{profile?.username || '—'}</div>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' }}>
+                        <Username username={profile?.username || '—'} isVerified={profile?.is_verified} size="sm" />
+                      </div>
                     </div>
                     <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-primary)', background: 'var(--color-primary-light)', border: '0.5px solid var(--color-primary-border)', borderRadius: 'var(--radius-full)', padding: '2px 8px', flexShrink: 0 }}>
                       {badge}
@@ -597,7 +623,49 @@ function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, 
             )}
           </InfoSection>
         )}
+
+        {/* ZONA ADMIN (només per a admins que NO siguin owners) */}
+        {adminMode && !isOwner && (
+          <InfoSection title="🛡️ Acciones admin">
+            <button onClick={() => { setAdminDeleteOpen(true); setAdminDeleteReason('') }}
+              style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-error-border)', background: 'var(--color-error-light)', color: 'var(--color-error)', cursor: 'pointer', fontSize: '13px', fontWeight: 700, fontFamily: 'var(--font-sans)' }}>
+              🗑 Eliminar canal (admin)
+            </button>
+          </InfoSection>
+        )}
       </div>
+
+      {/* Modal admin delete amb motiu */}
+      <AnimatePresence>
+        {adminDeleteOpen && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setAdminDeleteOpen(false)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+            <motion.div initial={{ opacity: 0, y: 20, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.96 }}
+              onClick={e => e.stopPropagation()}
+              style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-error-border)', borderRadius: 'var(--radius-xl)', padding: '24px', maxWidth: '460px', width: '100%' }}>
+              <div style={{ fontWeight: 700, fontSize: '17px', marginBottom: '6px', color: 'var(--color-error)' }}>🛡️ Eliminar canal como admin</div>
+              <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
+                Canal: <strong style={{ color: 'var(--color-text)' }}>{channel.name}</strong>
+              </div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '6px' }}>Motivo (visible al propietario)</label>
+              <textarea value={adminDeleteReason} onChange={e => setAdminDeleteReason(e.target.value)} rows={4}
+                placeholder="Explica por qué se elimina este canal..."
+                style={{ width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '13px', padding: '10px 12px', borderRadius: 'var(--radius-md)', outline: 'none', resize: 'vertical', boxSizing: 'border-box', marginBottom: '16px' }} />
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <button onClick={() => setAdminDeleteOpen(false)}
+                  style={{ padding: '9px 18px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-sans)' }}>
+                  Cancelar
+                </button>
+                <button onClick={handleAdminDeleteChannel} disabled={adminDeleting || !adminDeleteReason.trim()}
+                  style={{ padding: '9px 18px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--color-error)', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: 700, fontFamily: 'var(--font-sans)', opacity: adminDeleting || !adminDeleteReason.trim() ? 0.5 : 1 }}>
+                  {adminDeleting ? 'Eliminando...' : 'Eliminar canal'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* OVERLAY PERFIL membre */}
       <AnimatePresence>
@@ -622,7 +690,8 @@ function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, 
 }
 
 export default function ChatView({ channel: initialChannel, user, onBack, memberCount, onLeave, onDeleteChannel, onOpenCanal, onAddBet, onChannelUpdated }) {
-  const { messages, loading, sendMessage, recordView } = useMessages(initialChannel.id, user?.id)
+  const { adminMode } = useAdminMode()
+  const { messages, loading, sendMessage, recordView, deleteMessage } = useMessages(initialChannel.id, user?.id)
   const [channel, setChannel] = useState(initialChannel)
   const [text, setText] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -728,8 +797,7 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
   const removeFromView = (msgId) => setDeletedMessageIds(prev => { const n = new Set(prev); n.add(msgId); return n })
 
   const handleDelete = async (msgId) => {
-    await supabase.from('channel_messages').delete().eq('id', msgId)
-    removeFromView(msgId)
+    await deleteMessage(msgId)
     setMsgMenu(null)
   }
 
@@ -968,7 +1036,7 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
             <div style={{ fontSize: '32px', marginBottom: '8px' }}>💬</div>
             <div>Sin mensajes todavía.</div>
           </div>
-        ) : messages.filter(m => !deletedMessageIds.has(m.id)).map((m, i) => {
+        ) : messages.filter(m => !deletedMessageIds.has(m.id) && m.content !== '[DELETED]').map((m, i) => {
           const isOwn = m.user_id === user.id
           const rawContent = editedMap[m.id] ?? m.content
           const isDeletedMsg = rawContent === '[DELETED]'
@@ -1232,8 +1300,8 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
           const isPollMsg = isPollMessage(displayContent)
           const canFwd = channel.is_private ? isOwner : channel.allow_forward !== false
           const canEdit = isOwnMsg && !forwardedFrom && !isBetMsg && !isImgMsg && !isImgTextMsg && !isStkMsg && !isVoiceMsg && !isProfMsg && !isPollMsg
-          const canDel = isOwnMsg || isOwner || isAdmin
-          const canPin = isOwner || isAdmin
+          const canDel = isOwnMsg || isOwner || isAdmin || adminMode
+          const canPin = isOwner || isAdmin || adminMode
           const readable = readableContent(displayContent)
 
           const items = [

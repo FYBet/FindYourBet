@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../../../lib/supabase'
+import { isAdminUserId } from '../../../../lib/adminUsers'
 
 const MAX_OWN_CHANNELS = 5
 const MAX_JOINED_CHANNELS = 30
@@ -51,7 +52,8 @@ export function useChannels(user) {
       if (allChannels.length) {
         const channelIds = allChannels.map(c => c.id)
         const [{ data: mems }, lastMsgResults] = await Promise.all([
-          supabase.from('channel_members').select('channel_id').in('channel_id', channelIds),
+          // Inclou user_id per poder filtrar admins (fyourbet és invisible al recompte)
+          supabase.from('channel_members').select('channel_id, user_id').in('channel_id', channelIds),
           Promise.all(channelIds.map(id =>
             supabase.from('channel_messages')
               .select('content, created_at')
@@ -62,8 +64,16 @@ export function useChannels(user) {
               .then(({ data }) => ({ id, data }))
           )),
         ])
-        for (const m of mems || []) counts[m.channel_id] = (counts[m.channel_id] || 0) + 1
-        for (const c of allChannels) counts[c.id] = (counts[c.id] || 0) + 1
+        // Exclou admins del recompte de membres (fyourbet és "fantasma")
+        for (const m of mems || []) {
+          if (isAdminUserId(m.user_id)) continue
+          counts[m.channel_id] = (counts[m.channel_id] || 0) + 1
+        }
+        // +1 per a l'owner (sempre compta, però si l'owner fos admin no comptaria)
+        for (const c of allChannels) {
+          if (isAdminUserId(c.owner_id)) continue
+          counts[c.id] = (counts[c.id] || 0) + 1
+        }
         setLastMessages(Object.fromEntries(lastMsgResults.map(r => [r.id, r.data])))
       }
       setMemberCounts(counts)
@@ -147,13 +157,14 @@ export function useChannels(user) {
     setMyChannels(prev => prev.filter(c => c.id !== channelId))
   }
 
-  const searchChannels = async (query, { sport = '', language = '', sortBy = 'score' } = {}) => {
+  const searchChannels = async (query, { sport = '', language = '', sortBy = 'score', includePrivate = false } = {}) => {
     let q = supabase.from('channels')
       .select('*')
-      .eq('is_private', false)
       .is('deleted_at', null)
       .ilike('name', query.trim() ? `%${query}%` : '%')
       .limit(20)
+    // En mode normal només canals públics; en mode admin inclou privats/VIP/stakazo
+    if (!includePrivate) q = q.eq('is_private', false)
 
     if (sport)    q = q.eq('sport', sport)
     if (language) q = q.eq('language', language)
@@ -165,15 +176,24 @@ export function useChannels(user) {
     const ownerIds = [...new Set(channels.map(c => c.owner_id))]
 
     const [{ data: rawMems }, { data: profiles }, { data: bets }] = await Promise.all([
-      supabase.from('channel_members').select('channel_id').in('channel_id', channelIds),
+      // Inclou user_id per filtrar admins del recompte
+      supabase.from('channel_members').select('channel_id, user_id').in('channel_id', channelIds),
       supabase.from('profiles').select('id, username, name, avatar_url').in('id', ownerIds),
       supabase.from('bets').select('user_id, status, stake, odds')
         .in('user_id', ownerIds).in('status', ['won', 'lost']).limit(500),
     ])
 
     const memberMap = {}
-    for (const m of rawMems || []) memberMap[m.channel_id] = (memberMap[m.channel_id] || 0) + 1
-    for (const id of channelIds) memberMap[id] = (memberMap[id] || 0) + 1 // +1 propietari
+    for (const m of rawMems || []) {
+      if (isAdminUserId(m.user_id)) continue
+      memberMap[m.channel_id] = (memberMap[m.channel_id] || 0) + 1
+    }
+    // +1 propietari (excepte si l'owner és admin)
+    const ownerMap = Object.fromEntries(channels.map(c => [c.id, c.owner_id]))
+    for (const id of channelIds) {
+      if (isAdminUserId(ownerMap[id])) continue
+      memberMap[id] = (memberMap[id] || 0) + 1
+    }
     const profileMap = Object.fromEntries((profiles || []).map(p => [p.id, p]))
 
     const statsMap = {}

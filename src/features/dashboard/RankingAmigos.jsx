@@ -4,6 +4,7 @@ import { fadeUp, stagger } from '../../lib/animations'
 import { supabase } from '../../lib/supabase'
 import { useRanking, MIN_BETS, SPORT_ICONS } from './Ranking'
 import { useProfileNav } from '../../contexts/ProfileNavContext'
+import Username from '../../components/ui/Username'
 import './dashboard.css'
 
 const PERIODS = [
@@ -114,7 +115,9 @@ export default function RankingAmigos({ user }) {
 
                 <div className="tipster-info-rank">
                   <div className="tipster-name-rank" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                    <span onClick={() => openProfile(t.userId)} style={{ cursor: 'pointer' }}>{t.username}</span>
+                    <span onClick={() => openProfile(t.userId)} style={{ cursor: 'pointer' }}>
+                      <Username username={t.username} isVerified={t.isVerified} size="sm" />
+                    </span>
                     {user?.id === t.userId && (
                       <span style={{ fontSize: '10px', background: 'var(--color-primary-light)', color: 'var(--color-primary)', padding: '2px 8px', borderRadius: 'var(--radius-full)', border: '0.5px solid var(--color-primary-border)', fontWeight: 600 }}>
                         Tu

@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { fadeUp } from '../../../lib/animations'
+import { supabase } from '../../../lib/supabase'
 import { useMutes, MUTE_DURATIONS } from '../../../hooks/useMutes'
+import { useAdminMode } from '../../../contexts/AdminModeContext'
 
 function timeAgo(ts) {
   if (!ts) return ''
@@ -61,10 +63,29 @@ function MuteMenu({ muteKey, isMuted, muteLabel, onMute, onUnmute, onClose }) {
   )
 }
 
-export default function ChannelCard({ channel, onClick, onLeave, onDelete, isOwner, memberCount, lastMessage, hasUnread = false }) {
+export default function ChannelCard({ channel, onClick, onLeave, onDelete, onAdminDeleted, isOwner, memberCount, lastMessage, unreadCount = 0 }) {
+  const { adminMode } = useAdminMode()
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleteInput, setDeleteInput] = useState('')
   const [showMuteMenu, setShowMuteMenu] = useState(false)
+  const [showAdminDelete, setShowAdminDelete] = useState(false)
+  const [adminReason, setAdminReason] = useState('')
+  const [deleting, setDeleting] = useState(false)
+
+  const handleAdminDelete = async () => {
+    if (!adminReason.trim()) { alert('Escribe el motivo de la eliminación'); return }
+    setDeleting(true)
+    const { error } = await supabase.from('channels').update({
+      deleted_at: new Date().toISOString(),
+      deletion_reason: adminReason.trim(),
+      deletion_notified: false,
+    }).eq('id', channel.id)
+    setDeleting(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setShowAdminDelete(false)
+    setAdminReason('')
+    onAdminDeleted?.(channel.id)
+  }
   const { mute, unmute, isMuted, muteLabel } = useMutes()
   const muteKey = `channel_${channel.id}`
   const muted = isMuted(muteKey)
@@ -108,12 +129,18 @@ export default function ChannelCard({ channel, onClick, onLeave, onDelete, isOwn
       style={{ background: 'var(--color-bg)', border: `0.5px solid ${isOwner ? 'var(--color-primary-border)' : 'var(--color-border)'}`, borderRadius: 'var(--radius-lg)', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
 
       <div onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, cursor: 'pointer', minWidth: 0 }}>
-        <div style={{ width: '42px', height: '42px', background: isOwner ? 'var(--color-primary-light)' : 'var(--color-bg-soft)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '17px', fontWeight: 700, color: isOwner ? 'var(--color-primary)' : 'var(--color-text-muted)', flexShrink: 0, border: '0.5px solid var(--color-border)', overflow: 'hidden', opacity: muted ? 0.6 : 1 }}>
-          {channel.avatar_url ? <img src={channel.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : channel.name[0].toUpperCase()}
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <div style={{ width: '42px', height: '42px', background: isOwner ? 'var(--color-primary-light)' : 'var(--color-bg-soft)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '17px', fontWeight: 700, color: isOwner ? 'var(--color-primary)' : 'var(--color-text-muted)', border: '0.5px solid var(--color-border)', overflow: 'hidden', opacity: muted ? 0.6 : 1 }}>
+            {channel.avatar_url ? <img src={channel.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : channel.name[0].toUpperCase()}
+          </div>
+          {unreadCount > 0 && !muted && (
+            <div style={{ position: 'absolute', top: '-2px', right: '-2px', minWidth: '18px', height: '18px', background: 'var(--color-error)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 700, color: '#fff', border: '2px solid var(--color-bg)', padding: '0 3px', boxSizing: 'border-box' }}>
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </div>
+          )}
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontWeight: 700, fontSize: '15px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', opacity: muted ? 0.6 : 1 }}>
-            {hasUnread && !muted && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-error)', flexShrink: 0, display: 'inline-block' }} />}
             {channel.name}
             {/* Badge de tipus de canal VIP — mostra el preu si en té */}
             {channel.channel_type === 'vip_monthly' && (
@@ -178,6 +205,47 @@ export default function ChannelCard({ channel, onClick, onLeave, onDelete, isOwn
           Salir
         </button>
       )}
+
+      {/* Botó admin: eliminar amb motiu (només visible en mode admin i si NO ets l'owner — l'owner ja té el seu) */}
+      {adminMode && !isOwner && (
+        <button onClick={(e) => { e.stopPropagation(); setShowAdminDelete(true); setAdminReason('') }}
+          title="Eliminar como admin"
+          style={{ fontSize: '14px', padding: '5px 10px', border: '0.5px solid var(--color-error-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-error-light)', color: 'var(--color-error)', cursor: 'pointer', flexShrink: 0, marginLeft: '6px' }}>
+          🛡️
+        </button>
+      )}
+
+      {/* Modal admin delete amb motiu */}
+      <AnimatePresence>
+        {showAdminDelete && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setShowAdminDelete(false)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+            <motion.div initial={{ opacity: 0, y: 20, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.96 }}
+              onClick={e => e.stopPropagation()}
+              style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-error-border)', borderRadius: 'var(--radius-xl)', padding: '24px', maxWidth: '460px', width: '100%' }}>
+              <div style={{ fontWeight: 700, fontSize: '17px', marginBottom: '6px', color: 'var(--color-error)' }}>🛡️ Eliminar canal como admin</div>
+              <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
+                Canal: <strong style={{ color: 'var(--color-text)' }}>{channel.name}</strong>
+              </div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '6px' }}>Motivo (visible al propietario)</label>
+              <textarea value={adminReason} onChange={e => setAdminReason(e.target.value)} rows={4}
+                placeholder="Explica por qué se elimina este canal..."
+                style={{ width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '13px', padding: '10px 12px', borderRadius: 'var(--radius-md)', outline: 'none', resize: 'vertical', boxSizing: 'border-box', marginBottom: '16px' }} />
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <button onClick={() => setShowAdminDelete(false)}
+                  style={{ padding: '9px 18px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-sans)' }}>
+                  Cancelar
+                </button>
+                <button onClick={handleAdminDelete} disabled={deleting || !adminReason.trim()}
+                  style={{ padding: '9px 18px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--color-error)', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: 700, fontFamily: 'var(--font-sans)', opacity: deleting || !adminReason.trim() ? 0.5 : 1 }}>
+                  {deleting ? 'Eliminando...' : 'Eliminar canal'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }

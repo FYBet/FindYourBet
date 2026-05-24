@@ -4,6 +4,9 @@ import { supabase } from '../../../lib/supabase'
 import PostModal from '../feed/PostModal'
 import FollowListModal from './FollowListModal'
 import { useMutes, MUTE_DURATIONS } from '../../../hooks/useMutes'
+import Username from '../../../components/ui/Username'
+import { useAdminMode } from '../../../contexts/AdminModeContext'
+import { generateUniqueUsername } from '../../../lib/randomUsername'
 
 function Avatar({ url, name, size = 80, fontSize = 32 }) {
   const [imgError, setImgError] = useState(false)
@@ -28,6 +31,7 @@ function StatPill({ label, value, color, onClick }) {
 }
 
 export default function ProfileView({ userId, currentUser, onBack, onStartDM, isFollowing, isFollower, onFollow, onUnfollow, onNavigateToChannel, onBlock, onReport, onViewUser }) {
+  const { adminMode } = useAdminMode()
   const [profile, setProfile] = useState(null)
   const [bets, setBets] = useState([])
   const [loading, setLoading] = useState(true)
@@ -51,6 +55,93 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
   const { mute, unmute, isMuted, muteLabel } = useMutes()
   const muteKey = `user_${userId}`
   const muted = isMuted(muteKey)
+
+  // Admin actions
+  const [showAdminWarning, setShowAdminWarning] = useState(false)
+  const [adminWarningText, setAdminWarningText] = useState('')
+  const [showAdminBan, setShowAdminBan] = useState(false)
+  const [adminBanReason, setAdminBanReason] = useState('')
+  const [adminBusy, setAdminBusy] = useState(false)
+  // Modal de reset de username
+  const [showResetUsername, setShowResetUsername] = useState(false)
+  const [banOldName, setBanOldName] = useState(false)
+
+  // Admin: reseteja el nom d'usuari a un random + permet a l'usuari canviar-lo 1 cop sense cooldown
+  const handleResetUsername = async () => {
+    if (!profile?.username) return
+    setAdminBusy(true)
+    try {
+      const oldUsername = profile.username
+      const newUsername = await generateUniqueUsername()
+      // Missatge "oficial" — apareix al modal one-time al pròxim login (camp admin_warning)
+      const noticeText = `Tu nombre de usuario anterior ha sido cambiado a @${newUsername} por el equipo de FYB porque no cumplía con las normas de la comunidad. Puedes elegir un nuevo nombre de inmediato desde tu perfil, sin esperar el período habitual de 7 días.`
+      const { error } = await supabase.from('profiles').update({
+        username: newUsername,
+        username_reset_pending: true,
+        username_changed_at: new Date().toISOString(),
+        admin_warning: noticeText,
+        warning_notified: false,
+      }).eq('id', userId)
+      if (error) { alert('Error: ' + error.message); return }
+
+      if (banOldName) {
+        // Bany permanent del nom — ningú podrà tornar-lo a fer servir
+        supabase.from('banned_usernames').upsert({
+          username: oldUsername.toLowerCase(),
+          reason: 'Reset admin sobre @' + oldUsername,
+        }).then().catch(() => {})
+      } else {
+        // Reserva temporal (7 dies) per evitar que un altre l'agafi tot d'una
+        supabase.from('username_reservations').insert({
+          user_id: userId,
+          username: oldUsername,
+          expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
+        }).then().catch(() => {})
+      }
+
+      setProfile(prev => prev ? { ...prev, username: newUsername, username_reset_pending: true } : prev)
+      setShowResetUsername(false)
+      setBanOldName(false)
+      alert(`Nombre cambiado a @${newUsername}.${banOldName ? `\n\nEl nombre @${oldUsername} ha sido baneado.` : ''}\n\nEl usuario recibirá una notificación al conectarse.`)
+    } finally {
+      setAdminBusy(false)
+    }
+  }
+
+  const handleSendWarning = async () => {
+    if (!adminWarningText.trim()) { alert('Escribe el aviso'); return }
+    setAdminBusy(true)
+    const { error } = await supabase.from('profiles').update({
+      admin_warning: adminWarningText.trim(),
+      warning_notified: false,
+    }).eq('id', userId)
+    setAdminBusy(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setShowAdminWarning(false)
+    setAdminWarningText('')
+    alert('Aviso enviado. El usuario lo verá la próxima vez que se conecte.')
+  }
+
+  const handleBanUser = async () => {
+    if (!adminBanReason.trim()) { alert('Escribe el motivo del baneo'); return }
+    if (!confirm(`¿Confirmar baneo de @${profile?.username}? Esta acción bloquea su cuenta y email.`)) return
+    setAdminBusy(true)
+    const email = profile?.email || profile?.username  // si no tenim email al profile, intentem amb el username
+    const [{ error: e1 }, { error: e2 }] = await Promise.all([
+      supabase.from('profiles').update({
+        banned: true,
+        banned_reason: adminBanReason.trim(),
+      }).eq('id', userId),
+      profile?.email
+        ? supabase.from('banned_emails').upsert({ email: profile.email.toLowerCase(), reason: adminBanReason.trim() })
+        : Promise.resolve({ error: null }),
+    ])
+    setAdminBusy(false)
+    if (e1 || e2) { alert('Error: ' + (e1?.message || e2?.message)); return }
+    setShowAdminBan(false)
+    setAdminBanReason('')
+    alert(`Usuario @${profile?.username} baneado.`)
+  }
   const [showMuteMenu, setShowMuteMenu] = useState(false)
 
   // 3-dot menu
@@ -117,8 +208,10 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
     if (loadingChannels) return
     setLoadingChannels(true)
     try {
-      const { data: chans } = await supabase.from('channels')
-        .select('*').eq('owner_id', userId).eq('is_private', false).is('deleted_at', null)
+      // En mode admin, mostra TOTS els canals (privats, VIP, stakazo). En mode normal només públics.
+      let q = supabase.from('channels').select('*').eq('owner_id', userId).is('deleted_at', null)
+      if (!adminMode) q = q.eq('is_private', false)
+      const { data: chans } = await q
       if (!chans?.length) { setChannels([]); return }
       const { data: mems } = await supabase
         .from('channel_members').select('channel_id')
@@ -179,12 +272,12 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
       // DM conversations amb perfil de l'altre
       if (convData?.length) {
         const otherIds = convData.map(c => c.user1_id === currentUser.id ? c.user2_id : c.user1_id)
-        const { data: profiles } = await supabase.from('profiles').select('id, username, name, avatar_url').in('id', otherIds)
+        const { data: profiles } = await supabase.from('profiles').select('id, username, name, avatar_url, is_verified').in('id', otherIds)
         const profMap = Object.fromEntries((profiles || []).map(p => [p.id, p]))
         setSendConvs(convData.map(c => {
           const otherId = c.user1_id === currentUser.id ? c.user2_id : c.user1_id
           const p = profMap[otherId] || {}
-          return { id: c.id, otherId, username: p.username || '?', name: p.name || '', avatarUrl: p.avatar_url || null }
+          return { id: c.id, otherId, username: p.username || '?', name: p.name || '', avatarUrl: p.avatar_url || null, isVerified: p.is_verified || false }
         }))
       } else {
         setSendConvs([])
@@ -340,11 +433,8 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
             </div>
           </div>
 
-          <div style={{ fontWeight: 700, fontSize: '22px', marginBottom: profile.bio ? '8px' : '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {username}
-            {profile.is_verified && (
-              <span title="Verificado" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', borderRadius: '50%', background: 'var(--color-primary)', color: '#010906', fontSize: '11px', fontWeight: 900, flexShrink: 0 }}>✓</span>
-            )}
+          <div style={{ fontWeight: 700, fontSize: '22px', marginBottom: profile.bio ? '8px' : '16px' }}>
+            <Username username={username} isVerified={profile.is_verified} size="xl" />
           </div>
           {profile.bio && (
             <div style={{ fontSize: '14px', color: 'var(--color-text-soft)', marginBottom: '16px', lineHeight: 1.5 }}>{profile.bio}</div>
@@ -410,6 +500,133 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
           </div>
         </div>
       )}
+
+      {/* Accions admin (només visibles en mode admin i en perfils que no siguin el propi) */}
+      {adminMode && !isOwnProfile && (
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', padding: '10px 14px', background: 'rgba(239,68,68,0.08)', border: '0.5px solid var(--color-error-border)', borderRadius: 'var(--radius-md)' }}>
+          <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-error)', alignSelf: 'center', marginRight: 'auto' }}>🛡️ MODO ADMIN</span>
+          <button onClick={() => { setBanOldName(false); setShowResetUsername(true) }} disabled={adminBusy}
+            title="Cambiar a nombre aleatorio"
+            style={{ padding: '6px 14px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '12px', fontWeight: 700, fontFamily: 'var(--font-sans)', opacity: adminBusy ? 0.5 : 1 }}>
+            🎲 Resetear nombre
+          </button>
+          <button onClick={() => setShowAdminWarning(true)}
+            style={{ padding: '6px 14px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-warning)', background: 'transparent', color: 'var(--color-warning)', cursor: 'pointer', fontSize: '12px', fontWeight: 700, fontFamily: 'var(--font-sans)' }}>
+            ⚠️ Enviar aviso
+          </button>
+          {!profile?.banned && (
+            <button onClick={() => setShowAdminBan(true)}
+              style={{ padding: '6px 14px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--color-error)', color: '#fff', cursor: 'pointer', fontSize: '12px', fontWeight: 700, fontFamily: 'var(--font-sans)' }}>
+              🚫 Banear usuario
+            </button>
+          )}
+          {profile?.banned && (
+            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-error)', alignSelf: 'center' }}>BANEADO</span>
+          )}
+        </div>
+      )}
+
+      {/* Modal: enviar avís */}
+      <AnimatePresence>
+        {showAdminWarning && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setShowAdminWarning(false)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+            <motion.div initial={{ opacity: 0, y: 20, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.96 }}
+              onClick={e => e.stopPropagation()}
+              style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-warning)', borderRadius: 'var(--radius-xl)', padding: '24px', maxWidth: '460px', width: '100%' }}>
+              <div style={{ fontWeight: 700, fontSize: '17px', marginBottom: '6px', color: 'var(--color-warning)' }}>⚠️ Enviar aviso a @{profile?.username}</div>
+              <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
+                El usuario verá este aviso como modal la próxima vez que se conecte.
+              </div>
+              <textarea value={adminWarningText} onChange={e => setAdminWarningText(e.target.value)} rows={5}
+                placeholder="Texto del aviso..."
+                style={{ width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '13px', padding: '10px 12px', borderRadius: 'var(--radius-md)', outline: 'none', resize: 'vertical', boxSizing: 'border-box', marginBottom: '16px' }} />
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <button onClick={() => setShowAdminWarning(false)}
+                  style={{ padding: '9px 18px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-sans)' }}>
+                  Cancelar
+                </button>
+                <button onClick={handleSendWarning} disabled={adminBusy || !adminWarningText.trim()}
+                  style={{ padding: '9px 18px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--color-warning)', color: '#010906', cursor: 'pointer', fontSize: '13px', fontWeight: 700, fontFamily: 'var(--font-sans)', opacity: adminBusy || !adminWarningText.trim() ? 0.5 : 1 }}>
+                  {adminBusy ? 'Enviando...' : 'Enviar aviso'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal: banejar */}
+      <AnimatePresence>
+        {showAdminBan && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setShowAdminBan(false)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+            <motion.div initial={{ opacity: 0, y: 20, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.96 }}
+              onClick={e => e.stopPropagation()}
+              style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-error-border)', borderRadius: 'var(--radius-xl)', padding: '24px', maxWidth: '460px', width: '100%' }}>
+              <div style={{ fontWeight: 700, fontSize: '17px', marginBottom: '6px', color: 'var(--color-error)' }}>🚫 Banear a @{profile?.username}</div>
+              <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
+                Bloqueja el seu compte i email. No podrà entrar ni re-registrar-se.
+              </div>
+              <textarea value={adminBanReason} onChange={e => setAdminBanReason(e.target.value)} rows={4}
+                placeholder="Motivo del baneo..."
+                style={{ width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '13px', padding: '10px 12px', borderRadius: 'var(--radius-md)', outline: 'none', resize: 'vertical', boxSizing: 'border-box', marginBottom: '16px' }} />
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <button onClick={() => setShowAdminBan(false)}
+                  style={{ padding: '9px 18px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-sans)' }}>
+                  Cancelar
+                </button>
+                <button onClick={handleBanUser} disabled={adminBusy || !adminBanReason.trim()}
+                  style={{ padding: '9px 18px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--color-error)', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: 700, fontFamily: 'var(--font-sans)', opacity: adminBusy || !adminBanReason.trim() ? 0.5 : 1 }}>
+                  {adminBusy ? 'Baneando...' : 'Banear usuario'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal: resetejar nom d'usuari amb opció de banejar el nom antic */}
+      <AnimatePresence>
+        {showResetUsername && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setShowResetUsername(false)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 320, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+            <motion.div initial={{ opacity: 0, y: 20, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.96 }}
+              onClick={e => e.stopPropagation()}
+              style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-xl)', padding: '24px', maxWidth: '460px', width: '100%' }}>
+              <div style={{ fontWeight: 700, fontSize: '17px', marginBottom: '6px' }}>🎲 Resetear nombre de @{profile?.username}</div>
+              <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px', lineHeight: 1.5 }}>
+                Se generará un nombre aleatorio. El usuario verá un aviso al conectarse y podrá elegir un nuevo nombre sin esperar 7 días.
+              </div>
+
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px 14px', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', cursor: 'pointer', marginBottom: '20px' }}>
+                <input type="checkbox" checked={banOldName} onChange={e => setBanOldName(e.target.checked)}
+                  style={{ marginTop: '2px', cursor: 'pointer', accentColor: 'var(--color-error)' }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text)' }}>Banear el nombre @{profile?.username}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '3px', lineHeight: 1.4 }}>
+                    Nadie podrá volver a usarlo. Útil si el nombre es ofensivo o suplanta a otra persona.
+                  </div>
+                </div>
+              </label>
+
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <button onClick={() => setShowResetUsername(false)}
+                  style={{ padding: '9px 18px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-sans)' }}>
+                  Cancelar
+                </button>
+                <button onClick={handleResetUsername} disabled={adminBusy}
+                  style={{ padding: '9px 18px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--color-text)', color: 'var(--color-bg)', cursor: 'pointer', fontSize: '13px', fontWeight: 700, fontFamily: 'var(--font-sans)', opacity: adminBusy ? 0.5 : 1 }}>
+                  {adminBusy ? 'Procesando...' : 'Resetear nombre'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* TABS */}
       <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', borderBottom: '0.5px solid var(--color-border)' }}>
@@ -611,7 +828,9 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
                         {c.avatarUrl ? <img src={c.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (c.username || '?')[0].toUpperCase()}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, fontSize: '13px' }}>{c.username}</div>
+                        <div style={{ fontWeight: 600, fontSize: '13px' }}>
+                          <Username username={c.username} isVerified={c.isVerified} size="sm" />
+                        </div>
                       </div>
                       <button onClick={() => handleSendProfileTo('dm', c.id, c.username)} disabled={sentSet.has(c.id)}
                         style={{ background: sentSet.has(c.id) ? 'var(--color-primary-light)' : 'var(--color-primary)', color: sentSet.has(c.id) ? 'var(--color-primary)' : '#010906', border: 'none', borderRadius: 'var(--radius-md)', padding: '6px 14px', cursor: sentSet.has(c.id) ? 'default' : 'pointer', fontSize: '12px', fontWeight: 700, fontFamily: 'var(--font-sans)', flexShrink: 0, transition: 'all 0.2s' }}>

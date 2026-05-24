@@ -4,6 +4,8 @@ import { supabase } from '../../../lib/supabase'
 import { insertNotification } from '../notifications/useNotifications'
 import ForwardModal from '../social/ForwardModal'
 import { useProfileNav } from '../../../contexts/ProfileNavContext'
+import Username from '../../../components/ui/Username'
+import { useAdminMode } from '../../../contexts/AdminModeContext'
 
 function timeAgo(ts) {
   if (!ts) return ''
@@ -48,7 +50,7 @@ function CommentItem({ comment, likeInfo, onLike, onReply, isReply, reported, on
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '2px', flexWrap: 'wrap' }}>
           <span onClick={() => openProfile(comment.user_id)} style={{ fontSize: isReply ? '12px' : '13px', fontWeight: 700, cursor: 'pointer' }}>
-            {comment.profile?.username || 'usuario'}
+            <Username username={comment.profile?.username || 'usuario'} isVerified={comment.profile?.is_verified} size="sm" />
           </span>
           <span style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>
             {timeAgo(comment.created_at)} · {fmtTime(comment.created_at)}
@@ -129,7 +131,7 @@ async function fetchPostData(messageId, currentUserId) {
     { data: betRow },
   ] = await Promise.all([
     supabase.from('channels').select('id, name, invite_code, is_private, deleted_at, owner_id').eq('id', msg.channel_id).single(),
-    supabase.from('profiles').select('id, username, avatar_url').eq('id', msg.user_id).single(),
+    supabase.from('profiles').select('id, username, avatar_url, is_verified').eq('id', msg.user_id).single(),
     supabase.from('post_likes').select('user_id').eq('message_id', messageId),
     supabase.from('post_comments').select('id, user_id, content, created_at, parent_id').eq('message_id', messageId).order('created_at', { ascending: true }),
     supabase.from('post_likes').select('id').eq('message_id', messageId).eq('user_id', currentUserId).maybeSingle(),
@@ -140,7 +142,7 @@ async function fetchPostData(messageId, currentUserId) {
   const commentUserIds = [...new Set((comments || []).map(c => c.user_id))]
   let commentProfiles = []
   if (commentUserIds.length) {
-    const { data: cp } = await supabase.from('profiles').select('id, username, avatar_url').in('id', commentUserIds)
+    const { data: cp } = await supabase.from('profiles').select('id, username, avatar_url, is_verified').in('id', commentUserIds)
     commentProfiles = cp || []
   }
   const commentProfileMap = Object.fromEntries(commentProfiles.map(p => [p.id, p]))
@@ -189,7 +191,10 @@ async function fetchPostData(messageId, currentUserId) {
 
 export default function PostModal({ messageId: initialMessageId, betId, currentUser, onClose }) {
   const openProfile = useProfileNav()
+  const { adminMode } = useAdminMode()
   const [resolvedMessageId, setResolvedMessageId] = useState(initialMessageId || null)
+  const [showEditResult, setShowEditResult] = useState(false)
+  const [editStatus, setEditStatus] = useState('pending')
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [hasLiked, setHasLiked] = useState(false)
@@ -269,6 +274,32 @@ export default function PostModal({ messageId: initialMessageId, betId, currentU
     }
     load()
   }, [initialMessageId, betId, currentUser?.id])
+
+  // Admin: edita el resultat del pick (status: won/lost/pending)
+  const handleAdminEditResult = async () => {
+    const betId = data?.bet?.id
+    if (!betId || !editStatus) return
+    const { error } = await supabase.from('bets').update({ status: editStatus }).eq('id', betId)
+    if (error) { alert('Error: ' + error.message); return }
+    setData(prev => prev ? { ...prev, bet: { ...prev.bet, status: editStatus } } : prev)
+    setShowEditResult(false)
+    alert('Resultado actualizado.')
+  }
+
+  // Admin: elimina el pick (bet + missatge associat)
+  const handleAdminDeleteBet = async () => {
+    const betId = data?.bet?.id
+    if (!betId) return
+    if (!confirm('¿Eliminar este pick definitivamente? Las estadísticas se actualizarán.')) return
+    const { error: e1 } = await supabase.from('bets').delete().eq('id', betId)
+    if (e1) { alert('Error: ' + e1.message); return }
+    // També elimina el missatge del canal si existeix
+    if (data?.message?.id) {
+      await supabase.from('channel_messages').delete().eq('id', data.message.id)
+    }
+    alert('Pick eliminado.')
+    onClose?.()
+  }
 
   const handleLike = async () => {
     if (!data || !messageId) return
@@ -395,7 +426,9 @@ export default function PostModal({ messageId: initialMessageId, betId, currentU
                     : (data.posterProfile?.username || '?')[0].toUpperCase()}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div onClick={() => openProfile(data.message.user_id)} style={{ fontWeight: 700, fontSize: '14px', cursor: 'pointer', display: 'inline-block' }}>{data.posterProfile?.username || 'usuario'}</div>
+                  <div onClick={() => openProfile(data.message.user_id)} style={{ fontWeight: 700, fontSize: '14px', cursor: 'pointer', display: 'inline-block' }}>
+                    <Username username={data.posterProfile?.username || 'usuario'} isVerified={data.posterProfile?.is_verified} size="sm" />
+                  </div>
                   <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                     <span>{timeAgo(data.message.created_at)} · {fmtTime(data.message.created_at)}</span>
                     {data.channel && (
@@ -422,11 +455,23 @@ export default function PostModal({ messageId: initialMessageId, betId, currentU
                       <>
                         <div onClick={() => setShowMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 9 }} />
                         <motion.div initial={{ opacity: 0, scale: 0.95, y: -4 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
-                          style={{ position: 'absolute', top: '30px', right: 0, background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-md)', zIndex: 10, minWidth: '160px', overflow: 'hidden' }}>
+                          style={{ position: 'absolute', top: '30px', right: 0, background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-md)', zIndex: 10, minWidth: '180px', overflow: 'hidden' }}>
                           <button onClick={() => { setReported(true); setShowMenu(false); setTimeout(() => setReported(false), 3000) }}
                             style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '12px 16px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: reported ? 'var(--color-text-muted)' : 'var(--color-error)', fontFamily: 'var(--font-sans)', textAlign: 'left' }}>
                             <span>{reported ? '✓' : '🚩'}</span><span>{reported ? 'Reportado' : 'Reportar'}</span>
                           </button>
+                          {adminMode && data?.bet && (
+                            <>
+                              <button onClick={() => { setEditStatus(data.bet.status || 'pending'); setShowEditResult(true); setShowMenu(false) }}
+                                style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '12px 16px', background: 'none', border: 'none', borderTop: '0.5px solid var(--color-border)', cursor: 'pointer', fontSize: '13px', color: 'var(--color-warning)', fontFamily: 'var(--font-sans)', textAlign: 'left' }}>
+                                <span>✏️</span><span>Editar resultado (admin)</span>
+                              </button>
+                              <button onClick={() => { handleAdminDeleteBet(); setShowMenu(false) }}
+                                style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '12px 16px', background: 'none', border: 'none', borderTop: '0.5px solid var(--color-border)', cursor: 'pointer', fontSize: '13px', color: 'var(--color-error)', fontWeight: 700, fontFamily: 'var(--font-sans)', textAlign: 'left' }}>
+                                <span>🛡️</span><span>Eliminar pick (admin)</span>
+                              </button>
+                            </>
+                          )}
                         </motion.div>
                       </>
                     )}
@@ -657,6 +702,41 @@ export default function PostModal({ messageId: initialMessageId, betId, currentU
             currentUser={currentUser}
             onClose={() => setShowForward(false)}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Modal admin: editar resultat del pick */}
+      <AnimatePresence>
+        {showEditResult && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setShowEditResult(false)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 330, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+            <motion.div initial={{ opacity: 0, y: 20, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.96 }}
+              onClick={e => e.stopPropagation()}
+              style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-warning)', borderRadius: 'var(--radius-xl)', padding: '24px', maxWidth: '400px', width: '100%' }}>
+              <div style={{ fontWeight: 700, fontSize: '17px', marginBottom: '6px', color: 'var(--color-warning)' }}>✏️ Editar resultado (admin)</div>
+              <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
+                Las estadísticas del usuario y canal se recalcularán automáticamente.
+              </div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '6px' }}>Estado</label>
+              <select value={editStatus} onChange={e => setEditStatus(e.target.value)}
+                style={{ width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '14px', padding: '10px 12px', borderRadius: 'var(--radius-md)', outline: 'none', cursor: 'pointer', marginBottom: '16px' }}>
+                <option value="pending">⏳ Pendiente</option>
+                <option value="won">✓ Ganada</option>
+                <option value="lost">✗ Perdida</option>
+              </select>
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <button onClick={() => setShowEditResult(false)}
+                  style={{ padding: '9px 18px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-sans)' }}>
+                  Cancelar
+                </button>
+                <button onClick={handleAdminEditResult}
+                  style={{ padding: '9px 18px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--color-warning)', color: '#010906', cursor: 'pointer', fontSize: '13px', fontWeight: 700, fontFamily: 'var(--font-sans)' }}>
+                  Guardar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </>

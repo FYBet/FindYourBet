@@ -71,7 +71,7 @@ async function enrichMessages(messages, currentUserId) {
     { data: liveBets },
   ] = await Promise.all([
     supabase.from('channels').select('id, name, invite_code').in('id', channelIds),
-    supabase.from('profiles').select('id, username, name, avatar_url').in('id', userIds),
+    supabase.from('profiles').select('id, username, name, avatar_url, is_verified').in('id', userIds),
     supabase.from('post_likes').select('message_id').in('message_id', messageIds),
     supabase.from('post_comments').select('message_id').in('message_id', messageIds),
     supabase.from('post_likes').select('message_id').in('message_id', messageIds).eq('user_id', currentUserId),

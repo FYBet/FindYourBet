@@ -7,12 +7,15 @@ import { useChannels } from './hooks/useChannels'
 import ChannelCard from './ChannelCard'
 import ChatView from './ChatView'
 import PreviewView from './PreviewView'
+import { useAdminMode } from '../../../contexts/AdminModeContext'
+import { isAdminUserId } from '../../../lib/adminUsers'
 import '../dashboard.css'
 
 const inputStyle = { width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '14px', padding: '12px 14px', borderRadius: 'var(--radius-md)', outline: 'none', boxSizing: 'border-box' }
 const labelStyle = { display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-soft)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px' }
 
-export default function Canales({ user, initialCanalCode, onCanalCodeUsed, onAddBet, unreadChannelIds = new Set() }) {
+export default function Canales({ user, initialCanalCode, onCanalCodeUsed, onAddBet, unreadChannelCounts = new Map(), onMarkChannelRead }) {
+  const { adminMode } = useAdminMode()
   const { myChannels, joinedChannels, memberCounts, lastMessages, loading, createChannel, deleteChannel, updateChannel, searchChannels, findChannelByCode, joinChannel, leaveChannel, refetch, MAX_OWN_CHANNELS, MAX_JOINED_CHANNELS } = useChannels(user)
   const [activeChannel, setActiveChannel] = useState(null)
   const [activeMemberCount, setActiveMemberCount] = useState(0)
@@ -60,13 +63,16 @@ export default function Canales({ user, initialCanalCode, onCanalCodeUsed, onAdd
   const handleOpenChannel = (channel) => {
     setActiveMemberCount(memberCounts[channel.id] || 1)
     setActiveChannel(channel)
+    onMarkChannelRead?.(channel.id)
   }
 
   const handlePreviewChannel = async (channel) => {
-    const { count } = await supabase
-      .from('channel_members').select('*', { count: 'exact', head: true })
+    // Exclou admins (fyourbet) del recompte
+    const { data: mems } = await supabase
+      .from('channel_members').select('user_id')
       .eq('channel_id', channel.id)
-    setPreviewMemberCount((count || 0) + 1)
+    const count = (mems || []).filter(m => !isAdminUserId(m.user_id)).length
+    setPreviewMemberCount(count + (isAdminUserId(channel.owner_id) ? 0 : 1))
     setPreviewChannel(channel)
     setShowSearch(false)
     setSearchQuery('')
@@ -99,9 +105,20 @@ export default function Canales({ user, initialCanalCode, onCanalCodeUsed, onAdd
     setShowCreate(false)
   }
 
+  // Exclou canals on l'usuari ja és propietari o membre — no apareixen ni com a suggerits ni als resultats.
+  // En mode admin no es filtra res — pot veure tots els canals existents.
+  const filterOutJoined = (channels) => {
+    if (adminMode) return channels || []
+    const joinedIds = new Set([
+      ...(myChannels || []).map(c => c.id),
+      ...(joinedChannels || []).map(c => c.id),
+    ])
+    return (channels || []).filter(c => !joinedIds.has(c.id))
+  }
+
   const runSearch = async ({ query = searchQuery, sport = filterSport, language = filterLanguage, sort = sortBy } = {}) => {
     setSearching(true)
-    const results = await searchChannels(query, { sport, language, sortBy: sort })
+    const results = filterOutJoined(await searchChannels(query, { sport, language, sortBy: sort, includePrivate: adminMode }))
     if (query.trim() || sport || language) {
       setSearchResults(results)
     } else {
@@ -115,7 +132,7 @@ export default function Canales({ user, initialCanalCode, onCanalCodeUsed, onAdd
     setShowSearch(true)
     setShowCreate(false)
     setSearching(true)
-    const results = await searchChannels('', { sport: filterSport, language: filterLanguage, sortBy: sortBy })
+    const results = filterOutJoined(await searchChannels('', { sport: filterSport, language: filterLanguage, sortBy: sortBy, includePrivate: adminMode }))
     setSuggestedChannels(results)
     setSearching(false)
   }
@@ -486,7 +503,7 @@ export default function Canales({ user, initialCanalCode, onCanalCodeUsed, onAdd
               <ChannelCard key={c.id} channel={c} isOwner={true}
                 memberCount={memberCounts[c.id]}
                 lastMessage={lastMessages[c.id] || null}
-                hasUnread={unreadChannelIds.has(c.id)}
+                unreadCount={unreadChannelCounts.get(c.id) || 0}
                 onClick={() => handleOpenChannel(c)}
                 onDelete={deleteChannel}
               />
@@ -505,9 +522,10 @@ export default function Canales({ user, initialCanalCode, onCanalCodeUsed, onAdd
               <ChannelCard key={c.id} channel={c} isOwner={false}
                 memberCount={memberCounts[c.id]}
                 lastMessage={lastMessages[c.id] || null}
-                hasUnread={unreadChannelIds.has(c.id)}
+                unreadCount={unreadChannelCounts.get(c.id) || 0}
                 onClick={() => handleOpenChannel(c)}
                 onLeave={() => leaveChannel(c.id)}
+                onAdminDeleted={() => refetch()}
               />
             ))}
           </motion.div>

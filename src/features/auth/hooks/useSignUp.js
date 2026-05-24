@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../../../lib/supabase'
+import { isReservedUsername, isUsernameBanned } from '../../../lib/reservedUsernames'
 
 const EMPTY_FORM = {
   name: '', surname: '', birthdate: '', nationality: '',
@@ -49,6 +50,12 @@ export function useSignUp({ onLogin }) {
     const desiredUsername = username.trim().toLowerCase()
     if (!/^[a-z0-9_]{3,20}$/.test(desiredUsername)) {
       setError('El usuario solo puede contener letras, números y _ (3-20 caracteres)'); setLoading(false); return
+    }
+    if (isReservedUsername(desiredUsername)) {
+      setError('Este username está reservado y no puede usarse.'); setLoading(false); return
+    }
+    if (await isUsernameBanned(supabase, desiredUsername)) {
+      setError('Este username está bloqueado y no puede usarse.'); setLoading(false); return
     }
 
     try {

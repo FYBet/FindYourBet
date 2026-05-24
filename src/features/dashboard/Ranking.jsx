@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { fadeUp, stagger } from '../../lib/animations'
 import { supabase } from '../../lib/supabase'
 import { useProfileNav } from '../../contexts/ProfileNavContext'
+import Username from '../../components/ui/Username'
+import { isAdminUserId } from '../../lib/adminUsers'
 import './dashboard.css'
 
 export const MIN_BETS = 10
@@ -180,19 +182,21 @@ export function useRanking(period, selectedSports, scope = 'public', filterUserI
 
     const userIds = entries.map(e => e.userId)
     const { data: profiles } = await supabase
-      .from('profiles').select('id, username, hide_from_ranking').in('id', userIds)
+      .from('profiles').select('id, username, hide_from_ranking, is_verified').in('id', userIds)
 
     const profileMap = {}
+    const verifiedSet = new Set()
     const hiddenSet = new Set()
     profiles?.forEach(p => {
       if (p.hide_from_ranking) hiddenSet.add(p.id)
       else profileMap[p.id] = p.username
+      if (p.is_verified) verifiedSet.add(p.id)
     })
 
     setRanking(
       entries
-        .filter(e => !hiddenSet.has(e.userId))
-        .map(e => ({ ...e, username: profileMap[e.userId] ?? e.userId.slice(0, 6) }))
+        .filter(e => !hiddenSet.has(e.userId) && !isAdminUserId(e.userId))
+        .map(e => ({ ...e, username: profileMap[e.userId] ?? e.userId.slice(0, 6), isVerified: verifiedSet.has(e.userId) }))
     )
     } catch (e) {
       // silent — no bloqueja la UI
@@ -215,9 +219,8 @@ export function PeriodDropdown({ period, setPeriod }) {
   const [open, setOpen] = useState(false)
   const selected = PERIODS.find(p => p.id === period)
   const isGlobal = period === 'trimestral'
-  const isAmigos = period === 'amigos'
-  const isSpecial = isGlobal || isAmigos
-  const icon = isAmigos ? '👥' : isGlobal ? '🏆' : null
+  const isSpecial = isGlobal
+  const icon = isGlobal ? '🏆' : null
 
   return (
     <div style={{ position: 'relative', width: 'fit-content' }}>
@@ -260,27 +263,12 @@ export function PeriodDropdown({ period, setPeriod }) {
                 </div>
               </div>
 
-              {/* Amigos */}
-              <div onClick={() => { setPeriod('amigos'); setOpen(false) }}
-                style={{ padding: '12px 16px', cursor: 'pointer', background: period === 'amigos' ? 'var(--color-primary-light)' : 'transparent', borderBottom: '1px solid var(--color-border)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '14px' }}>👥</span>
-                  <div>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-primary)' }}>Amigos</div>
-                    <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '1px' }}>Solo personas que sigues mutuamente</div>
-                  </div>
-                  {period === 'amigos' && (
-                    <span style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--color-primary)' }}>✓</span>
-                  )}
-                </div>
-              </div>
-
               {/* Por período */}
               <div style={{ padding: '6px 16px 2px', fontSize: '10px', fontWeight: 600, color: 'var(--color-text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
                 Por período
               </div>
 
-              {PERIODS.slice(2).map(p => (
+              {PERIODS.slice(1).map(p => (
                 <div key={p.id} onClick={() => { setPeriod(p.id); setOpen(false) }}
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', cursor: 'pointer', background: period === p.id ? 'rgba(255,255,255,0.04)' : 'transparent' }}>
                   <span style={{ fontSize: '13px', color: period === p.id ? 'var(--color-text)' : 'var(--color-text-muted)', fontWeight: period === p.id ? 600 : 400 }}>{p.label}</span>
@@ -352,7 +340,7 @@ export function SportDropdown({ selectedSports, toggleSport, onSelectAll, isTodo
 // Agrupa les apostes per channel_id i calcula stats per canal.
 // Mín. 5 picks resolts per aparèixer (menys que el rànking públic perquè els VIP
 // solen tenir menys volum però tots pagats → mostra valor ràpidament).
-const MIN_VIP_BETS = 5
+const MIN_VIP_BETS = 3
 function useVipRanking(vipType) {
   const [ranking, setRanking] = useState([])
   const [loading, setLoading] = useState(true)
@@ -381,7 +369,7 @@ function useVipRanking(vipType) {
             .in('status', ['won', 'lost'])
             .limit(2000),
           supabase.from('profiles')
-            .select('id, username, avatar_url')
+            .select('id, username, avatar_url, is_verified')
             .in('id', ownerIds),
         ])
 
@@ -412,7 +400,8 @@ function useVipRanking(vipType) {
             : '—'
           const winRate = channelBets.length > 0 ? (won / channelBets.length) * 100 : 0
           const profile = profileMap[c.owner_id]
-          return { channelId: c.id, channelName: c.name, price: c.price, ownerId: c.owner_id, username: profile?.username ?? '?', bets: channelBets.length, won, lost, yieldVal, avgOdds, winRate }
+          if (isAdminUserId(c.owner_id)) return null
+          return { channelId: c.id, channelName: c.name, price: c.price, ownerId: c.owner_id, username: profile?.username ?? '?', isVerified: profile?.is_verified || false, bets: channelBets.length, won, lost, yieldVal, avgOdds, winRate }
         }).filter(Boolean).sort((a, b) => b.yieldVal - a.yieldVal)
 
         setRanking(entries)
@@ -458,7 +447,7 @@ function useStakazoRanking() {
             .in('status', ['won', 'lost'])
             .limit(2000),
           supabase.from('profiles')
-            .select('id, username')
+            .select('id, username, is_verified')
             .in('id', ownerIds),
         ])
 
@@ -484,7 +473,8 @@ function useStakazoRanking() {
             (acc, b) => acc + (b.status === 'won' ? b.stake * (b.odds - 1) : -b.stake), 0
           )
           const avgProfit = ownerBets.length > 0 ? (totalProfit / ownerBets.length).toFixed(2) : '0'
-          return { ownerId, username: profileMap[ownerId]?.username ?? '?', bets: ownerBets.length, won, lost, winRate, avgOdds, avgProfit }
+          if (isAdminUserId(ownerId)) return null
+          return { ownerId, username: profileMap[ownerId]?.username ?? '?', isVerified: profileMap[ownerId]?.is_verified || false, bets: ownerBets.length, won, lost, winRate, avgOdds, avgProfit }
         }).filter(Boolean).sort((a, b) => b.winRate - a.winRate || b.bets - a.bets)
 
         setRanking(entries)
@@ -513,14 +503,22 @@ function RankRow({ pos, left, right }) {
 
 function VipRankingTab({ vipType, user, openProfile }) {
   const { ranking, loading } = useVipRanking(vipType)
-  const label = vipType === 'vip_monthly' ? 'mensual' : 'semanal'
+  // Etiquetes per als textos i pel sufix del preu
+  const isPublic = vipType === 'public'
+  const label = vipType === 'vip_monthly' ? 'mensual' : vipType === 'vip_weekly' ? 'semanal' : 'público'
+  const priceSuffix = vipType === 'vip_monthly' ? 'mes' : vipType === 'vip_weekly' ? 'sem' : ''
+  const emptyIcon = isPublic ? '🌐' : '📅'
 
   if (loading) return <div className="empty-state"><div className="empty-icon">⏳</div><div>Cargando...</div></div>
   if (!ranking.length) return (
     <div className="empty-state">
-      <div className="empty-icon">📅</div>
+      <div className="empty-icon">{emptyIcon}</div>
       <div className="empty-title">Sin datos aún</div>
-      <div className="empty-sub">Los canales VIP {label}es necesitan mín. {MIN_VIP_BETS} picks resueltos para aparecer.</div>
+      <div className="empty-sub">
+        {isPublic
+          ? `Los canales públicos necesitan mín. ${MIN_VIP_BETS} picks resueltos para aparecer.`
+          : `Los canales VIP ${label}es necesitan mín. ${MIN_VIP_BETS} picks resueltos para aparecer.`}
+      </div>
     </div>
   )
   return (
@@ -531,11 +529,12 @@ function VipRankingTab({ vipType, user, openProfile }) {
             <>
               <div className="tipster-name-rank" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                 <span onClick={() => openProfile(t.ownerId)} style={{ cursor: 'pointer' }}>{t.channelName}</span>
-                {t.price && <span style={{ fontSize: '10px', color: 'var(--color-warning)', background: 'rgba(245,158,11,0.12)', border: '0.5px solid rgba(245,158,11,0.3)', padding: '1px 7px', borderRadius: 'var(--radius-full)', fontWeight: 700 }}>{t.price}€/{label === 'mensual' ? 'mes' : 'sem'}</span>}
+                {t.price && priceSuffix && <span style={{ fontSize: '10px', color: 'var(--color-warning)', background: 'rgba(245,158,11,0.12)', border: '0.5px solid rgba(245,158,11,0.3)', padding: '1px 7px', borderRadius: 'var(--radius-full)', fontWeight: 700 }}>{t.price}€/{priceSuffix}</span>}
                 {user?.id === t.ownerId && <span style={{ fontSize: '10px', background: 'var(--color-primary-light)', color: 'var(--color-primary)', padding: '2px 8px', borderRadius: 'var(--radius-full)', border: '0.5px solid var(--color-primary-border)', fontWeight: 600 }}>Tu</span>}
               </div>
-              <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '3px' }}>
-                {t.username} · {t.bets} picks resueltos
+              <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '3px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <Username username={t.username} isVerified={t.isVerified} size="xs" />
+                <span>· {t.bets} picks resueltos</span>
               </div>
             </>
           }
@@ -583,7 +582,9 @@ function StakazoRankingTab({ user, openProfile }) {
           left={
             <>
               <div className="tipster-name-rank" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span onClick={() => openProfile(t.ownerId)} style={{ cursor: 'pointer' }}>{t.username}</span>
+                <span onClick={() => openProfile(t.ownerId)} style={{ cursor: 'pointer' }}>
+                  <Username username={t.username} isVerified={t.isVerified} size="sm" />
+                </span>
                 {user?.id === t.ownerId && <span style={{ fontSize: '10px', background: 'var(--color-primary-light)', color: 'var(--color-primary)', padding: '2px 8px', borderRadius: 'var(--radius-full)', border: '0.5px solid var(--color-primary-border)', fontWeight: 600 }}>Tu</span>}
               </div>
               <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '3px' }}>{t.bets} stakazos · beneficio mínimo promedio/pick</div>
@@ -615,8 +616,9 @@ function StakazoRankingTab({ user, openProfile }) {
   )
 }
 
-// Sub-pestanyes del bloc Privado
-const PRIVATE_SUBTABS = [
+// Pestanyes del ranking — cadascuna correspon a un tipus de canal
+const CHANNEL_TABS = [
+  { id: 'public',      label: '🌐 Públicos' },
   { id: 'vip_monthly', label: '📅 VIP Mensual' },
   { id: 'vip_weekly',  label: '📅 VIP Semanal' },
   { id: 'stakazo',     label: '⚡ Stakazos' },
@@ -624,37 +626,7 @@ const PRIVATE_SUBTABS = [
 
 export default function Ranking({ user }) {
   const openProfile = useProfileNav()
-  // bloc: 'public' | 'private' — els 2 grans blocs del ranking
-  const [bloc, setBloc] = useState('public')
-  // subTab: sub-pestanya dins del bloc Privado
-  const [subTab, setSubTab] = useState('vip_monthly')
-  const [period, setPeriod] = useState('trimestral')
-  const [selectedSports, setSelectedSports] = useState([])
-  const [hideMe, setHideMe] = useState(false)
-  // El ranking públic s'obté per tipster. El privat té els seus propis hooks
-  // (per canal VIP o per tipster acumulat de stakazos).
-  const { ranking, loading } = useRanking(period, selectedSports, 'public')
-
-  useEffect(() => {
-    if (!user?.id) return
-    supabase.from('profiles').select('hide_from_ranking').eq('id', user.id).single()
-      .then(({ data }) => { if (data) setHideMe(data.hide_from_ranking ?? false) })
-  }, [user?.id])
-
-  const toggleHideMe = async () => {
-    const next = !hideMe
-    setHideMe(next)
-    await supabase.from('profiles').update({ hide_from_ranking: next }).eq('id', user.id)
-  }
-
-  const toggleSport = (sport) => {
-    setSelectedSports(prev =>
-      prev.includes(sport) ? prev.filter(s => s !== sport) : [...prev, sport]
-    )
-  }
-
-  const periodLabel = PERIODS.find(p => p.id === period)?.label
-  const isTodos = selectedSports.length === 0
+  const [activeTab, setActiveTab] = useState('public')
 
   return (
     <motion.div key="ranking"
@@ -663,113 +635,23 @@ export default function Ranking({ user }) {
 
       <div className="page-header">
         <h2>Ranking</h2>
-        <p>Clasificación de tipsters y canales por rendimiento.</p>
+        <p>Clasificación de canales por rendimiento. Cada canal tiene sus propias estadísticas.</p>
       </div>
 
-      {/* Selector principal: Público / Privado */}
-      <div style={{ display: 'flex', gap: '6px', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '4px', marginBottom: '20px', width: 'fit-content' }}>
-        {[
-          { id: 'public',  label: '🌐 Público' },
-          { id: 'private', label: '🔒 Privado' },
-        ].map(b => (
-          <button key={b.id} onClick={() => setBloc(b.id)}
-            style={{ padding: '9px 22px', borderRadius: 'var(--radius-md)', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 700, fontFamily: 'var(--font-sans)', background: bloc === b.id ? 'var(--color-primary)' : 'transparent', color: bloc === b.id ? '#010906' : 'var(--color-text-muted)', transition: 'all 0.15s' }}>
-            {b.label}
+      {/* Pestanyes per tipus de canal */}
+      <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', borderBottom: '0.5px solid var(--color-border)', overflowX: 'auto' }}>
+        {CHANNEL_TABS.map(t => (
+          <button key={t.id} onClick={() => setActiveTab(t.id)}
+            style={{ padding: '8px 16px', border: 'none', borderBottom: `2px solid ${activeTab === t.id ? 'var(--color-primary)' : 'transparent'}`, background: 'transparent', cursor: 'pointer', fontSize: '13px', fontWeight: activeTab === t.id ? 700 : 500, fontFamily: 'var(--font-sans)', color: activeTab === t.id ? 'var(--color-primary)' : 'var(--color-text-muted)', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
+            {t.label}
           </button>
         ))}
       </div>
 
-      {/* ── BLOC PÚBLIC ── */}
-      {bloc === 'public' && (
-        <>
-          <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
-            <PeriodDropdown period={period} setPeriod={setPeriod} />
-            <SportDropdown
-              selectedSports={selectedSports}
-              toggleSport={toggleSport}
-              onSelectAll={() => setSelectedSports([])}
-              isTodos={isTodos}
-            />
-          </div>
-          <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
-            Mín. {MIN_BETS} apuestas resueltas · Mostrando: <strong style={{ color: 'var(--color-text)' }}>{periodLabel}</strong>
-            {!isTodos && <> · <strong style={{ color: 'var(--color-primary)' }}>{selectedSports.join(' + ')}</strong></>}
-          </div>
-
-          {loading ? (
-            <div className="empty-state"><div className="empty-icon">⏳</div><div>Cargando ranking...</div></div>
-          ) : ranking.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-icon">🏆</div>
-              <div className="empty-title">Sin datos para este filtro</div>
-              <div className="empty-sub">Prueba con otro período o deporte.</div>
-            </div>
-          ) : (
-            <AnimatePresence>
-              <motion.div className="ranking-list" initial="hidden" animate="visible" variants={stagger}>
-                {ranking.map((t, i) => (
-                  <motion.div key={t.userId} className="ranking-item" variants={fadeUp}
-                    layout whileHover={{ x: 4, transition: { duration: 0.2 } }}>
-                    <div className={`rank-pos ${i === 0 ? 'top1' : i === 1 ? 'top2' : i === 2 ? 'top3' : ''}`}>#{i + 1}</div>
-                    <div className="tipster-info-rank">
-                      <div className="tipster-name-rank" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                        <span onClick={() => openProfile(t.userId)} style={{ cursor: 'pointer' }}>{t.username}</span>
-                        {user?.id === t.userId && (
-                          <span style={{ fontSize: '10px', background: 'var(--color-primary-light)', color: 'var(--color-primary)', padding: '2px 8px', borderRadius: 'var(--radius-full)', border: '0.5px solid var(--color-primary-border)', fontWeight: 600 }}>Tu</span>
-                        )}
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
-                        <span className="tipster-user-rank" style={{ margin: 0 }}>{t.bets} apuestas resueltas</span>
-                        {t.usedSports?.map(s => (
-                          <span key={s} style={{ fontSize: '10px', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-full)', padding: '1px 7px', color: 'var(--color-text-muted)', fontWeight: 500 }}>
-                            {SPORT_ICONS[s]} {s}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="rank-metrics">
-                      <div className="rank-metric">
-                        <div className={`rank-metric-val ${t.yieldVal >= 0 ? '' : 'red'}`}>{t.yieldVal >= 0 ? '+' : ''}{t.yieldVal.toFixed(1)}%</div>
-                        <div className="rank-metric-label">Yield</div>
-                      </div>
-                      <div className="rank-metric">
-                        <div className="rank-metric-val neutral">{t.won}/{t.lost}</div>
-                        <div className="rank-metric-label">W/L</div>
-                      </div>
-                      <div className="rank-metric">
-                        <div className="rank-metric-val neutral">{t.avgOdds}</div>
-                        <div className="rank-metric-label">Cuota</div>
-                      </div>
-                      <div className="rank-metric">
-                        <div className="rank-metric-val neutral">{t.habitualStake}</div>
-                        <div className="rank-metric-label">Stake<br/>usual</div>
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </motion.div>
-            </AnimatePresence>
-          )}
-        </>
-      )}
-
-      {/* ── BLOC PRIVAT ── sub-pestanyes VIP Mensual / VIP Semanal / Stakazos */}
-      {bloc === 'private' && (
-        <>
-          <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', borderBottom: '0.5px solid var(--color-border)', paddingBottom: '0' }}>
-            {PRIVATE_SUBTABS.map(t => (
-              <button key={t.id} onClick={() => setSubTab(t.id)}
-                style={{ padding: '8px 16px', border: 'none', borderBottom: `2px solid ${subTab === t.id ? 'var(--color-primary)' : 'transparent'}`, background: 'transparent', cursor: 'pointer', fontSize: '13px', fontWeight: subTab === t.id ? 700 : 500, fontFamily: 'var(--font-sans)', color: subTab === t.id ? 'var(--color-primary)' : 'var(--color-text-muted)', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
-                {t.label}
-              </button>
-            ))}
-          </div>
-
-          {subTab === 'vip_monthly' && <VipRankingTab vipType="vip_monthly" user={user} openProfile={openProfile} />}
-          {subTab === 'vip_weekly'  && <VipRankingTab vipType="vip_weekly"  user={user} openProfile={openProfile} />}
-          {subTab === 'stakazo'     && <StakazoRankingTab user={user} openProfile={openProfile} />}
-        </>
-      )}
+      {activeTab === 'stakazo'
+        ? <StakazoRankingTab user={user} openProfile={openProfile} />
+        : <VipRankingTab vipType={activeTab} user={user} openProfile={openProfile} />
+      }
 
     </motion.div>
   )
