@@ -104,7 +104,7 @@ async function sendAccessEmail({ to, channelName, tipsterUsername, offerName, ac
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      sender: { name: 'FindYourBet', email: 'hola@fyourbet.com' },
+      sender: { name: 'FindYourBet', email: 'fyourbet@gmail.com' },
       to: [{ email: to }],
       subject: `Tu acceso al canal ${channelName} - FindYourBet`,
       htmlContent: html,
