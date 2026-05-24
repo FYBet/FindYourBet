@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { fadeUp } from '../../lib/animations'
 import { supabase } from '../../lib/supabase'
 import { Button } from '../../components/ui/Button'
+import { isReservedUsername, isUsernameBanned } from '../../lib/reservedUsernames'
 import { Input } from '../../components/ui/Input'
 import { FormLabel } from '../../components/ui/FormLabel'
 import './auth.css'
@@ -25,6 +26,8 @@ export default function GoogleOnboarding({ user, onComplete }) {
     const trimmed = username.trim().toLowerCase().replace('@', '')
     if (!trimmed) { setError('Elige un nombre de usuario'); return }
     if (!/^[a-z0-9_]{3,20}$/.test(trimmed)) { setError('El usuario solo puede contener letras, números y _ (3-20 caracteres)'); return }
+    if (isReservedUsername(trimmed)) { setError('Este username está reservado y no puede usarse.'); return }
+    if (await isUsernameBanned(supabase, trimmed)) { setError('Este username está bloqueado y no puede usarse.'); return }
     if (!birthdate) { setError('Introduce tu fecha de nacimiento'); return }
     const birth = new Date(birthdate)
     const ageDiff = new Date().getFullYear() - birth.getFullYear()

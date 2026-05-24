@@ -6,9 +6,12 @@ import { useFollow } from './hooks/useFollow'
 import { useMutes, MUTE_DURATIONS } from '../../../hooks/useMutes'
 import DMView from './DMView'
 import ProfileView from './ProfileView'
+import Username from '../../../components/ui/Username'
+import { isAdminUserId } from '../../../lib/adminUsers'
 
 function formatMsgPreview(content) {
   if (!content) return ''
+  if (content === '[DELETED]') return '🗑 Mensaje eliminado'
   if (content.startsWith('[VOICE]:')) return '🎤 Mensaje de voz'
   if (content.startsWith('[GIF]:')) return '🎞 GIF'
   if (content.startsWith('[IMAGE]:')) return '📷 Imagen'
@@ -40,7 +43,7 @@ export default function Social({ user, initialDMUserId }) {
     if (!q.trim()) { setSearchResults([]); return }
     setSearching(true)
     const [{ data }, { data: myBlocks }, { data: blockedByOthers }] = await Promise.all([
-      supabase.from('profiles').select('id, username, name').or(`username.ilike.%${q}%,name.ilike.%${q}%`).neq('id', user.id).limit(20),
+      supabase.from('profiles').select('id, username, name, is_verified').or(`username.ilike.%${q}%,name.ilike.%${q}%`).neq('id', user.id).limit(20),
       supabase.from('blocks').select('blocked_id').eq('blocker_id', user.id),
       supabase.from('blocks').select('blocker_id').eq('blocked_id', user.id),
     ])
@@ -48,7 +51,8 @@ export default function Social({ user, initialDMUserId }) {
       ...(myBlocks || []).map(b => b.blocked_id),
       ...(blockedByOthers || []).map(b => b.blocker_id),
     ])
-    setSearchResults((data || []).filter(u => !hidden.has(u.id)).slice(0, 10))
+    // Exclou admins (fyourbet) i usuaris bloquejats
+    setSearchResults((data || []).filter(u => !hidden.has(u.id) && !isAdminUserId(u.id)).slice(0, 10))
     setSearching(false)
   }
 
@@ -145,7 +149,9 @@ export default function Social({ user, initialDMUserId }) {
                     {(u.username || u.name || '?')[0].toUpperCase()}
                   </div>
                   <div onClick={() => { handleOpenProfile(u.id); setSearchQuery(''); setSearchResults([]) }} style={{ flex: 1, cursor: 'pointer' }}>
-                    <div style={{ fontWeight: 600, fontSize: '14px' }}>{u.username}</div>
+                    <div style={{ fontWeight: 600, fontSize: '14px' }}>
+                      <Username username={u.username} isVerified={u.is_verified} size="sm" />
+                    </div>
                   </div>
                   <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
                     <button
@@ -180,7 +186,9 @@ export default function Social({ user, initialDMUserId }) {
                     : (c.otherUsername || '?')[0].toUpperCase()}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div onClick={() => handleOpenProfile(c.otherId)} style={{ fontWeight: 600, fontSize: '14px', cursor: 'pointer', display: 'inline-block' }}>{c.otherUsername}</div>
+                  <div onClick={() => handleOpenProfile(c.otherId)} style={{ fontWeight: 600, fontSize: '14px', cursor: 'pointer', display: 'inline-block' }}>
+                  <Username username={c.otherUsername} isVerified={c.otherIsVerified} size="sm" />
+                </div>
                   <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>quiere enviarte un mensaje</div>
                 </div>
                 <div style={{ display: 'flex', gap: '6px' }}>
@@ -238,7 +246,7 @@ export default function Social({ user, initialDMUserId }) {
                     <div style={{ flex: 1, minWidth: 0, opacity: muted ? 0.6 : 1 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
                         <div style={{ fontWeight: c.unread > 0 && !muted ? 700 : 600, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          {c.otherUsername}
+                          <Username username={c.otherUsername} isVerified={c.otherIsVerified} size="sm" />
                           {muted && <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontWeight: 400 }}>🔕 {muteLabel(dmKey)}</span>}
                         </div>
                         <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', flexShrink: 0 }}>

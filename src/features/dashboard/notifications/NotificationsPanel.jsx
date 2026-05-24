@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
 import { insertNotification } from './useNotifications'
 import { useFollow } from '../social/hooks/useFollow'
+import Username from '../../../components/ui/Username'
 
 function timeAgo(ts) {
   if (!ts) return ''
@@ -78,7 +79,7 @@ function NotifItem({ n, profile, onViewProfile, onViewPost, currentUser, followe
             style={{ fontWeight: 700, cursor: 'pointer', color: 'var(--color-text)', textDecoration: 'underline', textDecorationColor: 'transparent', transition: 'text-decoration-color 0.15s' }}
             onMouseEnter={e => { e.currentTarget.style.textDecorationColor = 'var(--color-text)' }}
             onMouseLeave={e => { e.currentTarget.style.textDecorationColor = 'transparent' }}>
-            {displayName}
+            <Username username={displayName} isVerified={profile?.is_verified} size="sm" />
           </span>{' '}
           <span style={{ color: 'var(--color-text-muted)' }}>{notifText(n)}</span>
         </div>
@@ -102,7 +103,7 @@ export default function NotificationsPanel({ notifications, onClose, onViewProfi
   useEffect(() => {
     const ids = [...new Set(notifications.map(n => n.from_user_id).filter(Boolean))]
     if (!ids.length) return
-    supabase.from('profiles').select('id, username, avatar_url').in('id', ids)
+    supabase.from('profiles').select('id, username, avatar_url, is_verified').in('id', ids)
       .then(({ data }) => {
         if (data) setProfileMap(Object.fromEntries(data.map(p => [p.id, p])))
       })

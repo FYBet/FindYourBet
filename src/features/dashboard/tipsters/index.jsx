@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
 import { useFollow } from '../social/hooks/useFollow'
 import ProfileView from '../social/ProfileView'
+import Username from '../../../components/ui/Username'
+import SharedAvatar from '../../../components/ui/Avatar'
 
 const SORT_OPTIONS = [
   { id: 'yield',   label: 'Yield' },
@@ -12,14 +14,9 @@ const SORT_OPTIONS = [
 ]
 
 function Avatar({ url, name, size = 48, fontSize = 18 }) {
-  const [imgError, setImgError] = useState(false)
-  if (url && !imgError) return (
-    <img src={url} alt="" onError={() => setImgError(true)} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--color-bg)', flexShrink: 0 }} />
-  )
   return (
-    <div style={{ width: size, height: size, borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize, fontWeight: 700, color: 'var(--color-primary)', border: '2px solid var(--color-bg)', flexShrink: 0 }}>
-      {(name || '?')[0].toUpperCase()}
-    </div>
+    <SharedAvatar url={url} name={name} size={size} fontSize={fontSize}
+      borderWidth={2} bg="var(--color-primary-light)" fg="var(--color-primary)" />
   )
 }
 
@@ -36,10 +33,9 @@ function TipsterCard({ tipster, isFollowing, isMutual, onClick }) {
 
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-          <span style={{ fontWeight: 700, fontSize: '14px' }}>{tipster.username}</span>
-          {tipster.is_verified && (
-            <span title="Verificado" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '16px', height: '16px', borderRadius: '50%', background: 'var(--color-primary)', color: '#010906', fontSize: '9px', fontWeight: 900, flexShrink: 0 }}>✓</span>
-          )}
+          <span style={{ fontWeight: 700, fontSize: '14px' }}>
+            <Username username={tipster.username} isVerified={tipster.is_verified} size="md" />
+          </span>
           {isMutual ? (
             <span style={{ fontSize: '10px', color: 'var(--color-primary)', padding: '2px 8px', background: 'var(--color-primary-light)', border: '0.5px solid var(--color-primary-border)', borderRadius: 'var(--radius-full)', fontWeight: 700 }}>👥 Amigos</span>
           ) : isFollowing && (
@@ -134,7 +130,6 @@ export default function Tipsters({ user, onNavigateToChannel, onStartDM }) {
     setLoading(true)
     const safetyTimer = setTimeout(() => setLoading(false), 10000)
     try {
-      const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
       const uid = user?.id || ''
 
       const [
@@ -142,15 +137,11 @@ export default function Tipsters({ user, onNavigateToChannel, onStartDM }) {
         { data: bets },
         { data: myFollowing },
         { data: myFollowers },
-        { data: recentBets },
-        { data: recentMsgs },
       ] = await Promise.all([
-        supabase.from('profiles').select('id, username, avatar_url, bio').neq('id', uid).limit(200),
+        supabase.from('profiles').select('id, username, avatar_url, bio, is_verified').neq('id', uid).limit(200),
         supabase.from('bets').select('user_id, stake, status, odds').in('status', ['won', 'lost']).limit(3000),
         supabase.from('follows').select('following_id').eq('follower_id', uid),
         supabase.from('follows').select('follower_id').eq('following_id', uid),
-        supabase.from('bets').select('user_id').gte('created_at', sevenDaysAgo).limit(1000),
-        supabase.from('channel_messages').select('user_id').gte('created_at', sevenDaysAgo).limit(2000),
       ])
 
       if (!profiles?.length) return
@@ -170,11 +161,6 @@ export default function Tipsters({ user, onNavigateToChannel, onStartDM }) {
         }
       }
 
-      const recentlyActive = new Set([
-        ...(recentBets || []).map(b => b.user_id),
-        ...(recentMsgs || []).map(m => m.user_id),
-      ])
-
       const statsMap = {}
       for (const b of (bets || [])) {
         if (!statsMap[b.user_id]) statsMap[b.user_id] = { won: 0, lost: 0, total: 0, profit: 0, stakeSum: 0 }
@@ -186,7 +172,7 @@ export default function Tipsters({ user, onNavigateToChannel, onStartDM }) {
 
       const scored = profiles
         .map(p => {
-          if (!recentlyActive.has(p.id)) return null
+          // Exclou els que ja segueixes — apareixeran a Siguiendo
           if (followingSet.has(p.id)) return null
 
           const s = statsMap[p.id] || { won: 0, lost: 0, total: 0, profit: 0, stakeSum: 0 }
@@ -229,7 +215,7 @@ export default function Tipsters({ user, onNavigateToChannel, onStartDM }) {
     followRows.forEach(f => { followDateMap[f.following_id] = f.created_at })
 
     const [{ data: profiles }, { data: bets }] = await Promise.all([
-      supabase.from('profiles').select('id, username, avatar_url, bio').in('id', ids),
+      supabase.from('profiles').select('id, username, avatar_url, bio, is_verified').in('id', ids),
       supabase.from('bets').select('user_id, stake, status, odds').in('user_id', ids).in('status', ['won', 'lost']).limit(2000),
     ])
 
@@ -282,18 +268,19 @@ export default function Tipsters({ user, onNavigateToChannel, onStartDM }) {
   const runSearch = async (q) => {
     setSearching(true)
     const { data: profiles } = await supabase
-      .from('profiles').select('id, username, name, avatar_url, bio')
+      .from('profiles').select('id, username, name, avatar_url, bio, is_verified')
       .or(`username.ilike.%${q}%,name.ilike.%${q}%`)
       .neq('id', user?.id || '').limit(20)
 
-    if (!profiles?.length) { setSearchResults([]); setSearching(false); return }
+    const visibleProfiles = profiles || []
+    if (!visibleProfiles.length) { setSearchResults([]); setSearching(false); return }
 
-    const ids = profiles.map(p => p.id)
+    const ids = visibleProfiles.map(p => p.id)
     const { data: bets } = await supabase
       .from('bets').select('user_id, odds, stake, status')
       .in('user_id', ids).in('status', ['won', 'lost']).limit(500)
 
-    setSearchResults(enrichWithStats(profiles, bets || []))
+    setSearchResults(enrichWithStats(visibleProfiles, bets || []))
     setSearching(false)
   }
 

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
 import { insertNotification } from '../notifications/useNotifications'
+import Username from '../../../components/ui/Username'
 
 export default function FollowListModal({ type, profileUserId, currentUser, onClose, onViewProfile, onStartDM }) {
   const [users, setUsers] = useState([])
@@ -27,7 +28,7 @@ export default function FollowListModal({ type, profileUserId, currentUser, onCl
       if (!userIds.length) { setUsers([]); setLoading(false); return }
 
       const [{ data: profiles }, { data: myFollows }] = await Promise.all([
-        supabase.from('profiles').select('id, username, name, avatar_url').in('id', userIds),
+        supabase.from('profiles').select('id, username, name, avatar_url, is_verified').in('id', userIds),
         currentUser?.id
           ? supabase.from('follows').select('following_id').eq('follower_id', currentUser.id).in('following_id', userIds)
           : Promise.resolve({ data: [] }),
@@ -86,7 +87,9 @@ export default function FollowListModal({ type, profileUserId, currentUser, onCl
                   )}
                 </div>
                 <div onClick={() => { onViewProfile?.(u.id); onClose() }} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
-                  <div style={{ fontWeight: 600, fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.username}</div>
+                  <div style={{ fontWeight: 600, fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <Username username={u.username} isVerified={u.is_verified} size="sm" />
+                  </div>
                 </div>
                 {!isOwn && (
                   <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>

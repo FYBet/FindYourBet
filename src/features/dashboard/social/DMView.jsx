@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
 import { StickerPicker } from '../StickerPicker'
 import { VoicePlayer, VoiceRecordButton } from '../VoiceMessage'
+import Username from '../../../components/ui/Username'
 import { usePolling } from '../../../hooks/usePolling'
 import ForwardModal from './ForwardModal'
 import PinDurationModal from '../canales/PinDurationModal'
@@ -208,7 +209,27 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
     loadMessages()
   }, [conversation.id, loadMessages])
 
-  usePolling(loadMessages, 5000, !!conversation.id)
+  // Realtime: sense filter (els filters d'UPDATE requereixen REPLICA IDENTITY FULL)
+  // Filtrem al callback per conversation_id / per id de missatge a l'estat
+  useEffect(() => {
+    if (!conversation.id) return
+    const channel = supabase.channel(`dm-view-${conversation.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'direct_messages',
+      }, (payload) => {
+        if (payload.new.conversation_id === conversation.id) loadMessages()
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'direct_messages',
+      }, (payload) => {
+        setMessages(prev => prev.map(m => m.id === payload.new.id ? { ...m, ...payload.new } : m))
+      })
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [conversation.id, loadMessages])
+
+  // Polling de fallback si Realtime es desconnecta
+  usePolling(loadMessages, 30000, !!conversation.id)
 
   useEffect(() => {
     const newCount = messages.length
@@ -233,9 +254,20 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
   }
 
   const handleDeleteMsg = async (msgId) => {
-    await supabase.from('direct_messages').delete().eq('id', msgId)
-    setMessages(prev => prev.filter(m => m.id !== msgId))
     setMsgMenu(null)
+    // .select() retorna les files modificades; si està buit, RLS està bloquejant la UPDATE
+    const { data, error } = await supabase
+      .from('direct_messages')
+      .update({ content: '[DELETED]' })
+      .eq('id', msgId)
+      .select()
+    if (error) { console.error('[DM delete] error:', error); alert('Error al eliminar: ' + error.message); return }
+    if (!data?.length) {
+      console.warn('[DM delete] RLS bloqueja la UPDATE — cap fila modificada')
+      alert('No se puede eliminar este mensaje (permisos)')
+      return
+    }
+    setMessages(prev => prev.map(m => m.id === msgId ? { ...m, content: '[DELETED]' } : m))
   }
 
   const handlePin = async (rawContent, durationMs) => {
@@ -372,7 +404,9 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
               : (conversation.otherUsername || '?')[0].toUpperCase()}
           </div>
           <div>
-            <div style={{ fontWeight: 700, fontSize: '15px' }}>{conversation.otherUsername}</div>
+            <div style={{ fontWeight: 700, fontSize: '15px' }}>
+              <Username username={conversation.otherUsername} isVerified={conversation.otherIsVerified} size="md" />
+            </div>
           </div>
         </div>
         <div style={{ position: 'relative' }}>

@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
+import { usePolling } from '../../hooks/usePolling'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
@@ -22,8 +23,12 @@ import { useNotifications } from './notifications/useNotifications'
 import NotificationsPanel from './notifications/NotificationsPanel'
 import Configuracion from './Configuracion'
 import Faqs from './Faqs'
-import AdminPanel from '../admin/AdminPanel'
+// AdminPanel és pesant i només l'usa fyourbet — code-split per reduir el bundle inicial
+const AdminPanel = lazy(() => import('../admin/AdminPanel'))
+import Username from '../../components/ui/Username'
+import Avatar from '../../components/ui/Avatar'
 import { ProfileNavContext } from '../../contexts/ProfileNavContext'
+import { AdminModeProvider } from '../../contexts/AdminModeContext'
 import './dashboard.css'
 
 const SHORTCUT_OPTIONS = [
@@ -241,16 +246,36 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
   }
 
   const [showVerifiedModal, setShowVerifiedModal] = useState(false)
+  const [adminWarning, setAdminWarning] = useState(null)        // text de l'avís admin
+  const [deletedChannels, setDeletedChannels] = useState([])    // canals que han estat eliminats per admin
 
   useEffect(() => {
     if (!user?.id) return
-    supabase.from('profiles').select('avatar_url, is_verified, verified_notified').eq('id', user.id).single()
+    supabase.from('profiles').select('avatar_url, is_verified, verified_notified, admin_warning, warning_notified').eq('id', user.id).single()
       .then(({ data }) => {
         if (data?.avatar_url) setNavAvatar(data.avatar_url)
         // Mostra el modal una sola vegada quan l'admin verifica l'usuari
         if (data?.is_verified && !data?.verified_notified) {
           setShowVerifiedModal(true)
           supabase.from('profiles').update({ verified_notified: true }).eq('id', user.id).then()
+        }
+        // Mostra avís de l'admin una sola vegada
+        if (data?.admin_warning && !data?.warning_notified) {
+          setAdminWarning(data.admin_warning)
+          supabase.from('profiles').update({ warning_notified: true }).eq('id', user.id).then()
+        }
+      })
+
+    // Detecta canals propis eliminats per admin que encara no s'han notificat
+    supabase.from('channels')
+      .select('id, name, deletion_reason')
+      .eq('owner_id', user.id)
+      .not('deleted_at', 'is', null)
+      .eq('deletion_notified', false)
+      .then(({ data }) => {
+        if (data?.length) {
+          setDeletedChannels(data)
+          supabase.from('channels').update({ deletion_notified: true }).in('id', data.map(c => c.id)).then()
         }
       })
   }, [user?.id])
@@ -266,7 +291,21 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
   } = useBets(user)
 
   const unreadCount = useUnreadDMCount(user?.id)
-  const { count: unreadChannelCount, unreadIds: unreadChannelIds } = useUnreadChannelCount(user?.id)
+  const { count: unreadChannelCount, unreadCounts: unreadChannelCounts, markRead: markChannelReadInstant } = useUnreadChannelCount(user?.id)
+
+  // Comptador de feines pendents per a l'admin (peticions + suggerències en estat pending)
+  const [adminPendingCount, setAdminPendingCount] = useState(0)
+  const isAdminUser = ADMIN_EMAILS.includes(user?.email)
+  const fetchAdminPending = useCallback(async () => {
+    if (!isAdminUser) return
+    const [{ count: t }, { count: s }] = await Promise.all([
+      supabase.from('support_tickets').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+      supabase.from('suggestions').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    ])
+    setAdminPendingCount((t || 0) + (s || 0))
+  }, [isAdminUser])
+  useEffect(() => { if (isAdminUser) fetchAdminPending() }, [isAdminUser, fetchAdminPending])
+  usePolling(fetchAdminPending, 60000, isAdminUser)
   const { notifications, unreadCount: notifCount, markRead, markAllRead } = useNotifications(user?.id)
   const [showNotifs, setShowNotifs] = useState(false)
 
@@ -299,6 +338,7 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
   }
 
   return (
+    <AdminModeProvider user={user}>
     <ProfileNavContext.Provider value={setNotifProfileUserId}>
     <>
     <div className="dashboard">
@@ -319,6 +359,62 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
             onSave={saveShortcuts}
             onClose={() => setShowShortcutConfig(false)}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Avís de l'admin (text custom) — apareix una sola vegada */}
+      <AnimatePresence>
+        {adminWarning && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 310, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+            <motion.div initial={{ opacity: 0, y: 24, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 24, scale: 0.96 }} transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+              style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-warning)', borderRadius: 'var(--radius-xl)', padding: '36px 28px', maxWidth: '460px', width: '100%', textAlign: 'center', boxShadow: '0 0 40px rgba(245,158,11,0.25)' }}>
+              <div style={{ fontSize: '40px', marginBottom: '14px' }}>⚠️</div>
+              <div style={{ fontWeight: 700, fontSize: '20px', marginBottom: '12px', color: 'var(--color-warning)' }}>Aviso del equipo FYB</div>
+              <div style={{ fontSize: '14px', color: 'var(--color-text)', lineHeight: 1.6, whiteSpace: 'pre-wrap', textAlign: 'left', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '14px 16px', marginBottom: '24px' }}>
+                {adminWarning}
+              </div>
+              <button onClick={() => setAdminWarning(null)}
+                style={{ background: 'var(--color-warning)', color: '#010906', border: 'none', borderRadius: 'var(--radius-lg)', padding: '12px 32px', cursor: 'pointer', fontWeight: 700, fontSize: '15px', fontFamily: 'var(--font-sans)' }}>
+                Entendido
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Notificació de canal eliminat per admin — apareix una sola vegada */}
+      <AnimatePresence>
+        {deletedChannels.length > 0 && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 309, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+            <motion.div initial={{ opacity: 0, y: 24, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 24, scale: 0.96 }} transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+              style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-error-border)', borderRadius: 'var(--radius-xl)', padding: '36px 28px', maxWidth: '460px', width: '100%', textAlign: 'center', boxShadow: '0 0 40px rgba(239,68,68,0.25)' }}>
+              <div style={{ fontSize: '40px', marginBottom: '14px' }}>🚫</div>
+              <div style={{ fontWeight: 700, fontSize: '20px', marginBottom: '12px', color: 'var(--color-error)' }}>
+                {deletedChannels.length === 1 ? 'Canal eliminado' : `${deletedChannels.length} canales eliminados`}
+              </div>
+              <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
+                El equipo de FYB ha eliminado los siguientes canales tuyos:
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px' }}>
+                {deletedChannels.map(c => (
+                  <div key={c.id} style={{ background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '12px 14px', textAlign: 'left' }}>
+                    <div style={{ fontWeight: 700, fontSize: '13px', marginBottom: '4px' }}>{c.name}</div>
+                    {c.deletion_reason && (
+                      <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                        <strong>Motivo:</strong> {c.deletion_reason}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => setDeletedChannels([])}
+                style={{ background: 'var(--color-error)', color: '#fff', border: 'none', borderRadius: 'var(--radius-lg)', padding: '12px 32px', cursor: 'pointer', fontWeight: 700, fontSize: '15px', fontFamily: 'var(--font-sans)' }}>
+                Entendido
+              </button>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -406,12 +502,8 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
 
           <div className="user-chip" style={{ cursor: 'pointer' }}
             onClick={() => setTab('miperfil')}>
-            <div className="user-avatar" style={{ overflow: 'hidden', padding: 0 }}>
-              {navAvatar
-                ? <img src={navAvatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
-                : (user?.username || 'U')[0].toUpperCase()}
-            </div>
-            <span>{user?.username || 'Usuario'}</span>
+            <Avatar url={navAvatar} name={user?.username || 'U'} size={28} bg="var(--color-primary)" fg="var(--color-primary-light)" />
+            <span><Username username={user?.username || 'Usuario'} isVerified={user?.is_verified} size="sm" /></span>
           </div>
           <motion.button className="dash-tab" whileTap={{ scale: 0.98 }} onClick={logout}>
             Salir
@@ -463,6 +555,11 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
                 onClick={() => setTab('admin')}>
                 <span className="sidebar-icon">⚙️</span>
                 Centro de control
+                {adminPendingCount > 0 && (
+                  <span style={{ marginLeft: 'auto', background: 'var(--color-error)', color: '#fff', borderRadius: '999px', fontSize: '10px', fontWeight: 700, padding: '1px 6px' }}>
+                    {adminPendingCount > 9 ? '9+' : adminPendingCount}
+                  </span>
+                )}
               </button>
             </div>
           )}
@@ -501,7 +598,8 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
                 initialCanalCode={pendingCanalCode}
                 onCanalCodeUsed={() => setPendingCanalCode(null)}
                 onAddBet={handleAddBetFromCanal}
-                unreadChannelIds={unreadChannelIds}
+                unreadChannelCounts={unreadChannelCounts}
+                onMarkChannelRead={markChannelReadInstant}
               />
             </div>
           )}
@@ -550,7 +648,9 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
 
           {/* Centre de control admin — sense visited check, es munta/desmunta directament */}
           {tab === 'admin' && ADMIN_EMAILS.includes(user?.email) && (
-            <AdminPanel user={user} />
+            <Suspense fallback={<div style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-muted)' }}>⏳ Cargando panel...</div>}>
+              <AdminPanel user={user} />
+            </Suspense>
           )}
 
           {visited.has('miperfil') && (
@@ -590,5 +690,6 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
     </AnimatePresence>
     </>
     </ProfileNavContext.Provider>
+    </AdminModeProvider>
   )
 }

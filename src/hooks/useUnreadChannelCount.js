@@ -9,12 +9,22 @@ export function markChannelRead(userId, channelId) {
 }
 
 export function useUnreadChannelCount(userId) {
-  const [unreadIds, setUnreadIds] = useState(new Set())
+  // Map<channelId, unreadCount> — mateixa estructura que useDMs
+  const [unreadCounts, setUnreadCounts] = useState(new Map())
+
+  // Marca un canal com llegit immediatament (localStorage + state) sense esperar el poll
+  const markRead = useCallback((channelId) => {
+    markChannelRead(userId, channelId)
+    setUnreadCounts(prev => {
+      const next = new Map(prev)
+      next.delete(channelId)
+      return next
+    })
+  }, [userId])
 
   const fetchUnread = useCallback(async () => {
     if (!userId) return
 
-    // Canals propis + canals on sóc membre
     const [{ data: own }, { data: memberships }] = await Promise.all([
       supabase.from('channels').select('id').eq('owner_id', userId).is('deleted_at', null),
       supabase.from('channel_members').select('channel_id').eq('user_id', userId),
@@ -25,35 +35,35 @@ export function useUnreadChannelCount(userId) {
       ...(memberships || []).map(m => m.channel_id),
     ])]
 
-    if (!allIds.length) { setUnreadIds(new Set()); return }
+    if (!allIds.length) { setUnreadCounts(new Map()); return }
 
-    // Últim missatge d'altri per cada canal — una query per canal (polling cada 30s)
+    // Per cada canal: compte missatges d'altri posteriors a l'últim read
     const results = await Promise.all(
-      allIds.map(id =>
-        supabase.from('channel_messages')
-          .select('channel_id, created_at')
+      allIds.map(id => {
+        const lastRead = localStorage.getItem(`fyb_ch_read_${userId}_${id}`)
+        let query = supabase.from('channel_messages')
+          .select('id', { count: 'exact', head: true })
           .eq('channel_id', id)
           .neq('user_id', userId)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-          .then(({ data }) => ({ id, lastMsg: data }))
-      )
+        if (lastRead) query = query.gt('created_at', lastRead)
+        return query.then(({ count }) => ({ id, count: count || 0 }))
+      })
     )
 
-    const newUnread = new Set()
-    for (const { id, lastMsg } of results) {
-      if (!lastMsg) continue
-      const lastRead = localStorage.getItem(`fyb_ch_read_${userId}_${id}`)
-      if (!lastRead || new Date(lastMsg.created_at) > new Date(lastRead)) {
-        newUnread.add(id)
-      }
+    const newMap = new Map()
+    for (const { id, count } of results) {
+      if (count > 0) newMap.set(id, count)
     }
-    setUnreadIds(newUnread)
+    setUnreadCounts(newMap)
   }, [userId])
 
   useEffect(() => { if (userId) fetchUnread() }, [userId, fetchUnread])
   usePolling(fetchUnread, 30000, !!userId)
 
-  return { count: unreadIds.size, unreadIds }
+  return {
+    count: unreadCounts.size,
+    unreadIds: new Set(unreadCounts.keys()),  // backward compat
+    unreadCounts,
+    markRead,
+  }
 }

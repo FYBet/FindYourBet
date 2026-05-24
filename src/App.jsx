@@ -82,7 +82,7 @@ function AppRoutes() {
     let profileConfirmed = false
     try {
       const res = await Promise.race([
-        supabase.from('profiles').select('avatar_url, username, name').eq('id', authUser.id).maybeSingle(),
+        supabase.from('profiles').select('avatar_url, username, name, is_verified, banned, banned_reason').eq('id', authUser.id).maybeSingle(),
         new Promise((_, reject) => setTimeout(() => reject(new Error('profile-timeout')), 6000))
       ])
       if (res?.error) {
@@ -100,10 +100,25 @@ function AppRoutes() {
       username: profile?.username || null,
       email: authUser.email,
       avatar_url: profile?.avatar_url || authUser.user_metadata?.avatar_url || null,
+      is_verified: profile?.is_verified || false,
+      banned: profile?.banned || false,
+      banned_reason: profile?.banned_reason || null,
       // Si la query del perfil ha fallat (timeout, error, etc.) NO assumim que falti
       // l'onboarding — això causava redirects falsos en cada esdeveniment de Supabase.
       needsOnboarding: profileConfirmed && !profile?.username,
     }
+  }
+
+  // Comprova si un email està a la llista negra. Si ho està, força logout.
+  const checkBannedAndLogout = async (email) => {
+    if (!email) return false
+    const { data } = await supabase.from('banned_emails').select('reason').eq('email', email.toLowerCase()).maybeSingle()
+    if (data) {
+      await supabase.auth.signOut()
+      alert(`Tu cuenta ha sido bloqueada.${data.reason ? `\n\nMotivo: ${data.reason}` : ''}`)
+      return true
+    }
+    return false
   }
 
   const refreshUser = async () => {
@@ -130,7 +145,18 @@ function AppRoutes() {
         if (error) {
           await supabase.auth.signOut()
         } else if (session?.user) {
-          try { setUser(await buildUser(session.user)) } catch {
+          // Comprova ban abans de construir l'usuari
+          const banned = await checkBannedAndLogout(session.user.email)
+          if (banned) return
+          try {
+            const built = await buildUser(session.user)
+            if (built.banned) {
+              await supabase.auth.signOut()
+              alert(`Tu cuenta ha sido bloqueada.${built.banned_reason ? `\n\nMotivo: ${built.banned_reason}` : ''}`)
+              return
+            }
+            setUser(built)
+          } catch {
             setUser(prev => prev ?? { id: session.user.id, name: session.user.email, email: session.user.email, avatar_url: null })
           }
         }
@@ -148,8 +174,16 @@ function AppRoutes() {
       // ha de re-avaluar needsOnboarding perquè pot arribar amb perfil incomplet.
       if (_event === 'INITIAL_SESSION' || _event === 'TOKEN_REFRESHED') return
       if (session?.user) {
+        // Comprova ban (banned_emails table o profile.banned) i força logout si cal
+        const banned = await checkBannedAndLogout(session.user.email)
+        if (banned) return
         try {
           const built = await buildUser(session.user)
+          if (built.banned) {
+            await supabase.auth.signOut()
+            alert(`Tu cuenta ha sido bloqueada.${built.banned_reason ? `\n\nMotivo: ${built.banned_reason}` : ''}`)
+            return
+          }
           // Si el perfil no s'ha pogut carregar (username null), conservem el que ja teníem
           setUser(prev => ({
             ...built,

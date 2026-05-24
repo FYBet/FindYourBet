@@ -12,7 +12,19 @@ export function useDMs(currentUserId) {
     fetchConversations(false)
   }, [currentUserId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  usePolling(useCallback(() => fetchConversations(false), [currentUserId]), 15000, !!currentUserId) // eslint-disable-line react-hooks/exhaustive-deps
+  // Realtime: actualitza la llista quan arriba un DM nou a qualsevol conversa
+  useEffect(() => {
+    if (!currentUserId) return
+    const channel = supabase.channel(`dm-list-${currentUserId}`)
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'direct_messages',
+      }, () => fetchConversations(false))
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [currentUserId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Polling de fallback si Realtime es desconnecta
+  usePolling(useCallback(() => fetchConversations(false), [currentUserId]), 30000, !!currentUserId) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Optimitzat: 4 queries en total en comptes de 1 + N×3
   const fetchConversations = async (cancelled = false) => {
@@ -37,7 +49,7 @@ export function useDMs(currentUserId) {
 
     // 3 queries paral·leles en comptes de N×3 seqüencials
     const [{ data: profiles }, lastMsgResults, { data: unreadMsgs }] = await Promise.all([
-      supabase.from('profiles').select('id, username, name, avatar_url').in('id', otherIds),
+      supabase.from('profiles').select('id, username, name, avatar_url, is_verified').in('id', otherIds),
       // Última missatge per conversa — en paral·lel però cada una és 1 query
       Promise.all(convIds.map(id =>
         supabase.from('direct_messages')
@@ -78,6 +90,7 @@ export function useDMs(currentUserId) {
         otherId,
         otherUsername: profile?.username || otherId.slice(0, 6),
         otherAvatarUrl: profile?.avatar_url || null,
+        otherIsVerified: profile?.is_verified || false,
         lastMessage: lastMsg?.content || '',
         lastMessageAt: lastMsg?.created_at || conv.created_at,
         lastMessageIsOwn: lastMsg?.sender_id === currentUserId,

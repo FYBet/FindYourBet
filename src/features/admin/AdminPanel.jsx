@@ -83,26 +83,133 @@ function ReviewCard({ bet, reports, onClear, onInvalidate }) {
   )
 }
 
+const SG_STATUS_OPTIONS = [
+  { value: 'pending',  label: '⏳ Pendiente' },
+  { value: 'accepted', label: '✅ Aceptada' },
+  { value: 'rejected', label: '❌ Rechazada' },
+]
+const SG_STATUS_COLORS = {
+  pending:  { border: 'var(--color-warning)',        left: 'rgba(245,158,11,0.6)' },
+  accepted: { border: 'var(--color-primary-border)', left: 'var(--color-primary)' },
+  rejected: { border: 'var(--color-error-border)',   left: 'var(--color-error)' },
+}
+
+function SuggestionRow({ suggestion, onUpdate }) {
+  const [expanded, setExpanded] = useState(false)
+  const [status, setStatus] = useState(suggestion.status || 'pending')
+  const [response, setResponse] = useState(suggestion.admin_response || '')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  const handleSave = async () => {
+    setSaving(true)
+    await supabase.from('suggestions').update({
+      status,
+      admin_response: response.trim() || null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', suggestion.id)
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+    onUpdate(suggestion.id, { status, admin_response: response.trim() || null })
+  }
+
+  const colors = SG_STATUS_COLORS[status] || SG_STATUS_COLORS.pending
+  const header = suggestion.title || (suggestion.message || '').slice(0, 80)
+
+  return (
+    <div style={{ background: 'var(--color-bg)', border: `0.5px solid ${colors.border}`, borderLeft: `3px solid ${colors.left}`, borderRadius: 'var(--radius-lg)', marginBottom: '10px', overflow: 'hidden' }}>
+      <div onClick={() => setExpanded(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px', cursor: 'pointer' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: '13px', marginBottom: '3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{header}</div>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text)' }}>{suggestion.profiles?.username || '?'}</span>
+            <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{new Date(suggestion.created_at).toLocaleString('es-ES')}</span>
+          </div>
+        </div>
+        <span style={{ fontSize: '11px', fontWeight: 700, color: SG_STATUS_COLORS[status]?.left || 'var(--color-text-muted)', flexShrink: 0 }}>
+          {SG_STATUS_OPTIONS.find(o => o.value === status)?.label}
+        </span>
+        <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', flexShrink: 0 }}>{expanded ? '▲' : '▼'}</span>
+      </div>
+
+      {expanded && (
+        <div style={{ padding: '0 16px 16px', borderTop: '0.5px solid var(--color-border)' }}>
+          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.7px', margin: '12px 0 6px' }}>Sugerencia</div>
+          <div style={{ fontSize: '13px', color: 'var(--color-text)', lineHeight: 1.6, whiteSpace: 'pre-wrap', background: 'var(--color-bg-soft)', borderRadius: 'var(--radius-md)', padding: '10px 14px', marginBottom: '16px' }}>
+            {suggestion.message}
+          </div>
+
+          {suggestion.image_url && (
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.7px', marginBottom: '6px' }}>📷 Imagen adjunta</div>
+              <a href={suggestion.image_url} target="_blank" rel="noopener noreferrer">
+                <img src={suggestion.image_url} alt="Adjunto" style={{ maxWidth: '320px', maxHeight: '240px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-border)', cursor: 'pointer' }} />
+              </a>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: '200px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.7px', marginBottom: '6px' }}>Estado</div>
+              <select value={status} onChange={e => setStatus(e.target.value)}
+                style={{ width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '13px', padding: '9px 12px', borderRadius: 'var(--radius-md)', outline: 'none', cursor: 'pointer' }}>
+                {SG_STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+            <div style={{ flex: 2, minWidth: '240px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.7px', marginBottom: '6px' }}>Respuesta (opcional)</div>
+              <textarea value={response} onChange={e => setResponse(e.target.value)} rows={3}
+                placeholder="Escribe una respuesta visible para el usuario..."
+                style={{ width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '13px', padding: '9px 12px', borderRadius: 'var(--radius-md)', outline: 'none', resize: 'vertical', boxSizing: 'border-box' }} />
+            </div>
+          </div>
+
+          <button onClick={handleSave} disabled={saving}
+            style={{ marginTop: '12px', background: saved ? 'var(--color-primary-light)' : 'var(--color-primary)', color: saved ? 'var(--color-primary)' : '#010906', border: saved ? '0.5px solid var(--color-primary-border)' : 'none', padding: '8px 20px', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 700, fontSize: '13px', fontFamily: 'var(--font-sans)', transition: 'all 0.2s', opacity: saving ? 0.6 : 1 }}>
+            {saving ? 'Guardando...' : saved ? '✓ Guardado' : 'Guardar cambios'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SugerenciasTab({ adminUserId }) {
   const [suggestions, setSuggestions] = useState([])
   const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState('all')
 
   useEffect(() => {
-    supabase.from('suggestions')
-      .select('id, message, created_at, user_id, profiles(username)')
-      .not('message', 'like', '[SOPORTE]%')
-      .order('created_at', { ascending: false })
-      .then(({ data }) => {
-        if (!data) { setLoading(false); return }
-        const sorted = [...data].sort((a, b) => {
-          if (a.user_id === adminUserId) return -1
-          if (b.user_id === adminUserId) return 1
-          return 0
-        })
-        setSuggestions(sorted)
-        setLoading(false)
+    (async () => {
+      const { data, error } = await supabase.from('suggestions')
+        .select('id, title, message, status, admin_response, image_url, created_at, user_id')
+        .order('created_at', { ascending: false })
+      if (error) { console.error('[SugerenciasTab]', error); setLoading(false); return }
+      if (!data?.length) { setSuggestions([]); setLoading(false); return }
+
+      const userIds = [...new Set(data.map(s => s.user_id).filter(Boolean))]
+      const { data: profs } = await supabase.from('profiles')
+        .select('id, username').in('id', userIds)
+      const profMap = Object.fromEntries((profs || []).map(p => [p.id, p]))
+
+      const enriched = data.map(s => ({ ...s, status: s.status || 'pending', profiles: profMap[s.user_id] || null }))
+      const sorted = enriched.sort((a, b) => {
+        if (a.user_id === adminUserId) return -1
+        if (b.user_id === adminUserId) return 1
+        return 0
       })
+      setSuggestions(sorted)
+      setLoading(false)
+    })()
   }, [adminUserId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleUpdate = (id, changes) => {
+    setSuggestions(prev => prev.map(s => s.id === id ? { ...s, ...changes } : s))
+  }
+
+  const displayed = filter === 'all' ? suggestions : suggestions.filter(s => s.status === filter)
+  const pending = suggestions.filter(s => s.status === 'pending').length
 
   if (loading) return <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '40px' }}>⏳ Cargando...</div>
 
@@ -115,18 +222,18 @@ function SugerenciasTab({ adminUserId }) {
 
   return (
     <div>
-      <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
-        {suggestions.length} sugerencia{suggestions.length !== 1 ? 's' : ''}
-      </div>
-      {suggestions.map(s => (
-        <div key={s.id} style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderLeft: '3px solid var(--color-primary)', borderRadius: 'var(--radius-lg)', padding: '14px 16px', marginBottom: '10px' }}>
-          <div style={{ fontSize: '13px', lineHeight: 1.6, color: 'var(--color-text)', marginBottom: '8px' }}>{s.message}</div>
-          <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', display: 'flex', gap: '12px' }}>
-            <span>{s.profiles?.username || 'Usuario desconocido'}</span>
-            <span>{new Date(s.created_at).toLocaleString('es-ES')}</span>
-          </div>
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{suggestions.length} total · {pending} pendiente{pending !== 1 ? 's' : ''}</span>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px' }}>
+          {[['all', 'Todas'], ['pending', '⏳'], ['accepted', '✅'], ['rejected', '❌']].map(([val, label]) => (
+            <button key={val} onClick={() => setFilter(val)}
+              style={{ padding: '4px 10px', border: `0.5px solid ${filter === val ? 'var(--color-primary-border)' : 'var(--color-border)'}`, borderRadius: 'var(--radius-md)', background: filter === val ? 'var(--color-primary-light)' : 'transparent', color: filter === val ? 'var(--color-primary)' : 'var(--color-text-muted)', cursor: 'pointer', fontSize: '12px', fontWeight: filter === val ? 700 : 400, fontFamily: 'var(--font-sans)' }}>
+              {label}
+            </button>
+          ))}
         </div>
-      ))}
+      </div>
+      {displayed.map(s => <SuggestionRow key={s.id} suggestion={s} onUpdate={handleUpdate} />)}
     </div>
   )
 }
@@ -194,6 +301,15 @@ function TicketRow({ ticket, onUpdate }) {
             {ticket.message}
           </div>
 
+          {ticket.image_url && (
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.7px', marginBottom: '6px' }}>📷 Imagen adjunta</div>
+              <a href={ticket.image_url} target="_blank" rel="noopener noreferrer">
+                <img src={ticket.image_url} alt="Adjunto" style={{ maxWidth: '320px', maxHeight: '240px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-border)', cursor: 'pointer' }} />
+              </a>
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: '200px' }}>
               <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.7px', marginBottom: '6px' }}>Estado</div>
@@ -226,10 +342,22 @@ function ProblemasTab() {
   const [filter, setFilter] = useState('all')
 
   useEffect(() => {
-    supabase.from('support_tickets')
-      .select('id, title, message, email, status, admin_response, created_at, user_id, profiles(username)')
-      .order('created_at', { ascending: false })
-      .then(({ data }) => { setTickets(data || []); setLoading(false) })
+    (async () => {
+      const { data, error } = await supabase.from('support_tickets')
+        .select('id, title, message, email, status, admin_response, image_url, created_at, user_id')
+        .order('created_at', { ascending: false })
+      if (error) { console.error('[ProblemasTab]', error); setLoading(false); return }
+      if (!data?.length) { setTickets([]); setLoading(false); return }
+
+      // Join manual a profiles
+      const userIds = [...new Set(data.map(t => t.user_id).filter(Boolean))]
+      const { data: profs } = await supabase.from('profiles')
+        .select('id, username').in('id', userIds)
+      const profMap = Object.fromEntries((profs || []).map(p => [p.id, p]))
+
+      setTickets(data.map(t => ({ ...t, profiles: profMap[t.user_id] || null })))
+      setLoading(false)
+    })()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleUpdate = (id, changes) => {
@@ -353,6 +481,20 @@ export default function AdminPanel({ user }) {
   // Comprova accés admin per email
   const isAdmin = ADMIN_EMAILS.includes(user?.email)
 
+  // Comptadors per als badges dels tabs
+  const [pendingTicketsCount, setPendingTicketsCount] = useState(0)
+  const [suggestionsCount, setSuggestionsCount] = useState(0)
+
+  useEffect(() => {
+    if (!isAdmin) return
+    supabase.from('support_tickets').select('id', { count: 'exact', head: true })
+      .eq('status', 'pending')
+      .then(({ count }) => setPendingTicketsCount(count || 0))
+    supabase.from('suggestions').select('id', { count: 'exact', head: true })
+      .eq('status', 'pending')
+      .then(({ count }) => setSuggestionsCount(count || 0))
+  }, [isAdmin])
+
   const fetchReviewBets = async () => {
     setLoading(true)
     // Picks en revisió pendent
@@ -420,8 +562,8 @@ export default function AdminPanel({ user }) {
       <div style={{ display: 'flex', gap: '4px', borderBottom: '0.5px solid var(--color-border)', marginBottom: '20px' }}>
         {[
           { id: 'review',       label: `🚩 Picks en revisión${reviewBets.length > 0 ? ` (${reviewBets.length})` : ''}` },
-          { id: 'problemas',    label: '🆘 Problemas' },
-          { id: 'sugerencias',  label: '💬 Sugerencias' },
+          { id: 'problemas',    label: `🆘 Problemas${pendingTicketsCount > 0 ? ` (${pendingTicketsCount})` : ''}` },
+          { id: 'sugerencias',  label: `💬 Sugerencias${suggestionsCount > 0 ? ` (${suggestionsCount})` : ''}` },
           { id: 'verificados',  label: '✓ Verificados' },
         ].map(t => (
           <button key={t.id} onClick={() => setActiveTab(t.id)}

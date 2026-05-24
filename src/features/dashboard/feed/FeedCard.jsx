@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import ForwardModal from '../social/ForwardModal'
 import PostModal from './PostModal'
 import { useProfileNav } from '../../../contexts/ProfileNavContext'
+import Username from '../../../components/ui/Username'
 
 function timeAgo(ts) {
   if (!ts) return ''
@@ -57,7 +58,7 @@ export default function FeedCard({ post, currentUser, onLike, onNavigateToChanne
           <div style={{ flex: 1, minWidth: 0 }}>
             <div onClick={() => openProfile(post.user_id)}
               style={{ fontWeight: 700, fontSize: '14px', lineHeight: 1.2, cursor: 'pointer', display: 'inline-block' }}>
-              {profile?.username || 'usuario'}
+              <Username username={profile?.username || 'usuario'} isVerified={profile?.is_verified} size="sm" />
             </div>
             <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', display: 'flex', gap: '6px', alignItems: 'center' }}>
               <span>{timeAgo(created_at)}</span>

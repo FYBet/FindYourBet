@@ -2,18 +2,19 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../../../../lib/supabase'
 import { usePolling } from '../../../../hooks/usePolling'
 import { markChannelRead } from '../../../../hooks/useUnreadChannelCount'
+import { isAdminUserId } from '../../../../lib/adminUsers'
 
 export function useMessages(channelId, userId) {
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(true)
   const recordedRef = useRef(new Set())
 
-  // Reset tracked IDs when channel changes
   useEffect(() => { recordedRef.current = new Set() }, [channelId])
 
-  // Called by IntersectionObserver when a message enters the viewport
   const recordView = useCallback((msgId) => {
     if (!userId || userId === 'dev-skip') return
+    // Stealth: els admins (fyourbet) no deixen rastre de visites
+    if (isAdminUserId(userId)) return
     if (msgId.startsWith('opt-') || recordedRef.current.has(msgId)) return
     recordedRef.current.add(msgId)
     supabase
@@ -32,7 +33,6 @@ export function useMessages(channelId, userId) {
       .limit(100)
     if (!data) return null
 
-    // Fetch view counts via aggregation view
     const msgIds = data.map(m => m.id)
     const { data: counts } = await supabase
       .from('channel_message_view_counts')
@@ -50,7 +50,6 @@ export function useMessages(channelId, userId) {
     if (enriched) {
       setMessages(enriched)
       setLoading(false)
-      // Marca el canal com llegit cada vegada que es carreguen missatges
       markChannelRead(userId, channelId)
     }
   }, [fetchAndEnrich, userId, channelId])
@@ -61,7 +60,44 @@ export function useMessages(channelId, userId) {
     fetchMessages()
   }, [channelId, fetchMessages])
 
-  usePolling(fetchMessages, 5000, !!channelId)
+  // Realtime: INSERT propaga missatges nous, DELETE propaga eliminacions a tots els membres
+  useEffect(() => {
+    if (!channelId) return
+    const channel = supabase.channel(`ch-view-${channelId}`)
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'channel_messages',
+        filter: `channel_id=eq.${channelId}`,
+      }, () => fetchMessages())
+      .on('postgres_changes', {
+        // Sense filter: DELETE events no suporten filtres sense REPLICA IDENTITY FULL
+        // Es filtra per id al callback — si el missatge no és al canal actiu, no passa res
+        event: 'DELETE', schema: 'public', table: 'channel_messages',
+      }, (payload) => {
+        setMessages(prev => prev.filter(m => m.id !== payload.old.id))
+      })
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [channelId, fetchMessages])
+
+  usePolling(fetchMessages, 30000, !!channelId)
+
+  // Hard delete: verifica via .select() que la DELETE ha afectat alguna fila
+  // (si RLS bloqueja, no llença error però retorna data buit)
+  const deleteMessage = useCallback(async (msgId) => {
+    const { data, error } = await supabase
+      .from('channel_messages')
+      .delete()
+      .eq('id', msgId)
+      .select()
+    if (error) { console.error('[CH delete] error:', error); alert('Error al eliminar: ' + error.message); return false }
+    if (!data?.length) {
+      console.warn('[CH delete] RLS bloqueja la DELETE — cap fila eliminada')
+      alert('No se puede eliminar este mensaje (permisos)')
+      return false
+    }
+    setMessages(prev => prev.filter(m => m.id !== msgId))
+    return true
+  }, [])
 
   const sendMessage = async (content, sendUserId) => {
     if (!content.trim()) return
@@ -87,5 +123,5 @@ export function useMessages(channelId, userId) {
     if (enriched) setMessages(enriched)
   }
 
-  return { messages, loading, sendMessage, recordView }
+  return { messages, loading, sendMessage, recordView, deleteMessage }
 }
