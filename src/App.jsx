@@ -43,6 +43,7 @@ function GateScreen({ onUnlock }) {
           onChange={e => { setCode(e.target.value.toUpperCase()); setError(false) }}
           onKeyDown={handleKey}
           placeholder="Código de acceso"
+          maxLength={10}
           autoFocus
           style={{
             background: '#111',

@@ -28,6 +28,9 @@ export function useDMs(currentUserId) {
 
   // Optimitzat: 4 queries en total en comptes de 1 + N×3
   const fetchConversations = async (cancelled = false) => {
+    // Safety timer + try/catch/finally (regla 3 CLAUDE.md): el finally SEMPRE apaga
+    // el loading. Abans el finally només netejava el timer, així que un error abans
+    // dels setLoading(false) inline deixava el spinner penjat per sempre.
     const safetyTimer = setTimeout(() => setLoading(false), 10000)
     try {
     const { data: convs } = await supabase
@@ -40,7 +43,6 @@ export function useDMs(currentUserId) {
     if (!convs?.length) {
       setConversations([])
       setUnreadCount(0)
-      setLoading(false)
       return
     }
 
@@ -104,9 +106,11 @@ export function useDMs(currentUserId) {
     const total = enriched.reduce((sum, c) => sum + c.unread, 0)
     setUnreadCount(total)
     setConversations(enriched.sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt)))
-    setLoading(false)
+    } catch {
+      // Empassat: el finally garanteix que el loading s'apaga.
     } finally {
       clearTimeout(safetyTimer)
+      setLoading(false)
     }
   }
 
@@ -161,26 +165,30 @@ export function useDMs(currentUserId) {
   }
 
   const fetchMessages = async (conversationId) => {
+    // NOMÉS llegim. Ja NO marquem tot com llegit en obrir: els missatges es marquen
+    // un per un quan l'usuari els veu (scroll), via markDmRead des de DMView.
     const { data } = await supabase
       .from('direct_messages')
       .select('*')
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true })
+    return data || []
+  }
 
-    // Marca com llegits
+  // Marca com llegits NOMÉS els missatges que l'usuari ha vist realment (scroll al
+  // viewport). read_at també alimenta els ✓✓ del remitent, així que els receipts
+  // passen a ser exactes. Baixa el comptador de no llegits de la conversa.
+  const markDmRead = async (conversationId, messageIds) => {
+    if (!messageIds?.length) return
     await supabase.from('direct_messages')
       .update({ read_at: new Date().toISOString() })
-      .eq('conversation_id', conversationId)
+      .in('id', messageIds)
       .neq('sender_id', currentUserId)
       .is('read_at', null)
-
-    // Actualitza unread localment
     setConversations(prev => prev.map(c =>
-      c.id === conversationId ? { ...c, unread: 0 } : c
+      c.id === conversationId ? { ...c, unread: Math.max(0, (c.unread || 0) - messageIds.length) } : c
     ))
-    setUnreadCount(prev => Math.max(0, prev - (conversations.find(c => c.id === conversationId)?.unread || 0)))
-
-    return data || []
+    setUnreadCount(prev => Math.max(0, prev - messageIds.length))
   }
 
   const blockUser = async (conversationId) => {
@@ -191,7 +199,7 @@ export function useDMs(currentUserId) {
   return {
     conversations, loading, unreadCount,
     startConversation, acceptConversation,
-    sendMessage, fetchMessages, blockUser,
+    sendMessage, fetchMessages, markDmRead, blockUser,
     refetch: fetchConversations,
   }
 }

@@ -148,6 +148,22 @@ export default function OfferPage({ user }) {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {/* Avís de correu — clau per evitar problemes d'accés post-compra */}
+              {user ? (
+                <div style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '10px 14px', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                  <span style={{ fontSize: '14px', flexShrink: 0, marginTop: '1px' }}>⚠️</span>
+                  <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+                    Estás comprando con la cuenta <strong style={{ color: 'var(--color-text)' }}>{user.email}</strong>. El enlace de acceso quedará vinculado a este email — asegúrate de que es el correcto.
+                  </div>
+                </div>
+              ) : (
+                <div style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '10px 14px', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                  <span style={{ fontSize: '14px', flexShrink: 0, marginTop: '1px' }}>⚠️</span>
+                  <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+                    Usa el mismo email en FindYourBet y en el pago. Si no coinciden, no podrás acceder con tu enlace personal.
+                  </div>
+                </div>
+              )}
               {error && (
                 <div style={{ background: 'var(--color-error-light)', border: '0.5px solid var(--color-error-border)', borderRadius: 'var(--radius-md)', padding: '10px 14px', fontSize: '13px', color: 'var(--color-error)', textAlign: 'center' }}>
                   {error}

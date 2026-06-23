@@ -275,6 +275,7 @@ function RedesSoporte({ user }) {
                 value={title}
                 onChange={e => setTitle(e.target.value)}
                 placeholder="Resume tu problema en una frase..."
+                maxLength={100}
                 style={{ ...inputStyle }}
               />
             </div>
@@ -285,6 +286,7 @@ function RedesSoporte({ user }) {
                 value={problem}
                 onChange={e => setProblem(e.target.value)}
                 placeholder="Describe paso a paso qué ha ocurrido, qué esperabas y qué ha pasado en su lugar..."
+                maxLength={3000}
                 style={{ ...inputStyle, resize: 'vertical' }}
               />
             </div>
@@ -390,12 +392,13 @@ function Sugerencias({ user }) {
                 value={title}
                 onChange={e => setTitle(e.target.value)}
                 placeholder="Resume tu idea en una frase..."
+                maxLength={100}
                 style={{ ...inputStyle }}
               />
             </div>
             <div style={{ marginBottom: '14px' }}>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px' }}>Tu sugerencia</label>
-              <textarea style={{ ...inputStyle, resize: 'vertical' }} rows={5} placeholder="Cuéntanos tu idea con detalle..." value={message} onChange={e => setMessage(e.target.value)} />
+              <textarea style={{ ...inputStyle, resize: 'vertical' }} rows={5} placeholder="Cuéntanos tu idea con detalle..." value={message} onChange={e => setMessage(e.target.value)} maxLength={3000} />
             </div>
             <div style={{ marginBottom: '20px' }}>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '6px' }}>Imagen (opcional)</label>

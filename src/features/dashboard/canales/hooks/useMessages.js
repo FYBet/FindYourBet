@@ -1,15 +1,20 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../../../../lib/supabase'
 import { usePolling } from '../../../../hooks/usePolling'
-import { markChannelRead } from '../../../../hooks/useUnreadChannelCount'
 import { isAdminUserId } from '../../../../lib/adminUsers'
 
 export function useMessages(channelId, userId) {
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(true)
   const recordedRef = useRef(new Set())
+  // Evita el flash de "Cargando" en refetches (polling, realtime). Es reseteja
+  // en canviar de canal perquè el nou canal sí que mostri el seu spinner inicial.
+  const hasLoadedRef = useRef(false)
 
-  useEffect(() => { recordedRef.current = new Set() }, [channelId])
+  useEffect(() => {
+    recordedRef.current = new Set()
+    hasLoadedRef.current = false
+  }, [channelId])
 
   const recordView = useCallback((msgId) => {
     if (!userId || userId === 'dev-skip') return
@@ -25,19 +30,24 @@ export function useMessages(channelId, userId) {
 
   const fetchAndEnrich = useCallback(async () => {
     if (!channelId) return null
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('channel_messages')
       .select('*')
       .eq('channel_id', channelId)
       .order('created_at', { ascending: true })
       .limit(100)
-    if (!data) return null
+    // Supabase no llança en timeout/error de xarxa: retorna { data: null }. Tornem null
+    // perquè fetchMessages ho tracti com a fallada (retry) en lloc de buidar el xat.
+    if (error || !data) return null
 
     const msgIds = data.map(m => m.id)
-    const { data: counts } = await supabase
-      .from('channel_message_view_counts')
-      .select('message_id, view_count')
-      .in('message_id', msgIds)
+    // Els recomptes de vistes són secundaris: si fallen, mostrem els missatges igualment.
+    const { data: counts } = msgIds.length
+      ? await supabase
+          .from('channel_message_view_counts')
+          .select('message_id, view_count')
+          .in('message_id', msgIds)
+      : { data: [] }
 
     const countMap = {}
     ;(counts || []).forEach(r => { countMap[r.message_id] = Number(r.view_count) })
@@ -45,20 +55,35 @@ export function useMessages(channelId, userId) {
     return data.map(m => ({ ...m, view_count: countMap[m.id] || 0 }))
   }, [channelId])
 
+  // Carrega missatges amb la protecció obligatòria (regla 3 del CLAUDE.md):
+  // safety timer + try/catch/finally perquè el spinner MAI quedi penjat encara
+  // que la petició faci timeout.
   const fetchMessages = useCallback(async () => {
-    const enriched = await fetchAndEnrich()
-    if (enriched) {
-      setMessages(enriched)
+    if (!channelId) { setLoading(false); return }
+    // Spinner només el primer cop. Polling i realtime refetch són silenciosos.
+    if (!hasLoadedRef.current) setLoading(true)
+    const safetyTimer = setTimeout(() => setLoading(false), 10000)
+    try {
+      let enriched = await fetchAndEnrich()
+      // Primer load fallit (timeout/error): un retry net abans de rendir-nos.
+      if (!enriched && !hasLoadedRef.current) enriched = await fetchAndEnrich()
+      if (enriched) {
+        setMessages(enriched)
+        // NOTA: ja no marquem tot el canal com llegit aquí. El marcador avança
+        // a mesura que l'usuari fa scroll i veu els missatges (ChatView/observer),
+        // perquè els no llegits persisteixin fins que realment s'hagin vist.
+      }
+    } catch {
+      // Empassat: el finally garanteix que el loading s'apaga.
+    } finally {
+      clearTimeout(safetyTimer)
+      hasLoadedRef.current = true
       setLoading(false)
-      markChannelRead(userId, channelId)
     }
   }, [fetchAndEnrich, userId, channelId])
 
-  useEffect(() => {
-    if (!channelId) { setLoading(false); return }
-    setLoading(true)
-    fetchMessages()
-  }, [channelId, fetchMessages])
+  // fetchMessages ja gestiona internament el cas !channelId (apaga el loading).
+  useEffect(() => { fetchMessages() }, [channelId, fetchMessages])
 
   // Realtime: INSERT propaga missatges nous, DELETE propaga eliminacions a tots els membres
   useEffect(() => {

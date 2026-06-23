@@ -472,6 +472,91 @@ function VerificadosTab() {
   )
 }
 
+function UserReportsTab() {
+  const [reports, setReports] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  const fetchReports = async () => {
+    setLoading(true)
+    const safetyTimer = setTimeout(() => setLoading(false), 10000)
+    try {
+      const { data } = await supabase
+        .from('user_reports')
+        .select('id, reason, details, status, created_at, reporter:profiles!reporter_id(username), reported:profiles!reported_id(username)')
+        .order('created_at', { ascending: false })
+        .limit(100)
+      setReports(data || [])
+    } catch {
+      setReports([])
+    } finally {
+      clearTimeout(safetyTimer)
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { fetchReports() }, [])
+
+  const markReviewed = async (id) => {
+    await supabase.from('user_reports').update({ status: 'reviewed' }).eq('id', id)
+    setReports(prev => prev.map(r => r.id === id ? { ...r, status: 'reviewed' } : r))
+  }
+
+  const pending = reports.filter(r => r.status === 'pending')
+  const reviewed = reports.filter(r => r.status === 'reviewed')
+
+  if (loading) return <div style={{ textAlign: 'center', padding: '40px', color: 'var(--color-text-muted)' }}>⏳ Cargando...</div>
+
+  if (reports.length === 0) return (
+    <div style={{ textAlign: 'center', padding: '40px', color: 'var(--color-text-muted)' }}>
+      <div style={{ fontSize: '32px', marginBottom: '8px' }}>✅</div>
+      <div>Sin reportes de usuarios.</div>
+    </div>
+  )
+
+  const ReportRow = ({ r }) => (
+    <div style={{ background: 'var(--color-bg)', border: `0.5px solid ${r.status === 'pending' ? 'var(--color-warning, #f59e0b)' : 'var(--color-border)'}`, borderLeft: `3px solid ${r.status === 'pending' ? 'var(--color-warning, #f59e0b)' : 'var(--color-border)'}`, borderRadius: 'var(--radius-lg)', padding: '14px 16px', marginBottom: '8px', opacity: r.status === 'reviewed' ? 0.6 : 1 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
+              <strong style={{ color: 'var(--color-text)' }}>{r.reporter?.username || '?'}</strong>
+              {' reporta a '}
+              <strong style={{ color: 'var(--color-error)' }}>{r.reported?.username || '?'}</strong>
+            </span>
+            <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', background: 'var(--color-bg-soft)', padding: '2px 8px', borderRadius: '999px' }}>
+              {new Date(r.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>
+          <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: r.details ? '4px' : 0 }}>{r.reason}</div>
+          {r.details && <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>{r.details}</div>}
+        </div>
+        {r.status === 'pending' ? (
+          <button onClick={() => markReviewed(r.id)}
+            style={{ padding: '5px 12px', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-bg-soft)', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '12px', fontFamily: 'var(--font-sans)', flexShrink: 0 }}>
+            ✓ Marcar revisado
+          </button>
+        ) : (
+          <span style={{ fontSize: '12px', color: 'var(--color-primary)', fontWeight: 600 }}>✓ Revisado</span>
+        )}
+      </div>
+    </div>
+  )
+
+  return (
+    <div>
+      <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
+        {pending.length} pendiente{pending.length !== 1 ? 's' : ''} · {reviewed.length} revisado{reviewed.length !== 1 ? 's' : ''} ·{' '}
+        <button onClick={fetchReports} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: '12px', fontFamily: 'var(--font-sans)', padding: 0 }}>Actualizar</button>
+      </div>
+      {pending.map(r => <ReportRow key={r.id} r={r} />)}
+      {reviewed.length > 0 && pending.length > 0 && (
+        <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px', margin: '16px 0 10px' }}>Revisados</div>
+      )}
+      {reviewed.map(r => <ReportRow key={r.id} r={r} />)}
+    </div>
+  )
+}
+
 export default function AdminPanel({ user }) {
   const [reviewBets, setReviewBets] = useState([])
   const [reportsByBet, setReportsByBet] = useState({})
@@ -484,6 +569,7 @@ export default function AdminPanel({ user }) {
   // Comptadors per als badges dels tabs
   const [pendingTicketsCount, setPendingTicketsCount] = useState(0)
   const [suggestionsCount, setSuggestionsCount] = useState(0)
+  const [userReportsCount, setUserReportsCount] = useState(0)
 
   useEffect(() => {
     if (!isAdmin) return
@@ -493,6 +579,9 @@ export default function AdminPanel({ user }) {
     supabase.from('suggestions').select('id', { count: 'exact', head: true })
       .eq('status', 'pending')
       .then(({ count }) => setSuggestionsCount(count || 0))
+    supabase.from('user_reports').select('id', { count: 'exact', head: true })
+      .eq('status', 'pending')
+      .then(({ count }) => setUserReportsCount(count || 0))
   }, [isAdmin])
 
   const fetchReviewBets = async () => {
@@ -565,6 +654,7 @@ export default function AdminPanel({ user }) {
           { id: 'problemas',    label: `🆘 Problemas${pendingTicketsCount > 0 ? ` (${pendingTicketsCount})` : ''}` },
           { id: 'sugerencias',  label: `💬 Sugerencias${suggestionsCount > 0 ? ` (${suggestionsCount})` : ''}` },
           { id: 'verificados',  label: '✓ Verificados' },
+          { id: 'reportes',     label: `👤 Reportes${userReportsCount > 0 ? ` (${userReportsCount})` : ''}` },
         ].map(t => (
           <button key={t.id} onClick={() => setActiveTab(t.id)}
             style={{ padding: '8px 16px', border: 'none', borderBottom: `2px solid ${activeTab === t.id ? 'var(--color-primary)' : 'transparent'}`, background: 'transparent', cursor: 'pointer', fontSize: '13px', fontWeight: activeTab === t.id ? 700 : 500, color: activeTab === t.id ? 'var(--color-primary)' : 'var(--color-text-muted)', fontFamily: 'var(--font-sans)', transition: 'all 0.15s' }}>
@@ -576,6 +666,7 @@ export default function AdminPanel({ user }) {
       {activeTab === 'problemas'   && <ProblemasTab />}
       {activeTab === 'sugerencias' && <SugerenciasTab adminUserId={user?.id} />}
       {activeTab === 'verificados' && <VerificadosTab />}
+      {activeTab === 'reportes'    && <UserReportsTab />}
 
       {activeTab === 'review' && (
         <>

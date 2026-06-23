@@ -8,7 +8,7 @@ import {
   formatMsgTime, getDayLabel, DaySeparator,
 } from './messageRenderer'
 
-export default function PreviewView({ channel, user, onBack, onJoin, joining, memberCount }) {
+export default function PreviewView({ channel, user, onBack, onJoin, joining, memberCount, compact = false }) {
   const { messages, loading, recordView } = useMessages(channel.id, user?.id)
   const bottomRef = useRef(null)
   const scrollRef = useRef(null)
@@ -36,7 +36,7 @@ export default function PreviewView({ channel, user, onBack, onJoin, joining, me
 
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
-      style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 160px)' }}>
+      style={{ display: 'flex', flexDirection: 'column', height: compact ? 'calc(100vh - 57px - 48px)' : 'calc(100vh - 160px)' }}>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', color: 'var(--color-text-muted)' }}>←</button>

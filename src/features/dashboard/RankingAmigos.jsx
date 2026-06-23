@@ -31,6 +31,8 @@ export default function RankingAmigos({ user }) {
 
   useEffect(() => {
     if (!user?.id) { setFriendsLoading(false); return }
+    // Safety timer + .catch: si una query peta, friendsLoading no queda penjat.
+    const safetyTimer = setTimeout(() => setFriendsLoading(false), 10000)
     Promise.all([
       supabase.from('follows').select('following_id').eq('follower_id', user.id),
       supabase.from('follows').select('follower_id').eq('following_id', user.id),
@@ -40,9 +42,13 @@ export default function RankingAmigos({ user }) {
       const mutual = (followers || []).map(f => f.follower_id).filter(id => followingSet.has(id))
       setFriendIds([...mutual, user.id])
       setHideMe(profile?.hide_from_ranking ?? false)
+    }).catch(() => {
+      setFriendIds([user.id])
+    }).finally(() => {
+      clearTimeout(safetyTimer)
       setFriendsLoading(false)
     })
-  }, [user?.id])
+  }, [user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const effectiveFriendIds = hideMe
     ? (friendIds ?? []).filter(id => id !== user?.id)

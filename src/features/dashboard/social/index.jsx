@@ -4,28 +4,40 @@ import { supabase } from '../../../lib/supabase'
 import { useDMs } from './hooks/useDMs'
 import { useFollow } from './hooks/useFollow'
 import { useMutes, MUTE_DURATIONS } from '../../../hooks/useMutes'
+import { usePinnedChannels } from '../../../hooks/usePinnedChannels'
+import { useResizablePanel } from '../../../hooks/useResizablePanel'
 import DMView from './DMView'
 import ProfileView from './ProfileView'
+import ReportUserModal from './ReportUserModal'
 import Username from '../../../components/ui/Username'
 import { isAdminUserId } from '../../../lib/adminUsers'
+import { formatMsgPreview } from '../../../lib/formatMsgPreview'
+import '../dashboard.css'
 
-function formatMsgPreview(content) {
-  if (!content) return ''
-  if (content === '[DELETED]') return '🗑 Mensaje eliminado'
-  if (content.startsWith('[VOICE]:')) return '🎤 Mensaje de voz'
-  if (content.startsWith('[GIF]:')) return '🎞 GIF'
-  if (content.startsWith('[IMAGE]:')) return '📷 Imagen'
-  if (content.startsWith('[FILE:')) return '📎 Archivo'
-  if (content.startsWith('[BET]:')) return '📊 Pick'
-  if (content.startsWith('[STICKER]:')) return content.replace('[STICKER]:', '')
-  return content
+function miniTimeAgo(ts) {
+  if (!ts) return ''
+  const m = Math.floor((Date.now() - new Date(ts).getTime()) / 60000)
+  if (m < 1) return 'ahora'
+  if (m < 60) return `${m}m`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h`
+  const d = Math.floor(h / 24)
+  if (d < 7) return `${d}d`
+  return new Date(ts).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })
 }
 
-export default function Social({ user, initialDMUserId }) {
-  const { conversations, loading, unreadCount, startConversation, acceptConversation, sendMessage, fetchMessages, blockUser } = useDMs(user.id)
+export default function Social({ user, initialDMUserId, onNavigateToChannel, onActiveUnreadChange, onRefreshUnread }) {
+  const { conversations, loading, unreadCount, startConversation, acceptConversation, sendMessage, fetchMessages, markDmRead, blockUser } = useDMs(user.id)
   const { isFollowing, isFollower, follow, unfollow, isMutual } = useFollow(user.id)
   const { mute, unmute, isMuted, muteLabel } = useMutes()
+  const { pin: pinDM, unpin: unpinDM, isPinned: isDMPinned } = usePinnedChannels('fyb_pinned_dms')
+  // Comparteix la mateixa amplada que la secció Canales perquè les dues columnes
+  // dretes tinguin sempre la mateixa mida (abans DMs guardava un valor propi més petit).
+  const { pct: miniPct, containerRef: splitRef, onResizerMouseDown } = useResizablePanel('fyb_panel_width_channels')
   const [openMuteMenu, setOpenMuteMenu] = useState(null)
+  const [miniMenuId, setMiniMenuId] = useState(null)
+  const [miniMuteId, setMiniMuteId] = useState(null)
+  const [reportTarget, setReportTarget] = useState(null) // { id, username }
 
   const [view, setView] = useState('list') // 'list' | 'dm' | 'profile' | 'search'
   const [activeConv, setActiveConv] = useState(null)
@@ -75,211 +87,251 @@ export default function Social({ user, initialDMUserId }) {
     setView('dm')
   }
 
-  if (view === 'dm' && activeConv) {
-    return (
-      <DMView
-        conversation={activeConv}
-        currentUser={user}
-        onBack={() => setView('list')}
-        onSend={sendMessage}
-        onFetchMessages={fetchMessages}
-        onBlock={(id) => { blockUser(id); setView('list') }}
-        onReport={() => alert('Conversación reportada.')}
-        onViewProfile={(userId) => { setActiveProfile(userId); setView('profile') }}
-        onAccept={async (id) => {
-          await acceptConversation(id)
-          setActiveConv(prev => prev ? { ...prev, isAccepted: true } : prev)
-        }}
-      />
-    )
-  }
-
-  if (view === 'profile' && activeProfile) {
-    return (
-      <ProfileView
-        userId={activeProfile}
-        currentUser={user}
-        onBack={() => setView('list')}
-        onStartDM={handleStartDM}
-        isFollowing={isFollowing(activeProfile)}
-        isFollower={isFollower(activeProfile)}
-        onFollow={(userId) => follow(userId, user?.name || 'alguien')}
-        onUnfollow={unfollow}
-        onBlock={(userId) => { alert('Usuario bloqueado.') }}
-        onReport={(userId) => {}}
-        onViewUser={handleOpenProfile}
-      />
-    )
-  }
-
   const pending = conversations.filter(c => !c.isAccepted && c.user1_id !== user.id)
   const active = conversations.filter(c => c.isAccepted || c.user1_id === user.id)
+  const sortedConvs = [...active].sort((a, b) => {
+    const aPin = isDMPinned(a.id), bPin = isDMPinned(b.id)
+    if (aPin && !bPin) return -1
+    if (!aPin && bPin) return 1
+    return new Date(b.lastMessageAt) - new Date(a.lastMessageAt)
+  })
+  const miniMenuBtnStyle = { display: 'flex', alignItems: 'center', width: '100%', padding: '9px 12px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', color: 'var(--color-text)', textAlign: 'left', fontFamily: 'var(--font-sans)', gap: '6px' }
 
   return (
-    <motion.div key="social" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.3 }}>
+    <>
+    <div className="canales-split" ref={splitRef}>
 
-      <div className="page-header">
-        <h2>Social</h2>
-        <p>Mensajes directos y perfiles de la comunidad.</p>
-      </div>
-
-      {/* BUSCADOR */}
-      <div style={{ marginBottom: '24px' }}>
-        <input
-          type="text"
-          placeholder="🔍 Buscar usuario por nombre o @username..."
-          value={searchQuery}
-          onChange={e => handleSearch(e.target.value)}
-          style={{ width: '100%', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '14px', padding: '12px 16px', borderRadius: 'var(--radius-lg)', outline: 'none', boxSizing: 'border-box' }}
-        />
-
-        <AnimatePresence>
-          {searchQuery && (
-            <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-              style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', marginTop: '8px', overflow: 'hidden' }}>
-              {searching && <div style={{ padding: '16px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '13px' }}>Buscando...</div>}
-              {!searching && searchResults.length === 0 && (
-                <div style={{ padding: '16px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '13px' }}>No se encontraron usuarios</div>
-              )}
-              {searchResults.map((u, i) => (
-                <div key={u.id}
-                  style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', borderBottom: i < searchResults.length - 1 ? '0.5px solid var(--color-border)' : 'none' }}>
-                  <div onClick={() => { handleOpenProfile(u.id); setSearchQuery(''); setSearchResults([]) }}
-                    style={{ width: '40px', height: '40px', background: 'var(--color-primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, cursor: 'pointer' }}>
-                    {(u.username || u.name || '?')[0].toUpperCase()}
-                  </div>
-                  <div onClick={() => { handleOpenProfile(u.id); setSearchQuery(''); setSearchResults([]) }} style={{ flex: 1, cursor: 'pointer' }}>
-                    <div style={{ fontWeight: 600, fontSize: '14px' }}>
-                      <Username username={u.username} isVerified={u.is_verified} size="sm" />
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                    <button
-                      onClick={() => isFollowing(u.id) ? unfollow(u.id) : follow(u.id, user?.name || 'alguien')}
-                      style={{ padding: '5px 12px', borderRadius: 'var(--radius-md)', border: isFollowing(u.id) ? '0.5px solid var(--color-border)' : 'none', background: isFollowing(u.id) ? 'var(--color-bg-soft)' : 'var(--color-primary)', color: isFollowing(u.id) ? 'var(--color-text-muted)' : '#010906', cursor: 'pointer', fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-sans)', transition: 'all 0.15s' }}>
-                      {isMutual(u.id) ? '👥 Amigos' : isFollowing(u.id) ? 'Siguiendo' : '+ Seguir'}
-                    </button>
-                    <button onClick={() => handleStartDM(u.id)}
-                      style={{ padding: '5px 10px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-sans)' }}>
-                      💬
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* SOLICITUDES PENDIENTES */}
-      {pending.length > 0 && (
-        <div style={{ marginBottom: '24px' }}>
-          <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px' }}>
-            Solicitudes pendientes ({pending.length})
+      {/* 75% — contingut: DM actiu / perfil / resultats cerca / placeholder */}
+      <div className="canales-chat-panel">
+        {activeConv ? (
+          <DMView
+            key={activeConv.id}
+            conversation={activeConv}
+            currentUser={user}
+            onBack={() => { setView('list'); setActiveConv(null); onRefreshUnread?.() }}
+            onSend={sendMessage}
+            onFetchMessages={fetchMessages}
+            onMarkRead={markDmRead}
+            onUnreadChange={onActiveUnreadChange}
+            onBlock={(id) => { blockUser(id); setView('list'); setActiveConv(null) }}
+            onReport={() => alert('Conversación reportada.')}
+            onViewProfile={(userId) => { setActiveProfile(userId); setView('profile') }}
+            onAccept={async (id) => {
+              await acceptConversation(id)
+              setActiveConv(prev => prev ? { ...prev, isAccepted: true } : prev)
+            }}
+            onNavigateToChannel={onNavigateToChannel}
+            compact
+          />
+        ) : activeProfile ? (
+          <div style={{ height: '100%', overflowY: 'auto' }}>
+            <ProfileView
+              userId={activeProfile}
+              currentUser={user}
+              onBack={() => { setView('list'); setActiveProfile(null) }}
+              onStartDM={handleStartDM}
+              isFollowing={isFollowing(activeProfile)}
+              isFollower={isFollower(activeProfile)}
+              onFollow={(userId) => follow(userId, user?.name || 'alguien')}
+              onUnfollow={unfollow}
+              onBlock={(userId) => { alert('Usuario bloqueado.') }}
+              onReport={() => {}}
+              onViewUser={handleOpenProfile}
+            />
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        ) : (
+          // Cercador centrat + resultats — no hi ha DM ni perfil obert
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', overflowY: 'auto', padding: '0 40px', boxSizing: 'border-box' }}>
+            <div style={{ width: '100%', maxWidth: '380px', paddingTop: '18%' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+                <div style={{ fontSize: '52px', opacity: 0.2 }}>💬</div>
+                <div style={{ fontWeight: 600, fontSize: '16px', color: 'var(--color-text)', opacity: 0.7, textAlign: 'center' }}>
+                  {active.length + pending.length > 0 ? 'Selecciona o busca una conversación' : 'Busca un usuario para empezar'}
+                </div>
+              </div>
+              <input
+                type="text"
+                placeholder="🔍 Buscar usuario por nombre o @username..."
+                value={searchQuery}
+                onChange={e => handleSearch(e.target.value)}
+                maxLength={50}
+                style={{ width: '100%', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '14px', padding: '12px 16px', borderRadius: 'var(--radius-lg)', outline: 'none', boxSizing: 'border-box' }}
+              />
+              {searchQuery && (
+                <div style={{ marginTop: '10px' }}>
+                  {searching && <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '13px', padding: '12px 0' }}>Buscando...</div>}
+                  {!searching && searchResults.length === 0 && (
+                    <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '13px', padding: '12px 0' }}>No se encontraron usuarios</div>
+                  )}
+                  {searchResults.map(u => (
+                    <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', marginBottom: '8px' }}>
+                      <div onClick={() => { handleOpenProfile(u.id); setSearchQuery(''); setSearchResults([]) }}
+                        style={{ width: '40px', height: '40px', background: 'var(--color-primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, cursor: 'pointer' }}>
+                        {(u.username || u.name || '?')[0].toUpperCase()}
+                      </div>
+                      <div onClick={() => { handleOpenProfile(u.id); setSearchQuery(''); setSearchResults([]) }} style={{ flex: 1, cursor: 'pointer' }}>
+                        <div style={{ fontWeight: 600, fontSize: '14px' }}>
+                          <Username username={u.username} isVerified={u.is_verified} size="sm" />
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                        <button onClick={() => isFollowing(u.id) ? unfollow(u.id) : follow(u.id, user?.name || 'alguien')}
+                          style={{ padding: '5px 12px', borderRadius: 'var(--radius-md)', border: isFollowing(u.id) ? '0.5px solid var(--color-border)' : 'none', background: isFollowing(u.id) ? 'var(--color-bg-soft)' : 'var(--color-primary)', color: isFollowing(u.id) ? 'var(--color-text-muted)' : '#010906', cursor: 'pointer', fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-sans)', transition: 'all 0.15s' }}>
+                          {isMutual(u.id) ? '👥 Amigos' : isFollowing(u.id) ? 'Siguiendo' : '+ Seguir'}
+                        </button>
+                        <button onClick={() => handleStartDM(u.id)}
+                          style={{ padding: '5px 10px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '13px', fontFamily: 'var(--font-sans)' }}>
+                          💬
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Resizer arrossegable */}
+      <div className="canales-resizer" onMouseDown={onResizerMouseDown} />
+
+      {/* Mini-llista converses — dreta */}
+      <div className="canales-mini-list" style={{ width: `${miniPct}%` }}>
+
+        {/* Solicituds pendents */}
+        {pending.length > 0 && (
+          <div>
+            <div className="canales-mini-section">Solicitudes ({pending.length})</div>
             {pending.map(c => (
-              <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px', background: 'var(--color-bg)', border: '0.5px solid var(--color-primary-border)', borderRadius: 'var(--radius-lg)' }}>
-                <div onClick={() => handleOpenProfile(c.otherId)} style={{ width: '40px', height: '40px', background: 'var(--color-primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden', cursor: 'pointer' }}>
-                  {c.otherAvatarUrl
-                    ? <img src={c.otherAvatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    : (c.otherUsername || '?')[0].toUpperCase()}
+              <div key={c.id} className="canales-mini-item" style={{ borderLeft: '2px solid var(--color-primary)' }}>
+                <div onClick={() => handleOpenConv(c)} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flex: 1, minWidth: 0, cursor: 'pointer' }}>
+                  <div className="canales-mini-avatar" style={{ background: 'var(--color-primary-light)', color: 'var(--color-primary)' }}>
+                    {c.otherAvatarUrl
+                      ? <img src={c.otherAvatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                      : (c.otherUsername || '?')[0].toUpperCase()}
+                  </div>
+                  <div className="canales-mini-body">
+                    <div className="canales-mini-row">
+                      <span className="canales-mini-name">{c.otherUsername}</span>
+                    </div>
+                    <div className="canales-mini-preview" style={{ fontStyle: 'italic' }}>quiere enviarte un mensaje</div>
+                  </div>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div onClick={() => handleOpenProfile(c.otherId)} style={{ fontWeight: 600, fontSize: '14px', cursor: 'pointer', display: 'inline-block' }}>
-                  <Username username={c.otherUsername} isVerified={c.otherIsVerified} size="sm" />
-                </div>
-                  <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>quiere enviarte un mensaje</div>
-                </div>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button onClick={() => blockUser(c.id)}
-                    style={{ padding: '6px 12px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-error-border)', background: 'var(--color-error-light)', color: 'var(--color-error)', cursor: 'pointer', fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-sans)' }}>
-                    Rechazar
-                  </button>
+                {/* Botons acceptar/rebutjar compactes */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0, alignSelf: 'center' }}>
                   <button onClick={() => acceptConversation(c.id)}
-                    style={{ padding: '6px 12px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--color-primary)', color: '#010906', cursor: 'pointer', fontSize: '12px', fontWeight: 700, fontFamily: 'var(--font-sans)' }}>
-                    Aceptar
+                    style={{ padding: '3px 8px', background: 'var(--color-primary)', color: '#010906', border: 'none', borderRadius: 'var(--radius-sm)', fontSize: '11px', fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>
+                    ✓
+                  </button>
+                  <button onClick={() => blockUser(c.id)}
+                    style={{ padding: '3px 8px', background: 'var(--color-error-light)', color: 'var(--color-error)', border: 'none', borderRadius: 'var(--radius-sm)', fontSize: '11px', fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>
+                    ✕
                   </button>
                 </div>
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* CONVERSES */}
-      <div>
-        <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px' }}>
-          Mensajes directos
-        </div>
-
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--color-text-muted)' }}>⏳ Cargando...</div>
-        ) : active.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--color-text-muted)' }}>
-            <div style={{ fontSize: '40px', marginBottom: '12px' }}>💬</div>
-            <div style={{ fontWeight: 600, marginBottom: '6px' }}>Sin mensajes todavía</div>
-            <div style={{ fontSize: '13px' }}>Busca un usuario arriba para empezar a chatear.</div>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            {active.map(c => {
+        {/* Converses actives */}
+        {sortedConvs.length > 0 && (
+          <div>
+            <div className="canales-mini-section">Mensajes</div>
+            {sortedConvs.map(c => {
               const dmKey = `dm_${c.id}`
-              const muted = isMuted(dmKey)
+              const cmuted = isMuted(dmKey)
+              const cpinned = isDMPinned(c.id)
+              const isActive = c.id === activeConv?.id
+              const menuOpen = miniMenuId === c.id
+              const muteOpen = miniMuteId === c.id
+              const preview = formatMsgPreview(c.lastMessage) || ''
+              const timeStr = miniTimeAgo(c.lastMessageAt)
               return (
-                <div key={c.id} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', transition: 'border-color 0.15s' }}
-                  onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--color-primary-border)'}
-                  onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--color-border)'}>
-                  <div onClick={() => handleOpenConv(c)} style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, cursor: 'pointer', minWidth: 0 }}>
-                    <div style={{ position: 'relative', flexShrink: 0 }}>
-                      <div onClick={e => { e.stopPropagation(); handleOpenProfile(c.otherId) }} style={{ width: '44px', height: '44px', background: 'var(--color-primary-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '17px', fontWeight: 700, color: 'var(--color-primary)', opacity: muted ? 0.5 : 1, overflow: 'hidden', cursor: 'pointer' }}>
-                        {c.otherAvatarUrl
-                          ? <img src={c.otherAvatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          : (c.otherUsername || '?')[0].toUpperCase()}
-                      </div>
-                      {c.unread > 0 && !muted && (
-                        <div style={{ position: 'absolute', top: '-2px', right: '-2px', width: '18px', height: '18px', background: 'var(--color-error)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 700, color: '#fff' }}>
+                <div key={c.id} className={`canales-mini-item${isActive ? ' active' : ''}`}>
+                  <div onClick={() => handleOpenConv(c)} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flex: 1, minWidth: 0, cursor: 'pointer' }}>
+                    <div className="canales-mini-avatar" style={{ background: 'var(--color-primary-light)', color: 'var(--color-primary)' }}>
+                      {c.otherAvatarUrl
+                        ? <img src={c.otherAvatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                        : (c.otherUsername || '?')[0].toUpperCase()}
+                      {c.unread > 0 && !cmuted && (
+                        <div style={{ position: 'absolute', top: '-2px', right: '-2px', minWidth: '16px', height: '16px', background: 'var(--color-error)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', fontWeight: 700, color: '#fff', border: '2px solid var(--color-bg)', padding: '0 2px', boxSizing: 'border-box' }}>
                           {c.unread > 9 ? '9+' : c.unread}
                         </div>
                       )}
                     </div>
-                    <div style={{ flex: 1, minWidth: 0, opacity: muted ? 0.6 : 1 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
-                        <div style={{ fontWeight: c.unread > 0 && !muted ? 700 : 600, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <Username username={c.otherUsername} isVerified={c.otherIsVerified} size="sm" />
-                          {muted && <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontWeight: 400 }}>🔕 {muteLabel(dmKey)}</span>}
-                        </div>
-                        <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', flexShrink: 0 }}>
-                          {new Date(c.lastMessageAt).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
-                        </div>
+                    <div className="canales-mini-body">
+                      <div className="canales-mini-row">
+                        <span className="canales-mini-name">
+                          {cpinned && <span style={{ fontSize: '10px', marginRight: '3px' }}>📌</span>}
+                          {c.otherUsername}
+                        </span>
+                        <span className="canales-mini-time">{timeStr}</span>
                       </div>
-                      <div style={{ fontSize: '13px', color: c.unread > 0 && !muted ? 'var(--color-text)' : 'var(--color-text-muted)', fontWeight: c.unread > 0 && !muted ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {c.lastMessageIsOwn ? 'Tú: ' : ''}{formatMsgPreview(c.lastMessage) || 'Sin mensajes'}
+                      <div className="canales-mini-preview">
+                        {cmuted && <span style={{ marginRight: '4px' }}>🔕</span>}
+                        {c.lastMessageIsOwn && !preview ? null : c.lastMessageIsOwn ? `Tú: ${preview}` : preview || <span style={{ fontStyle: 'italic', opacity: 0.5 }}>Sin mensajes</span>}
                       </div>
                     </div>
                   </div>
 
-                  {/* Botó silenciar DM */}
-                  <div style={{ position: 'relative', flexShrink: 0 }}>
-                    <button onClick={e => { e.stopPropagation(); setOpenMuteMenu(openMuteMenu === c.id ? null : c.id) }}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', padding: '4px', opacity: muted ? 0.5 : 0.7, borderRadius: 'var(--radius-sm)' }}>
-                      {muted ? '🔕' : '🔔'}
+                  {/* ⋮ botó + dropdown */}
+                  <div style={{ position: 'relative', flexShrink: 0, alignSelf: 'center' }}>
+                    <button className="canales-mini-dots"
+                      onClick={e => { e.stopPropagation(); setMiniMenuId(menuOpen ? null : c.id); setMiniMuteId(null) }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: 'var(--color-text-muted)', padding: '2px 5px', borderRadius: 'var(--radius-sm)', fontWeight: 700, lineHeight: 1, opacity: menuOpen ? 1 : undefined }}>
+                      ⋮
                     </button>
                     <AnimatePresence>
-                      {openMuteMenu === c.id && (
+                      {menuOpen && (
                         <>
-                          <div onClick={() => setOpenMuteMenu(null)} style={{ position: 'fixed', inset: 0, zIndex: 9 }} />
+                          <div onClick={() => setMiniMenuId(null)} style={{ position: 'fixed', inset: 0, zIndex: 9 }} />
                           <motion.div initial={{ opacity: 0, y: -6, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.95 }}
-                            style={{ position: 'absolute', top: '32px', right: 0, background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-md)', zIndex: 10, minWidth: '160px', overflow: 'hidden' }}>
-                            {muted && (
-                              <button onClick={() => { unmute(dmKey); setOpenMuteMenu(null) }}
-                                style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', padding: '11px 14px', background: 'none', border: 'none', borderBottom: '0.5px solid var(--color-border)', cursor: 'pointer', fontSize: '13px', color: 'var(--color-primary)', fontWeight: 700, textAlign: 'left', fontFamily: 'var(--font-sans)' }}>
-                                🔔 Activar notificaciones
-                              </button>
-                            )}
+                            style={{ position: 'absolute', top: '26px', right: 0, background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-md)', zIndex: 10, minWidth: '175px', overflow: 'hidden' }}>
+                            <button onClick={() => { cpinned ? unpinDM(c.id) : pinDM(c.id); setMiniMenuId(null) }}
+                              style={{ ...miniMenuBtnStyle, borderBottom: '0.5px solid var(--color-border)' }}>
+                              {cpinned ? '📍 Desanclar' : '📌 Anclar'}
+                            </button>
+                            <button onClick={() => {
+                              if (cmuted) { unmute(dmKey); setMiniMenuId(null) }
+                              else { setMiniMuteId(c.id); setMiniMenuId(null) }
+                            }} style={{ ...miniMenuBtnStyle, borderBottom: '0.5px solid var(--color-border)' }}>
+                              {cmuted ? '🔔 Activar notificaciones' : '🔕 Silenciar'}
+                            </button>
+                            <button onClick={() => {
+                              if (window.confirm(`¿Eliminar la conversación con ${c.otherUsername}?`)) {
+                                blockUser(c.id)
+                                if (activeConv?.id === c.id) { setView('list'); setActiveConv(null) }
+                              }
+                              setMiniMenuId(null)
+                            }} style={{ ...miniMenuBtnStyle, borderBottom: '0.5px solid var(--color-border)', color: 'var(--color-error)' }}>
+                              🗑️ Eliminar chat
+                            </button>
+                            <button onClick={async () => {
+                              if (window.confirm(`¿Bloquear a ${c.otherUsername}?`)) {
+                                await supabase.from('blocks').upsert({ blocker_id: user.id, blocked_id: c.otherId })
+                                blockUser(c.id)
+                                if (activeConv?.id === c.id) { setView('list'); setActiveConv(null) }
+                              }
+                              setMiniMenuId(null)
+                            }} style={{ ...miniMenuBtnStyle, borderBottom: '0.5px solid var(--color-border)', color: 'var(--color-error)' }}>
+                              🚫 Bloquear
+                            </button>
+                            <button onClick={() => { setReportTarget({ id: c.otherId, username: c.otherUsername }); setMiniMenuId(null) }}
+                              style={{ ...miniMenuBtnStyle, color: 'var(--color-warning, #f59e0b)' }}>
+                              🚩 Reportar
+                            </button>
+                          </motion.div>
+                        </>
+                      )}
+                      {muteOpen && (
+                        <>
+                          <div onClick={() => setMiniMuteId(null)} style={{ position: 'fixed', inset: 0, zIndex: 9 }} />
+                          <motion.div initial={{ opacity: 0, y: -6, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.95 }}
+                            style={{ position: 'absolute', top: '26px', right: 0, background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-md)', zIndex: 10, minWidth: '155px', overflow: 'hidden' }}>
                             {MUTE_DURATIONS.map((d, i) => (
-                              <button key={i} onClick={() => { mute(dmKey, d.ms); setOpenMuteMenu(null) }}
-                                style={{ display: 'flex', width: '100%', padding: '10px 14px', background: 'none', border: 'none', borderBottom: i < MUTE_DURATIONS.length - 1 ? '0.5px solid var(--color-border)' : 'none', cursor: 'pointer', fontSize: '13px', color: 'var(--color-text)', textAlign: 'left', fontFamily: 'var(--font-sans)' }}>
+                              <button key={i} onClick={() => { mute(dmKey, d.ms); setMiniMuteId(null) }}
+                                style={{ ...miniMenuBtnStyle, borderBottom: i < MUTE_DURATIONS.length - 1 ? '0.5px solid var(--color-border)' : 'none' }}>
                                 {d.label}
                               </button>
                             ))}
@@ -293,7 +345,30 @@ export default function Social({ user, initialDMUserId }) {
             })}
           </div>
         )}
+
+        {loading && (
+          <div style={{ padding: '20px 16px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '12px' }}>
+            Cargando...
+          </div>
+        )}
+        {!loading && active.length === 0 && pending.length === 0 && (
+          <div style={{ padding: '20px 16px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '12px' }}>
+            Sin conversaciones todavía
+          </div>
+        )}
       </div>
-    </motion.div>
+    </div>
+
+    <AnimatePresence>
+      {reportTarget && (
+        <ReportUserModal
+          reportedId={reportTarget.id}
+          reportedUsername={reportTarget.username}
+          reporterId={user.id}
+          onClose={() => setReportTarget(null)}
+        />
+      )}
+    </AnimatePresence>
+    </>
   )
 }

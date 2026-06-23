@@ -655,6 +655,7 @@ export default function PostModal({ messageId: initialMessageId, betId, currentU
                                         if (e.key === 'Escape') { setReplyingTo(null); setReplyText('') }
                                       }}
                                       placeholder={`Responder a ${replyingTo.username || 'usuario'}...`}
+                                      maxLength={500}
                                       style={{ flex: 1, background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '12px', padding: '7px 10px', borderRadius: 'var(--radius-md)', outline: 'none' }}
                                     />
                                     <button onClick={() => handleReply(c.id)} disabled={!replyText.trim()}
@@ -682,6 +683,7 @@ export default function PostModal({ messageId: initialMessageId, betId, currentU
                     onChange={e => setCommentText(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleComment()}
                     placeholder="Añade un comentario..."
+                    maxLength={500}
                     style={{ flex: 1, background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '13px', padding: '10px 14px', borderRadius: 'var(--radius-md)', outline: 'none' }}
                   />
                   <motion.button whileTap={{ scale: 0.95 }} onClick={handleComment} disabled={!commentText.trim()}

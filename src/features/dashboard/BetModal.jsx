@@ -44,7 +44,7 @@ export function BetModal({ open, onClose, form, setForm, onSubmit, user, presele
     if (!open || !user?.id || preselectedChannelId) return
     supabase.from('channels').select('id, name, is_private').eq('owner_id', user.id)
       .then(({ data }) => setMyChannels(data || []))
-  }, [open, user])
+  }, [open, user?.id])
 
   useEffect(() => {
     if (!open) {
@@ -219,12 +219,12 @@ export function BetModal({ open, onClose, form, setForm, onSubmit, user, presele
             <div style={{ marginBottom: '14px' }}>
               <label style={labelStyle}>Nombre *</label>
               <input autoFocus type="text" placeholder="ej. MarcGol Tips" value={createForm.name}
-                onChange={e => setCreateForm(p => ({ ...p, name: e.target.value }))} style={inputStyle} />
+                onChange={e => setCreateForm(p => ({ ...p, name: e.target.value }))} maxLength={30} style={inputStyle} />
             </div>
             <div style={{ marginBottom: '16px' }}>
               <label style={labelStyle}>Descripción (opcional)</label>
               <input type="text" placeholder="De qué va tu canal..." value={createForm.description}
-                onChange={e => setCreateForm(p => ({ ...p, description: e.target.value }))} style={inputStyle} />
+                onChange={e => setCreateForm(p => ({ ...p, description: e.target.value }))} maxLength={200} style={inputStyle} />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '18px', padding: '14px', background: 'var(--color-bg-soft)', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-border)', cursor: 'pointer' }}
               onClick={() => setCreateForm(p => ({ ...p, isPrivate: !p.isPrivate }))}>
@@ -289,7 +289,7 @@ export function BetModal({ open, onClose, form, setForm, onSubmit, user, presele
                 <div className="form-group-modal">
                   <FormLabel>Evento</FormLabel>
                   <Input placeholder="ej. Real Madrid vs Barcelona"
-                    value={form.event} onChange={e => set('event', e.target.value)} />
+                    value={form.event} onChange={e => set('event', e.target.value)} maxLength={100} />
                 </div>
 
                 <div className="form-row-modal">
@@ -311,7 +311,7 @@ export function BetModal({ open, onClose, form, setForm, onSubmit, user, presele
                   <div>
                     <FormLabel>Selección</FormLabel>
                     <Input placeholder="ej. Real Madrid"
-                      value={form.pick} onChange={e => set('pick', e.target.value)} />
+                      value={form.pick} onChange={e => set('pick', e.target.value)} maxLength={100} />
                   </div>
                   <div>
                     <FormLabel>Cuota</FormLabel>
@@ -348,7 +348,7 @@ export function BetModal({ open, onClose, form, setForm, onSubmit, user, presele
                   <FormLabel>Análisis (opcional)</FormLabel>
                   <textarea className="input" rows="3" style={{ resize: 'vertical' }}
                     placeholder="Explica brevemente tu razonamiento..."
-                    value={form.analysis} onChange={e => set('analysis', e.target.value)} />
+                    value={form.analysis} onChange={e => set('analysis', e.target.value)} maxLength={500} />
                 </div>
               </>
             )}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
 import { StickerPicker } from '../StickerPicker'
@@ -6,6 +6,7 @@ import { VoicePlayer, VoiceRecordButton } from '../VoiceMessage'
 import Username from '../../../components/ui/Username'
 import { usePolling } from '../../../hooks/usePolling'
 import ForwardModal from './ForwardModal'
+import ForwardedChannelModal from '../canales/ForwardedChannelModal'
 import PinDurationModal from '../canales/PinDurationModal'
 import { ImageMessage } from '../canales/messageRenderer'
 
@@ -87,6 +88,27 @@ function renderContent(content, isOwn, onViewProfile) {
       )
     } catch { return null }
   }
+  if (content.startsWith('[CHANNEL]:')) {
+    const rest = content.replace('[CHANNEL]:', '')
+    const idx = rest.indexOf(':')
+    const code = idx >= 0 ? rest.slice(0, idx) : rest
+    const name = idx >= 0 ? rest.slice(idx + 1) : '?'
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '12px 14px', minWidth: '200px' }}>
+        <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', flexShrink: 0 }}>
+          📢
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
+          <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Canal compartido</div>
+        </div>
+        <button onClick={() => onNavigateToChannel?.({ invite_code: code })}
+          style={{ background: 'var(--color-primary)', color: '#010906', border: 'none', borderRadius: 'var(--radius-md)', padding: '5px 12px', cursor: 'pointer', fontSize: '11px', fontWeight: 700, fontFamily: 'var(--font-sans)', flexShrink: 0, whiteSpace: 'nowrap' }}>
+          Ver →
+        </button>
+      </div>
+    )
+  }
   if (content.startsWith('[PROFILE]:')) {
     const rest = content.replace('[PROFILE]:', '')
     const idx = rest.indexOf(':')
@@ -145,10 +167,27 @@ function renderContent(content, isOwn, onViewProfile) {
   return content
 }
 
-export default function DMView({ conversation, currentUser, onBack, onSend, onFetchMessages, onBlock, onReport, onViewProfile, onAccept }) {
+// Divisor "Nuevos mensajes" per als DMs (id fix per fer-hi scroll directe).
+function NewMessagesDivider() {
+  return (
+    <div id="dm-nuevos-divider" style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '6px 0', opacity: 0.75 }}>
+      <div style={{ flex: 1, height: '0.5px', background: 'var(--color-primary)' }} />
+      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.8px', whiteSpace: 'nowrap' }}>Nuevos mensajes</span>
+      <div style={{ flex: 1, height: '0.5px', background: 'var(--color-primary)' }} />
+    </div>
+  )
+}
+
+export default function DMView({ conversation, currentUser, onBack, onSend, onFetchMessages, onMarkRead, onUnreadChange, onBlock, onReport, onViewProfile, onAccept, onNavigateToChannel, compact = false }) {
   const [messages, setMessages] = useState([])
   const [text, setText] = useState('')
   const [loading, setLoading] = useState(true)
+  // Tracking de no llegits per scroll (mateix model que ChatView):
+  const [firstUnreadId, setFirstUnreadId] = useState(null) // snapshot per al divisor
+  const [markedIds, setMarkedIds] = useState(() => new Set()) // missatges marcats aquesta sessió
+  const firstUnreadDoneRef = useRef(false)
+  const markedRef = useRef(new Set())
+  const observerRef = useRef(null)
   const [showMenu, setShowMenu] = useState(false)
   const [showStickers, setShowStickers] = useState(false)
   const [muted, setMuted] = useState(false)
@@ -157,6 +196,7 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
   const [pastedImage, setPastedImage] = useState(null)
   const [hoveredMsgId, setHoveredMsgId] = useState(null)
   const [forwardMsg, setForwardMsg] = useState(null)
+  const [fwdChannel, setFwdChannel] = useState(null)
   const [msgMenu, setMsgMenu] = useState(null)
   const [replyTo, setReplyTo] = useState(null)
   const [editingMsg, setEditingMsg] = useState(null)
@@ -195,13 +235,24 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
   }
 
   const loadMessages = useCallback(async () => {
-    const [data, { data: convData }] = await Promise.all([
-      onFetchMessages(conversation.id),
-      supabase.from('dm_conversations').select('pinned_message').eq('id', conversation.id).single()
-    ])
-    setMessages(data)
-    if (convData !== undefined) setPinnedMsg(parsePinnedValue(convData?.pinned_message))
-    setLoading(false)
+    // Safety timer + try/catch/finally (regla 3 CLAUDE.md): si la petició fa timeout,
+    // el spinner "Cargando mensajes" no pot quedar penjat per sempre.
+    const safetyTimer = setTimeout(() => setLoading(false), 10000)
+    try {
+      const [data, { data: convData }] = await Promise.all([
+        onFetchMessages(conversation.id),
+        supabase.from('dm_conversations').select('pinned_message').eq('id', conversation.id).single()
+      ])
+      // Només sobreescrivim si tenim un array vàlid — així un error transitori
+      // no buida la conversa (es recupera al pròxim poll).
+      if (Array.isArray(data)) setMessages(data)
+      if (convData !== undefined) setPinnedMsg(parsePinnedValue(convData?.pinned_message))
+    } catch {
+      // Empassat: el finally apaga el loading.
+    } finally {
+      clearTimeout(safetyTimer)
+      setLoading(false)
+    }
   }, [conversation.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -231,14 +282,71 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
   // Polling de fallback si Realtime es desconnecta
   usePolling(loadMessages, 30000, !!conversation.id)
 
+  // Snapshot del primer no llegit (sender != jo, read_at null) en el primer load.
+  // Congelat: fixa on va el divisor "Nuevos mensajes" tota la sessió.
+  useEffect(() => {
+    if (firstUnreadDoneRef.current || messages.length === 0) return
+    firstUnreadDoneRef.current = true
+    const fu = messages.find(m => m.sender_id !== currentUser.id && !m.read_at)
+    setFirstUnreadId(fu?.id || null)
+  }, [messages, currentUser.id])
+
   useEffect(() => {
     const newCount = messages.length
     const prevCount = prevCountRef.current
-    if (newCount > prevCount && (wasAtBottomRef.current || prevCount === 0)) {
-      bottomRef.current?.scrollIntoView({ behavior: prevCount === 0 ? 'instant' : 'smooth' })
+    if (newCount > prevCount) {
+      if (prevCount === 0) {
+        // Primer load: posiciona't al divisor de nous missatges; si no n'hi ha, al final.
+        const fu = messages.find(m => m.sender_id !== currentUser.id && !m.read_at)
+        if (fu) {
+          requestAnimationFrame(() => {
+            const el = document.getElementById('dm-nuevos-divider') || document.getElementById(`dm-msg-${fu.id}`)
+            el?.scrollIntoView({ behavior: 'instant', block: 'start' })
+          })
+        } else {
+          bottomRef.current?.scrollIntoView({ behavior: 'instant' })
+        }
+      } else if (wasAtBottomRef.current) {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+      }
     }
     prevCountRef.current = newCount
-  }, [messages])
+  }, [messages, currentUser.id])
+
+  // IntersectionObserver: marca com llegits NOMÉS els missatges d'altri que entren
+  // a pantalla (i baixa el comptador). No re-marca els ja marcats (markedRef).
+  useEffect(() => {
+    const container = scrollRef.current
+    if (!container) return
+    observerRef.current?.disconnect()
+    observerRef.current = new IntersectionObserver((entries) => {
+      const newlyRead = []
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const id = entry.target.dataset.dmid
+          if (id && entry.target.dataset.unread === '1' && !markedRef.current.has(id)) {
+            markedRef.current.add(id)
+            newlyRead.push(id)
+          }
+        }
+      })
+      if (newlyRead.length) {
+        setMarkedIds(prev => { const n = new Set(prev); newlyRead.forEach(x => n.add(x)); return n })
+        onMarkRead?.(conversation.id, newlyRead)
+      }
+    }, { root: container, threshold: 0.1 })
+    container.querySelectorAll('[data-dmid]').forEach(el => observerRef.current.observe(el))
+    return () => observerRef.current?.disconnect()
+  }, [messages, conversation.id, onMarkRead])
+
+  // No llegits restants → reporta al pare per al badge de la sidebar en viu.
+  const liveUnread = useMemo(
+    () => messages.filter(m => m.sender_id !== currentUser.id && !m.read_at && !markedIds.has(m.id)).length,
+    [messages, markedIds, currentUser.id]
+  )
+  useEffect(() => {
+    onUnreadChange?.(conversation.id, liveUnread)
+  }, [liveUnread, conversation.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const refreshMessages = async () => {
     const data = await onFetchMessages(conversation.id)
@@ -391,7 +499,7 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
 
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
-      style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 160px)', position: 'relative' }}>
+      style={{ display: 'flex', flexDirection: 'column', height: compact ? 'calc(100vh - 57px - 48px)' : 'calc(100vh - 160px)', position: 'relative' }}>
 
       {/* HEADER */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
@@ -494,7 +602,9 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
           const isMenuOpen = msgMenu?.id === m.id
           const isHighlighted = highlightedMsgId === m.id
           return (
-            <div key={m.id} id={`dm-msg-${m.id}`}
+            <Fragment key={m.id}>
+              {m.id === firstUnreadId && <NewMessagesDivider />}
+            <div id={`dm-msg-${m.id}`} data-dmid={m.id} data-unread={!isOwn && !m.read_at ? '1' : '0'}
               onMouseEnter={() => setHoveredMsgId(m.id)}
               onMouseLeave={() => { if (!isMenuOpen) setHoveredMsgId(null) }}
               style={{ borderRadius: 'var(--radius-md)', padding: '1px 2px', margin: '-1px -2px', transition: 'background 0.4s', background: isHighlighted ? 'rgba(15,110,86,0.13)' : 'transparent' }}>
@@ -522,12 +632,6 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
                     </button>
                   )}
                   <div style={{ maxWidth: isProfile ? '320px' : isSticker ? 'fit-content' : isVoice ? '280px' : '70%' }}>
-                    {forwardedFrom && (
-                      <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginBottom: '2px', paddingLeft: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <span>↩</span>
-                        <span>{forwardedFrom === 'dm' ? 'Reenviado' : `Reenviado de ${forwardedFrom}`}</span>
-                      </div>
-                    )}
                     <div style={{
                       position: 'relative',
                       background: isSpecialNobubble ? 'transparent' : isOwn ? 'var(--color-primary)' : 'var(--color-bg-soft)',
@@ -538,6 +642,13 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
                       fontSize: '14px', lineHeight: 1.5, whiteSpace: 'pre-wrap', textAlign: 'left',
                       border: isOwn || isSpecialNobubble ? 'none' : '0.5px solid var(--color-border)'
                     }}>
+                      {forwardedFrom && !isSpecialNobubble && !isImage && (
+                        <div style={{ fontSize: '11px', fontStyle: 'italic', opacity: 0.6, marginBottom: '5px' }}>
+                          {forwardedFrom === 'dm'
+                            ? 'Reenviado'
+                            : <span onClick={() => setFwdChannel(forwardedFrom)} style={{ cursor: 'pointer', textDecoration: 'underline' }}>{`Reenviado de: ${forwardedFrom}`}</span>}
+                        </div>
+                      )}
                       {replyPreview && (
                         <div onClick={() => replyId && scrollToMessage(replyId)}
                           style={{ background: isOwn ? 'rgba(1,9,6,0.12)' : 'rgba(0,0,0,0.06)', borderLeft: `3px solid ${isOwn ? 'rgba(1,9,6,0.35)' : 'var(--color-primary)'}`, borderRadius: '4px', padding: '5px 8px', marginBottom: '8px', fontSize: '12px', opacity: 0.85, overflow: 'hidden', maxHeight: '52px', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: replyId ? 'pointer' : 'default' }}>
@@ -571,6 +682,7 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
                 </div>
               )}
             </div>
+            </Fragment>
           )
         })}
         <div ref={bottomRef} />
@@ -665,6 +777,17 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {fwdChannel && (
+          <ForwardedChannelModal
+            channelName={fwdChannel}
+            currentUser={currentUser}
+            onNavigateToChannel={onNavigateToChannel}
+            onClose={() => setFwdChannel(null)}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Pin duration modal */}
       <AnimatePresence>
         {pinDurationFor && (
@@ -717,7 +840,7 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
             </button>
             <VoiceRecordButton userId={currentUser.id} onSend={async content => { await onSend(conversation.id, content); await refreshMessages() }} />
             <textarea value={text} onChange={e => setText(e.target.value)} onKeyDown={handleKey}
-              placeholder="Envía un mensaje" rows={2}
+              placeholder="Envía un mensaje" rows={2} maxLength={2000}
               onPaste={e => {
                 const item = Array.from(e.clipboardData?.items || []).find(i => i.type.startsWith('image/'))
                 if (item) {

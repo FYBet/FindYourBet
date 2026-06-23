@@ -59,9 +59,12 @@ export default function MiPerfil({ user, onNavigate, onAvatarUpdated, onNavigate
   const [picksSubTab, setPicksSubTab] = useState('public')
   const [followListType, setFollowListType] = useState(null) // 'followers' | 'following' | null
   const [premiumChannelIds, setPremiumChannelIds] = useState(new Set())
+  const [purchases, setPurchases] = useState([])
+  const [loadingPurchases, setLoadingPurchases] = useState(false)
+  const [copiedPurchaseId, setCopiedPurchaseId] = useState(null)
 
   // Edit form
-  const [editForm, setEditForm] = useState({ name: '', username: '', bio: '' })
+  const [editForm, setEditForm] = useState({ name: '', username: '', bio: '', card_theme: 0 })
   const [avatarFile, setAvatarFile] = useState(null)
   const [avatarPreview, setAvatarPreview] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -94,6 +97,33 @@ export default function MiPerfil({ user, onNavigate, onAvatarUpdated, onNavigate
     }
   }
 
+  // Historial de compres de l'usuari (accessos VIP/stakazo). El `token` genera l'enllaç personal
+  // que sempre pot recuperar des d'aquí — no depèn de l'email ni del moment de la compra.
+  const fetchPurchases = async () => {
+    if (loadingPurchases) return
+    setLoadingPurchases(true)
+    const safetyTimer = setTimeout(() => setLoadingPurchases(false), 10000)
+    try {
+      const { data } = await supabase
+        .from('purchases')
+        .select('id, token, amount, created_at, offers(name), channels(name, invite_code, avatar_url, deleted_at)')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+      setPurchases(data || [])
+    } catch (e) {
+      setPurchases([])
+    } finally {
+      clearTimeout(safetyTimer)
+      setLoadingPurchases(false)
+    }
+  }
+
+  const handleCopyAccessLink = (purchase) => {
+    navigator.clipboard.writeText(`${window.location.origin}/acceso/${purchase.token}`)
+    setCopiedPurchaseId(purchase.id)
+    setTimeout(() => setCopiedPurchaseId(null), 2000)
+  }
+
   // `silent=true` evita mostrar "Cargando perfil..." en refrescos posteriors (després de guardar)
   const fetchAll = async (silent = false) => {
     if (!silent) setLoading(true)
@@ -123,7 +153,7 @@ export default function MiPerfil({ user, onNavigate, onAvatarUpdated, onNavigate
       if (fingCount != null) setFollowingCount(fingCount || 0)
       if (activeOffers) setPremiumChannelIds(new Set(activeOffers.map(o => o.channel_id)))
       if (dmSet) setDmSetting(dmSet.allow_dms)
-      if (prof) setEditForm({ name: prof.name || '', username: prof.username || '', bio: prof.bio || '' })
+      if (prof) setEditForm({ name: prof.name || '', username: prof.username || '', bio: prof.bio || '', card_theme: prof.card_theme || 0 })
 
       if (bets && bets.length > 0) {
         // Per stats: només won/lost. 'void' (nul, diners retornats) està exclòs.
@@ -294,6 +324,7 @@ export default function MiPerfil({ user, onNavigate, onAvatarUpdated, onNavigate
       username: newUsername,
       bio: editForm.bio.trim(),
       avatar_url: avatarUrl,
+      card_theme: editForm.card_theme || 0,
     }
     if (usernameChanged) {
       profileUpdate.username_changed_at = new Date().toISOString()
@@ -474,8 +505,9 @@ export default function MiPerfil({ user, onNavigate, onAvatarUpdated, onNavigate
           { id: 'stats', label: '📊 Rendimiento' },
           { id: 'canales', label: '📡 Canales' },
           { id: 'picks', label: '📋 Últimos picks' },
+          { id: 'compras', label: '🛒 Mis compras' },
         ].map(t => (
-          <button key={t.id} onClick={() => { setActiveTab(t.id); if (t.id === 'canales') fetchChannels() }}
+          <button key={t.id} onClick={() => { setActiveTab(t.id); if (t.id === 'canales') fetchChannels(); if (t.id === 'compras') fetchPurchases() }}
             style={{ padding: '10px 20px', fontSize: '13px', fontWeight: 500, color: activeTab === t.id ? 'var(--color-primary)' : 'var(--color-text-muted)', background: 'transparent', border: 'none', borderBottom: `2px solid ${activeTab === t.id ? 'var(--color-primary)' : 'transparent'}`, cursor: 'pointer', marginBottom: '-1px', fontFamily: 'var(--font-sans)', transition: 'all 0.15s' }}>
             {t.label}
           </button>
@@ -640,6 +672,75 @@ export default function MiPerfil({ user, onNavigate, onAvatarUpdated, onNavigate
             )}
           </motion.div>
         )}
+
+        {activeTab === 'compras' && (
+          <motion.div key="compras" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+            {loadingPurchases ? (
+              <div style={{ textAlign: 'center', padding: '40px', color: 'var(--color-text-muted)' }}>⏳ Cargando compras...</div>
+            ) : purchases.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px', color: 'var(--color-text-muted)' }}>
+                <div style={{ fontSize: '40px', marginBottom: '12px' }}>🛒</div>
+                <div style={{ fontWeight: 600, marginBottom: '6px' }}>Sin compras todavía</div>
+                <div style={{ fontSize: '13px' }}>Cuando compres acceso a un canal, aparecerá aquí con tu enlace personal.</div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {purchases.map(p => {
+                  const deleted = !!p.channels?.deleted_at
+                  const copied = copiedPurchaseId === p.id
+                  return (
+                    <div key={p.id} style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '16px 20px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: deleted ? '0' : '14px' }}>
+                        <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden', border: '2px solid var(--color-bg-soft)' }}>
+                          {p.channels?.avatar_url ? <img src={p.channels.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (p.channels?.name?.[0]?.toUpperCase() || '🛒')}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: '15px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {p.offers?.name || p.channels?.name || 'Compra'}
+                          </div>
+                          <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '2px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                            {p.channels?.name && <span>Canal <strong style={{ color: 'var(--color-text-soft)' }}>{p.channels.name}</strong></span>}
+                            <span>·</span>
+                            <span>{new Date(p.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
+                            {p.amount != null && <><span>·</span><span style={{ fontWeight: 600, color: 'var(--color-text-soft)' }}>{(p.amount / 100).toFixed(2)} €</span></>}
+                          </div>
+                        </div>
+                      </div>
+
+                      {deleted ? (
+                        <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                          Este canal ya no está disponible.
+                        </div>
+                      ) : (
+                        <>
+                          {/* Enllaç personal — sempre recuperable, lligat al token de la compra */}
+                          <div style={{ background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '10px 12px', marginBottom: '8px' }}>
+                            <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>Tu enlace personal</div>
+                            <div style={{ fontSize: '12px', color: 'var(--color-primary)', wordBreak: 'break-all', lineHeight: 1.5 }}>
+                              {`${window.location.origin}/acceso/${p.token}`}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button onClick={() => handleCopyAccessLink(p)}
+                              style={{ flex: 1, padding: '9px', borderRadius: 'var(--radius-md)', border: `0.5px solid ${copied ? 'var(--color-primary)' : 'var(--color-border)'}`, background: copied ? 'var(--color-primary-light)' : 'var(--color-bg-soft)', color: copied ? 'var(--color-primary)' : 'var(--color-text-muted)', cursor: 'pointer', fontSize: '13px', fontWeight: 700, fontFamily: 'var(--font-sans)', transition: 'all 0.15s' }}>
+                              {copied ? '✓ Copiado' : '📋 Copiar enlace'}
+                            </button>
+                            {onNavigateToChannel && p.channels?.invite_code && (
+                              <button onClick={() => onNavigateToChannel({ invite_code: p.channels.invite_code })}
+                                style={{ flex: 1, padding: '9px', borderRadius: 'var(--radius-md)', border: 'none', background: 'var(--color-primary)', color: '#010906', cursor: 'pointer', fontSize: '13px', fontWeight: 700, fontFamily: 'var(--font-sans)' }}>
+                                Ir al canal →
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {/* MODAL EDITAR PERFIL */}
@@ -684,13 +785,13 @@ export default function MiPerfil({ user, onNavigate, onAvatarUpdated, onNavigate
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px' }}>Nombre completo *</label>
                 <input style={inputStyle} placeholder="Tu nombre" value={editForm.name}
-                  onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} />
+                  onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} maxLength={50} />
               </div>
 
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px' }}>Username *</label>
                 <input style={inputStyle} placeholder="username" value={editForm.username}
-                  onChange={e => setEditForm(p => ({ ...p, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') }))} />
+                  onChange={e => setEditForm(p => ({ ...p, username: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') }))} maxLength={20} />
                 {(() => {
                   if (!profile?.username_changed_at) return null
                   const daysSince = (Date.now() - new Date(profile.username_changed_at).getTime()) / 86400000
@@ -708,6 +809,7 @@ export default function MiPerfil({ user, onNavigate, onAvatarUpdated, onNavigate
                   maxLength={160} />
                 <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px', textAlign: 'right' }}>{editForm.bio.length}/160</div>
               </div>
+
 
               {saveError && (
                 <div style={{ background: 'var(--color-error-light)', border: '0.5px solid var(--color-error-border)', color: 'var(--color-error)', padding: '10px 14px', borderRadius: 'var(--radius-md)', fontSize: '13px', marginBottom: '16px' }}>
