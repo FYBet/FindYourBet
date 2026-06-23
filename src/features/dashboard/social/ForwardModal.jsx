@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
 
-export default function ForwardModal({ content, fromChannelName, currentUser, onClose }) {
+// rawContent: when provided, sends this exact string (no FWD prefix) — used for sharing channels/profiles
+export default function ForwardModal({ content, fromChannelName, currentUser, onClose, rawContent = null }) {
   const [tab, setTab] = useState('dm')
   const [conversations, setConversations] = useState([])
   const [channels, setChannels] = useState([])
@@ -40,9 +41,9 @@ export default function ForwardModal({ content, fromChannelName, currentUser, on
     setLoading(false)
   }
 
-  const fwdContent = fromChannelName
-    ? `[FWD:${fromChannelName}]:${content}`
-    : `[FWD]:${content}`
+  const outContent = rawContent
+    ? rawContent
+    : fromChannelName ? `[FWD:${fromChannelName}]:${content}` : `[FWD]:${content}`
 
   const forwardToDM = async (conv) => {
     if (sentSet.has(conv.id) || sending) return
@@ -50,7 +51,7 @@ export default function ForwardModal({ content, fromChannelName, currentUser, on
     const { error } = await supabase.from('direct_messages').insert({
       conversation_id: conv.id,
       sender_id: currentUser.id,
-      content: fwdContent,
+      content: outContent,
     })
     if (!error) setSentSet(prev => new Set([...prev, conv.id]))
     setSending(null)
@@ -62,7 +63,7 @@ export default function ForwardModal({ content, fromChannelName, currentUser, on
     const { error } = await supabase.from('channel_messages').insert({
       channel_id: channel.id,
       user_id: currentUser.id,
-      content: fwdContent,
+      content: outContent,
     })
     if (!error) setSentSet(prev => new Set([...prev, channel.id]))
     setSending(null)
@@ -79,7 +80,7 @@ export default function ForwardModal({ content, fromChannelName, currentUser, on
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '0.5px solid var(--color-border)', flexShrink: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: '15px' }}>↩ Reenviar mensaje</div>
+          <div style={{ fontWeight: 700, fontSize: '15px' }}>{rawContent ? '📤 Compartir' : '↩ Reenviar mensaje'}</div>
           <button onClick={onClose}
             style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: 'var(--color-text-muted)', lineHeight: 1, padding: '4px 6px' }}>
             ✕

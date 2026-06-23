@@ -117,6 +117,32 @@ export function isSingleEmoji(content) {
   }
 }
 
+export function ChannelCard({ inviteCode, channelName, onOpenCanal, timeStr, viewCount = 0, isOwn = false }) {
+  const hasMeta = timeStr || viewCount > 0
+  return (
+    <div style={{ background: isOwn ? 'rgba(255,255,255,0.08)' : 'var(--color-bg)', border: `0.5px solid ${isOwn ? 'rgba(255,255,255,0.15)' : 'var(--color-border)'}`, borderRadius: 'var(--radius-lg)', padding: '12px 14px', minWidth: '220px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: hasMeta ? '8px' : '0' }}>
+        <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(var(--color-primary-rgb, 15 110 86) / 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', flexShrink: 0 }}>
+          📢
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: '13px', color: isOwn ? '#fff' : 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{channelName}</div>
+          <div style={{ fontSize: '11px', color: isOwn ? 'rgba(255,255,255,0.6)' : 'var(--color-text-muted)' }}>Canal compartido</div>
+        </div>
+        <button onClick={() => onOpenCanal?.(inviteCode)}
+          style={{ background: 'var(--color-primary)', color: '#010906', border: 'none', borderRadius: 'var(--radius-md)', padding: '5px 12px', cursor: 'pointer', fontSize: '11px', fontWeight: 700, fontFamily: 'var(--font-sans)', flexShrink: 0, whiteSpace: 'nowrap' }}>
+          Entrar →
+        </button>
+      </div>
+      {hasMeta && (
+        <div style={{ textAlign: 'right', fontSize: '10px', color: isOwn ? 'rgba(255,255,255,0.5)' : 'var(--color-text-muted)', opacity: 0.7 }}>
+          {viewCount > 0 ? `👁 ${viewCount} · ` : ''}{timeStr}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function ProfileCard({ profileId, profileUsername, onViewProfile, timeStr, viewCount = 0 }) {
   const hasMeta = timeStr || viewCount > 0
   return (
@@ -146,6 +172,13 @@ export function ProfileCard({ profileId, profileUsername, onViewProfile, timeStr
 export function renderMessage(content, onInternalLink, isOwnerMsg = false, onViewProfile = null, timeStr = '', viewCount = 0) {
   const linkColor = isOwnerMsg ? '#010906' : 'var(--color-primary)'
 
+  if (content.startsWith('[CHANNEL]:')) {
+    const rest = content.replace('[CHANNEL]:', '')
+    const idx = rest.indexOf(':')
+    const code = idx >= 0 ? rest.slice(0, idx) : rest
+    const name = idx >= 0 ? rest.slice(idx + 1) : '?'
+    return <ChannelCard inviteCode={code} channelName={name} onOpenCanal={onInternalLink} timeStr={timeStr} viewCount={viewCount} isOwn={isOwnerMsg} />
+  }
   if (content.startsWith('[PROFILE]:')) {
     const rest = content.replace('[PROFILE]:', '')
     const idx = rest.indexOf(':')
@@ -234,6 +267,7 @@ export function isImageMessage(content) { return content?.startsWith('[IMAGE]:')
 export function isBetMessage(content) { return content?.startsWith('[BET]:') }
 export function isStickerMessage(content) { return content?.startsWith('[STICKER]:') }
 export function isVoiceMessage(content) { return content?.startsWith('[VOICE]:') }
+export function isChannelMessage(content) { return content?.startsWith('[CHANNEL]:') }
 export function isProfileMessage(content) { return content?.startsWith('[PROFILE]:') }
 export function isPollMessage(content) { return content?.startsWith('[POLL]:') }
 export function parsePollMessage(content) {

@@ -1,11 +1,24 @@
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
+import { limiters, checkLimit } from './_ratelimit.js'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
 
-const FEE_STANDARD    = 0.20  // tipsters sense partnership
-const FEE_PARTNERSHIP = 0.15  // tipsters verificats (partnership)
+// Comissió escalonada segons preu (en EUR). Espill de src/lib/commission.js — mantenir sincronitzat.
+// Com més baix el preu, més comissió, perquè el cost fix de processament fa que els preus baixos
+// no surtin a compte. Verificats: -5 punts a cada tram.
+const COMMISSION_BANDS = [
+  { min: 7, rate: 0.20 },
+  { min: 5, rate: 0.25 },
+  { min: 3, rate: 0.30 },
+  { min: 2, rate: 0.35 },
+  { min: 1, rate: 0.40 },
+]
+function commissionRate(priceEur, isVerified) {
+  const band = COMMISSION_BANDS.find(b => priceEur >= b.min) || COMMISSION_BANDS[COMMISSION_BANDS.length - 1]
+  return Math.max(0, isVerified ? band.rate - 0.05 : band.rate)
+}
 
 async function readBody(req) {
   const chunks = []
@@ -19,6 +32,7 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).end()
+  if (await checkLimit(limiters.checkout, req, res)) return
 
   try {
     const { offer_id, user_id } = await readBody(req)
@@ -56,12 +70,13 @@ export default async function handler(req, res) {
       .eq('id', offer.channels.owner_id)
       .single()
 
-    const feePercent = ownerProfile?.is_verified ? FEE_PARTNERSHIP : FEE_STANDARD
+    // offer.price està en cèntims; el tram es decideix amb el preu en euros.
+    const feePercent = commissionRate(offer.price / 100, !!ownerProfile?.is_verified)
     const appFee = Math.round(offer.price * feePercent)
     const appUrl = process.env.APP_URL || 'https://fyourbet.com'
 
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
+      automatic_payment_methods: { enabled: true },
       line_items: [{
         price_data: {
           currency: 'eur',

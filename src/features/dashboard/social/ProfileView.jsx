@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
 import PostModal from '../feed/PostModal'
+import ReportUserModal from './ReportUserModal'
 import FollowListModal from './FollowListModal'
 import { useMutes, MUTE_DURATIONS } from '../../../hooks/useMutes'
 import Username from '../../../components/ui/Username'
@@ -55,6 +56,8 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
   const { mute, unmute, isMuted, muteLabel } = useMutes()
   const muteKey = `user_${userId}`
   const muted = isMuted(muteKey)
+
+  const [showReportModal, setShowReportModal] = useState(false)
 
   // Admin actions
   const [showAdminWarning, setShowAdminWarning] = useState(false)
@@ -403,7 +406,7 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
                         style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-md)', zIndex: 20, minWidth: '170px', overflow: 'hidden' }}>
                         {[
                           { icon: '📤', label: 'Compartir perfil', action: () => { openSendProfile(); setShowMenu(false) } },
-                          { icon: '🚩', label: 'Denunciar', action: () => { onReport?.(userId); setShowMenu(false); alert('Usuario denunciado. Lo revisaremos pronto.') } },
+                          { icon: '🚩', label: 'Reportar', action: () => { setShowReportModal(true); setShowMenu(false) } },
                           { icon: '🚫', label: 'Bloquear', action: handleBlock, danger: true },
                           // Opció exclusiva de l'admin: verificar / desverificar tipsters
                           ...(currentUser?.email === 'fyourbet@gmail.com' ? [
@@ -895,6 +898,17 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
       <AnimatePresence>
         {postModalBetId && (
           <PostModal betId={postModalBetId} currentUser={currentUser} onClose={() => setPostModalBetId(null)} />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showReportModal && profile && (
+          <ReportUserModal
+            reportedId={userId}
+            reportedUsername={profile.username || '?'}
+            reporterId={currentUser.id}
+            onClose={() => setShowReportModal(false)}
+          />
         )}
       </AnimatePresence>
 

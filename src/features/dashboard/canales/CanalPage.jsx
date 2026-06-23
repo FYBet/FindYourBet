@@ -22,12 +22,22 @@ export default function CanalPage() {
     })
 
     const fetchChannel = async () => {
-      const { data } = await supabase
-        .from('channels').select('*')
-        .eq('invite_code', code.toUpperCase()).single()
-      if (!data) { setNotFound(true); setLoading(false); return }
-      setChannel(data)
-      setLoading(false)
+      // Safety timer + try/catch/finally: el spinner "Cargando canal..." mai penjat.
+      const safetyTimer = setTimeout(() => setLoading(false), 10000)
+      try {
+        // Els invite_code es desen en lowercase; .ilike fa match case-insensitive
+        // perquè funcioni tant amb codis antics (UPPER) com nous (lower).
+        const { data } = await supabase
+          .from('channels').select('*')
+          .ilike('invite_code', code).maybeSingle()
+        if (!data) { setNotFound(true); return }
+        setChannel(data)
+      } catch {
+        setNotFound(true)
+      } finally {
+        clearTimeout(safetyTimer)
+        setLoading(false)
+      }
     }
 
     fetchChannel()

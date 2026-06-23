@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo, Fragment } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
 import { Button } from '../../../components/ui/Button'
 import Username, { VerifiedBadge } from '../../../components/ui/Username'
 import { isAdminUserId } from '../../../lib/adminUsers'
+import { advanceChannelRead, getChannelReadTs } from '../../../hooks/useUnreadChannelCount'
 import { useAdminMode } from '../../../contexts/AdminModeContext'
 import { useMessages } from './hooks/useMessages'
 import { StickerPicker } from '../StickerPicker'
@@ -12,10 +13,11 @@ import { VoiceRecordButton } from '../VoiceMessage'
 import ProfileView from '../social/ProfileView'
 import OfferManager from '../payments/OfferManager'
 import ForwardModal from '../social/ForwardModal'
+import ForwardedChannelModal from './ForwardedChannelModal'
 import {
   parseBetMessage, parsePollMessage,
   renderMessage, parseForward, parseReply, parseEdited, parsePinnedValue,
-  isBetMessage, isImageMessage, isStickerMessage, isProfileMessage, isVoiceMessage, isPollMessage,
+  isBetMessage, isImageMessage, isStickerMessage, isProfileMessage, isVoiceMessage, isPollMessage, isChannelMessage,
   isImgTextMessage, parseImgTextMessage, ImageMessage,
   formatMsgTime, getDayLabel, DaySeparator,
 } from './messageRenderer'
@@ -535,6 +537,12 @@ function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, 
           ) : (
             <>
               <div style={{ fontWeight: 700, fontSize: '20px', marginBottom: '4px' }}>{channel.name}</div>
+              {/* Finestra de durada del canal — es manté visible encara que ja hagi caducat */}
+              {channel.duration_start && channel.duration_end && (
+                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: '4px' }}>
+                  ({new Date(channel.duration_start).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })} - {new Date(channel.duration_end).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })})
+                </div>
+              )}
               {channel.description && <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', lineHeight: 1.4 }}>{channel.description}</div>}
               <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}>
                 {channel.is_private ? '🔒 Canal privado' : '🌐 Canal público'}
@@ -813,6 +821,7 @@ function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, 
                   value={deleteInput}
                   onChange={e => setDeleteInput(e.target.value)}
                   placeholder="ELIMINAR"
+                  maxLength={8}
                   style={{ width: '100%', background: 'var(--color-bg)', border: `1.5px solid ${deleteInput === 'ELIMINAR' ? 'var(--color-error)' : 'var(--color-error-border)'}`, color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '13px', fontWeight: 600, padding: '9px 12px', borderRadius: 'var(--radius-md)', outline: 'none', boxSizing: 'border-box', letterSpacing: '1px' }}
                 />
                 <div style={{ display: 'flex', gap: '8px' }}>
@@ -858,7 +867,7 @@ function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, 
               </div>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '6px' }}>Motivo (visible al propietario)</label>
               <textarea value={adminDeleteReason} onChange={e => setAdminDeleteReason(e.target.value)} rows={4}
-                placeholder="Explica por qué se elimina este canal..."
+                placeholder="Explica por qué se elimina este canal..." maxLength={500}
                 style={{ width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '13px', padding: '10px 12px', borderRadius: 'var(--radius-md)', outline: 'none', resize: 'vertical', boxSizing: 'border-box', marginBottom: '16px' }} />
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                 <button onClick={() => setAdminDeleteOpen(false)}
@@ -897,10 +906,29 @@ function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, 
   )
 }
 
-export default function ChatView({ channel: initialChannel, user, onBack, memberCount, onLeave, onDeleteChannel, onOpenCanal, onAddBet, onChannelUpdated }) {
+// Divisor "Nuevos mensajes": línia central semi-transparent que marca el primer
+// missatge no llegit en obrir el xat (id fix per poder-hi fer scroll directe).
+function NewMessagesDivider() {
+  return (
+    <div id="nuevos-mensajes-divider" style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '6px 0', opacity: 0.75 }}>
+      <div style={{ flex: 1, height: '0.5px', background: 'var(--color-primary)' }} />
+      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.8px', whiteSpace: 'nowrap' }}>Nuevos mensajes</span>
+      <div style={{ flex: 1, height: '0.5px', background: 'var(--color-primary)' }} />
+    </div>
+  )
+}
+
+// compact: true when rendered inside the split layout (smaller top-bottom margins)
+export default function ChatView({ channel: initialChannel, user, onBack, memberCount, onLeave, onDeleteChannel, onOpenCanal, onAddBet, onChannelUpdated, onUnreadChange, compact = false }) {
   const { adminMode } = useAdminMode()
   const { messages, loading, sendMessage, recordView, deleteMessage } = useMessages(initialChannel.id, user?.id)
   const [channel, setChannel] = useState(initialChannel)
+  // Tracking de no llegits:
+  // - initialReadTs: snapshot del marcador en obrir el canal. Congelat tota la sessió;
+  //   fixa on va el divisor "Nuevos mensajes" (primer missatge d'altri posterior).
+  // - liveReadTs: avança a mesura que es fa scroll i es veuen missatges; mou el recompte.
+  const [initialReadTs, setInitialReadTs] = useState('')
+  const [liveReadTs, setLiveReadTs] = useState('')
   const [text, setText] = useState('')
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
@@ -925,6 +953,7 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
   const [hoveredMsgId, setHoveredMsgId] = useState(null)
   const [pastedImage, setPastedImage] = useState(null)
   const [forwardMsg, setForwardMsg] = useState(null)
+  const [fwdChannel, setFwdChannel] = useState(null)
   const [msgMenu, setMsgMenu] = useState(null)
   const [replyTo, setReplyTo] = useState(null)
   const [editingMsg, setEditingMsg] = useState(null)
@@ -934,6 +963,23 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
   const [highlightedMsgId, setHighlightedMsgId] = useState(null)
   const [postModalMessageId, setPostModalMessageId] = useState(null)
   const [showPollCreator, setShowPollCreator] = useState(false)
+  const [showShareChannel, setShowShareChannel] = useState(false)
+
+  // Sincronitza l'estat local quan el parent ens passa un canal diferent (canvi via mini-llista)
+  // sense aquest reset, isOwner quedava enganxat al canal anterior
+  useEffect(() => {
+    setChannel(initialChannel)
+    setIsAdmin(false)
+    setText('')
+    setReplyTo(null)
+    setEditingMsg(null)
+    // Captura el marcador de llegit ABANS que l'observer comenci a avançar-lo,
+    // perquè el divisor quedi ancorat al primer no llegit d'aquesta obertura.
+    const snap = getChannelReadTs(user?.id, initialChannel.id)
+    setInitialReadTs(snap)
+    setLiveReadTs(snap)
+    prevCountRef.current = 0 // força el reposicionament inicial de scroll al nou canal
+  }, [initialChannel.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sincronitza pinned_message des de la BD en obrir el canal (per si el channel prop arriba sense el camp)
   useEffect(() => {
@@ -970,6 +1016,23 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
       .then(({ data }) => setIsAdmin(data?.role === 'admin'))
   }, [channel.id, user.id, isOwner])
 
+  // Primer missatge d'altri posterior al snapshot → on va el divisor "Nuevos mensajes".
+  const firstUnreadId = useMemo(() => {
+    const fu = messages.find(m => m.user_id !== user.id && (!initialReadTs || m.created_at > initialReadTs))
+    return fu?.id || null
+  }, [messages, initialReadTs, user.id])
+
+  // No llegits restants segons el marcador viu (baixa a mesura que es fa scroll).
+  const liveUnread = useMemo(
+    () => messages.filter(m => m.user_id !== user.id && (!liveReadTs || m.created_at > liveReadTs)).length,
+    [messages, liveReadTs, user.id]
+  )
+
+  // Reporta els no llegits restants al pare perquè actualitzi el badge del canal en viu.
+  useEffect(() => {
+    onUnreadChange?.(initialChannel.id, liveUnread)
+  }, [liveUnread, initialChannel.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const isNearBottom = () => {
     const el = scrollRef.current
     if (!el) return true
@@ -979,28 +1042,49 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
   useEffect(() => {
     const newCount = messages.length
     const prevCount = prevCountRef.current
-    if (newCount > prevCount && (wasAtBottomRef.current || prevCount === 0)) {
-      bottomRef.current?.scrollIntoView({ behavior: prevCount === 0 ? 'instant' : 'smooth' })
+    if (newCount > prevCount) {
+      if (prevCount === 0) {
+        // Primer load: si hi ha no llegits, posiciona't al divisor "Nuevos mensajes";
+        // si no, al final del xat (comportament de sempre).
+        if (firstUnreadId) {
+          requestAnimationFrame(() => {
+            const el = document.getElementById('nuevos-mensajes-divider') || document.getElementById(`msg-${firstUnreadId}`)
+            el?.scrollIntoView({ behavior: 'instant', block: 'start' })
+          })
+        } else {
+          bottomRef.current?.scrollIntoView({ behavior: 'instant' })
+        }
+      } else if (wasAtBottomRef.current) {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+      }
     }
     prevCountRef.current = newCount
-  }, [messages])
+  }, [messages, firstUnreadId])
 
-  // IntersectionObserver: registra vista quan el missatge apareix a pantalla
+  // IntersectionObserver: registra la vista i AVANÇA el marcador de llegit fins al
+  // missatge més nou que entra a pantalla, perquè els no llegits baixin amb el scroll.
   useEffect(() => {
     const container = scrollRef.current
     if (!container) return
     observerRef.current?.disconnect()
     observerRef.current = new IntersectionObserver((entries) => {
+      let maxTs = null
       entries.forEach(entry => {
         if (entry.isIntersecting) {
           const msgId = entry.target.dataset.msgid
+          const ts = entry.target.dataset.ts
           if (msgId) recordView(msgId)
+          if (ts && (!maxTs || ts > maxTs)) maxTs = ts
         }
       })
+      if (maxTs) {
+        advanceChannelRead(user?.id, initialChannel.id, maxTs)
+        setLiveReadTs(prev => (!prev || maxTs > prev) ? maxTs : prev)
+      }
     }, { root: container, threshold: 0.1 })
     container.querySelectorAll('[data-msgid]').forEach(el => observerRef.current.observe(el))
     return () => observerRef.current?.disconnect()
-  }, [messages, recordView])
+  }, [messages, recordView, initialChannel.id, user?.id])
 
   const removeFromView = (msgId) => setDeletedMessageIds(prev => { const n = new Set(prev); n.add(msgId); return n })
 
@@ -1152,6 +1236,7 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
 
   const menuItems = [
     { icon: 'ℹ️', label: 'Info del canal', action: () => { setShowInfo(true); setShowMenu(false) } },
+    { icon: '📤', label: 'Compartir canal', action: () => { setShowShareChannel(true); setShowMenu(false) } },
     { icon: muted ? '🔔' : '🔕', label: muted ? 'Activar notificaciones' : 'Silenciar', action: () => { setMuted(!muted); setShowMenu(false) } },
     { icon: '🚩', label: 'Reportar canal', action: () => { alert('Canal reportado. Lo revisaremos pronto.'); setShowMenu(false) } },
     ...(!isOwner ? [{ icon: '🚪', label: 'Abandonar canal', action: () => { onLeave?.(); setShowMenu(false) }, danger: true }] : []),
@@ -1159,7 +1244,7 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
 
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
-      style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 160px)', position: 'relative' }}>
+      style={{ display: 'flex', flexDirection: 'column', height: compact ? 'calc(100vh - 57px - 48px)' : 'calc(100vh - 160px)', position: 'relative' }}>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '20px', color: 'var(--color-text-muted)' }}>←</button>
@@ -1256,8 +1341,9 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
           const isImage = isImageMessage(displayContent)
           const isSticker = isStickerMessage(displayContent)
           const isProfile = isProfileMessage(displayContent)
+          const isChannel = isChannelMessage(displayContent)
           const isVoice = isVoiceMessage(displayContent)
-          const isNobubble = isSticker || isBet || isProfile || isPoll
+          const isNobubble = isSticker || isBet || isProfile || isPoll || isChannel
           const timeStr = formatMsgTime(m.created_at)
           const prev = messages[i - 1]
           const showDaySep = !prev || getDayLabel(m.created_at) !== getDayLabel(prev.created_at)
@@ -1265,7 +1351,9 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
           const isMenuOpen = msgMenu?.id === m.id
           const isHighlighted = highlightedMsgId === m.id
           return (
-            <div key={m.id} id={`msg-${m.id}`} data-msgid={m.id}
+            <Fragment key={m.id}>
+              {m.id === firstUnreadId && <NewMessagesDivider />}
+            <div id={`msg-${m.id}`} data-msgid={m.id} data-ts={m.created_at}
               onMouseEnter={() => setHoveredMsgId(m.id)}
               onMouseLeave={() => { if (!isMenuOpen) setHoveredMsgId(null) }}
               style={{ borderRadius: 'var(--radius-md)', padding: '1px 2px', margin: '-1px -2px', transition: 'background 0.4s', background: isHighlighted ? 'rgba(15,110,86,0.13)' : 'transparent' }}>
@@ -1287,13 +1375,7 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
                       ⋮
                     </button>
                   )}
-                  <div style={{ maxWidth: isBet || isProfile ? '320px' : isNobubble ? 'fit-content' : isVoice ? '280px' : '70%' }}>
-                    {forwardedFrom && (
-                      <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginBottom: '2px', paddingLeft: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <span>↩</span>
-                        <span>{forwardedFrom === 'dm' ? 'Reenviado' : `Reenviado de ${forwardedFrom}`}</span>
-                      </div>
-                    )}
+                  <div style={{ maxWidth: isBet || isProfile || isChannel ? '320px' : isNobubble ? 'fit-content' : isVoice ? '280px' : '70%' }}>
                     <div style={{
                         position: 'relative',
                         background: isNobubble ? 'transparent' : isOwn ? 'var(--color-primary)' : 'var(--color-bg-soft)',
@@ -1304,6 +1386,13 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
                         fontSize: '14px', lineHeight: 1.5, whiteSpace: 'pre-wrap', textAlign: 'left',
                         border: isOwn || isNobubble ? 'none' : '0.5px solid var(--color-border)',
                       }}>
+                      {forwardedFrom && !isNobubble && !isImage && (
+                        <div style={{ fontSize: '11px', fontStyle: 'italic', opacity: 0.6, marginBottom: '5px' }}>
+                          {forwardedFrom === 'dm'
+                            ? 'Reenviado'
+                            : <span onClick={() => setFwdChannel(forwardedFrom)} style={{ cursor: 'pointer', textDecoration: 'underline' }}>{`Reenviado de: ${forwardedFrom}`}</span>}
+                        </div>
+                      )}
                       {replyPreview && (
                         <div onClick={() => replyId && scrollToMessage(replyId)}
                           style={{ background: isOwn ? 'rgba(1,9,6,0.12)' : 'rgba(0,0,0,0.06)', borderLeft: `3px solid ${isOwn ? 'rgba(1,9,6,0.35)' : 'var(--color-primary)'}`, borderRadius: '4px', padding: '5px 8px', marginBottom: '8px', fontSize: '12px', opacity: 0.85, overflow: 'hidden', maxHeight: '52px', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: replyId ? 'pointer' : 'default' }}>
@@ -1373,6 +1462,7 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
                 </div>
               )}
             </div>
+            </Fragment>
           )
         })}
         <div ref={bottomRef} />
@@ -1450,7 +1540,7 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
             <VoiceRecordButton userId={user.id} onSend={async content => { await sendMessage(content, user.id) }} />
 
             <textarea value={text} onChange={e => setText(e.target.value)} onKeyDown={handleKey}
-              placeholder="Envía un mensaje" rows={2}
+              placeholder="Envía un mensaje" rows={2} maxLength={2000}
               onPaste={e => {
                 const item = Array.from(e.clipboardData?.items || []).find(i => i.type.startsWith('image/'))
                 if (item) {
@@ -1555,6 +1645,28 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
             fromChannelName={forwardMsg.fromChannelName}
             currentUser={user}
             onClose={() => setForwardMsg(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {fwdChannel && (
+          <ForwardedChannelModal
+            channelName={fwdChannel}
+            currentUser={user}
+            onNavigateToChannel={onNavigateToChannel}
+            onClose={() => setFwdChannel(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Share channel modal */}
+      <AnimatePresence>
+        {showShareChannel && (
+          <ForwardModal
+            rawContent={`[CHANNEL]:${channel.invite_code}:${channel.name}`}
+            currentUser={user}
+            onClose={() => setShowShareChannel(false)}
           />
         )}
       </AnimatePresence>

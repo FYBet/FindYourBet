@@ -5,7 +5,21 @@
       "Bash(npx vite *)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(curl -s \"https://www.thesportsdb.com/api/v1/json/3/searchteams.php?t=arsenal\" --max-time 8)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); t=d.get\\('teams',[{}]\\)[0]; print\\(t.get\\('idTeam'\\), t.get\\('strTeam'\\)\\)\")",
+      "Bash(curl -s \"https://www.thesportsdb.com/api/v1/json/3/searchteams.php?t=rayo+vallecano\" --max-time 8)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); teams=d.get\\('teams'\\) or []; print\\('rayo teams:', [\\(t.get\\('idTeam'\\), t.get\\('strTeam'\\)\\) for t in teams]\\)\")",
+      "Bash(curl -s \"https://www.thesportsdb.com/api/v1/json/3/searchteams.php?t=los+angeles+lakers\" --max-time 8)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); teams=d.get\\('teams'\\) or []; print\\('lakers:', [\\(t.get\\('idTeam'\\), t.get\\('strTeam'\\)\\) for t in teams]\\)\")",
+      "Bash(curl -s \"https://site.api.espn.com/apis/common/v3/search?query=crystal+palace&limit=8&mode=prefix&type=event\" --max-time 8)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(list\\(d.keys\\(\\)\\)[:5]\\); results=d.get\\('results',[]\\) or d.get\\('events',[]\\) or []; print\\('results:', len\\(results\\)\\)\")",
+      "Bash(curl -s \"https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard\" --max-time 8)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); events=d.get\\('events',[]\\)[:3]; [print\\(e['name'], e.get\\('date',''\\)\\) for e in events]\")",
+      "Bash(curl -s \"https://site.api.espn.com/apis/search/v2?query=rayo+vallecano&limit=5&type=team\" --max-time 8)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d, indent=2\\)[:800]\\)\")",
+      "Bash(curl -s \"https://site.api.espn.com/apis/search/v2?query=lakers&limit=5&type=team&sport=basketball\" --max-time 8)",
+      "Bash(node -e ' *)"
     ]
   }
 }

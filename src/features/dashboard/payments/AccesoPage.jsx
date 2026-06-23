@@ -44,7 +44,7 @@ export default function AccesoPage({ user }) {
       <div style={{ fontSize: '48px' }}>🔒</div>
       <div style={{ fontWeight: 800, fontSize: '20px', color: 'var(--color-text)', textAlign: 'center' }}>Enlace no válido</div>
       <div style={{ fontSize: '14px', color: 'var(--color-text-muted)', textAlign: 'center', maxWidth: '320px', lineHeight: 1.6 }}>
-        Este enlace no pertenece a tu cuenta o ya ha caducado. Asegúrate de acceder con el email con el que compraste.
+        Este enlace no es válido para tu cuenta{user?.email ? ` (${user.email})` : ''}. Si compraste con otro email, inicia sesión con ese email o contacta con <strong>fyourbet@gmail.com</strong>.
       </div>
       <button onClick={() => navigate('/dashboard')}
         style={{ background: 'var(--color-primary)', color: '#010906', border: 'none', padding: '12px 28px', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 700, fontSize: '14px', fontFamily: 'var(--font-sans)', marginTop: '8px' }}>

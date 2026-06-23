@@ -8,6 +8,7 @@ export default defineConfig({
     tailwindcss(),
   ],
   server: {
+    port: 1000,
     headers: {
       'Cache-Control': 'no-store',
     },

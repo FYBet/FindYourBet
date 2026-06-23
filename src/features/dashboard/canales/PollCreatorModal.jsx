@@ -74,6 +74,7 @@ export default function PollCreatorModal({ channelId, userId, onClose, onSent })
             onChange={e => setQuestion(e.target.value)}
             placeholder="¿Cuál es tu pregunta?"
             rows={2}
+            maxLength={200}
             style={{ ...inputSt, resize: 'vertical', fontSize: '14px', padding: '12px 14px' }}
           />
         </div>
@@ -92,6 +93,7 @@ export default function PollCreatorModal({ channelId, userId, onClose, onSent })
                   value={opt}
                   onChange={e => updateOption(i, e.target.value)}
                   placeholder={`Opción ${i + 1}`}
+                  maxLength={80}
                   style={{ ...inputSt, flex: 1, fontSize: '13px', padding: '9px 12px' }}
                 />
                 {options.length > 2 && (

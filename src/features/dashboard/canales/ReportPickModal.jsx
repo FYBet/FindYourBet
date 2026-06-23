@@ -120,6 +120,7 @@ export default function ReportPickModal({ bet, currentUser, onClose }) {
                   onChange={e => setDetails(e.target.value)}
                   placeholder="Explica con más detalle qué ha pasado..."
                   rows={3}
+                  maxLength={500}
                   style={{ width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '13px', padding: '10px 12px', borderRadius: 'var(--radius-md)', outline: 'none', resize: 'vertical', boxSizing: 'border-box' }}
                 />
               </div>

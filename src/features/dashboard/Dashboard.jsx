@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import { usePolling } from '../../hooks/usePolling'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSearchParams, useNavigate } from 'react-router-dom'
@@ -35,10 +35,10 @@ const SHORTCUT_OPTIONS = [
   { id: 'miperfil',     label: 'Perfil',           icon: '👤' },
   { id: 'estadisticas', label: 'Estadísticas',      icon: '📊' },
   { id: 'historial',    label: 'Historial',         icon: '📋' },
-  { id: 'feed',         label: 'Descubre',          icon: '🔥' },
-  { id: 'canales',      label: 'Canales',           icon: '📡' },
-  { id: 'tipsters',     label: 'Tipsters',          icon: '🎯' },
   { id: 'social',       label: 'Mensajes',          icon: '💬' },
+  { id: 'canales',      label: 'Canales',           icon: '📡' },
+  { id: 'feed',         label: 'Feed',              icon: '🔥' },
+  { id: 'tipsters',     label: 'Tipsters',          icon: '🎯' },
   { id: 'ranking',      label: 'Ranking',           icon: '🏆' },
   { id: 'amigos',       label: 'Amigos',            icon: '👥' },
   { id: 'faqs',         label: 'FAQs',              icon: '❓' },
@@ -64,10 +64,10 @@ const SIDEBAR = [
   {
     label: 'Social',
     items: [
-      { id: 'feed', label: 'Descubre', icon: '🔥' },
-      { id: 'canales', label: 'Canales', icon: '📡' },
-      { id: 'tipsters', label: 'Tipsters', icon: '🎯' },
       { id: 'social', label: 'Mensajes directos', icon: '💬' },
+      { id: 'canales', label: 'Canales', icon: '📡' },
+      { id: 'feed', label: 'Feed', icon: '🔥' },
+      { id: 'tipsters', label: 'Tipsters', icon: '🎯' },
     ]
   },
   {
@@ -193,8 +193,8 @@ function ShortcutConfigModal({ shortcuts, onSave, onClose }) {
 }
 
 export default function Dashboard({ user, logout, onRefreshUser }) {
-  const [tab, setTabRaw] = useState('estadisticas')
-  const [visited, setVisited] = useState(() => new Set(['estadisticas']))
+  const [tab, setTabRaw] = useState('miperfil')
+  const [visited, setVisited] = useState(() => new Set(['miperfil']))
   const [canalesKey, setCanalesKey] = useState(0)
   const [socialKey, setSocialKey] = useState(0)
   const [tipstersKey, setTipstersKey] = useState(0)
@@ -246,8 +246,10 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
   }
 
   const [showVerifiedModal, setShowVerifiedModal] = useState(false)
-  const [adminWarning, setAdminWarning] = useState(null)        // text de l'avís admin
-  const [deletedChannels, setDeletedChannels] = useState([])    // canals que han estat eliminats per admin
+  const [adminWarning, setAdminWarning] = useState(null)
+  const [deletedChannels, setDeletedChannels] = useState([])
+  const [recentPurchase, setRecentPurchase] = useState(null)
+  const purchaseCheckedRef = useRef(false)
 
   useEffect(() => {
     if (!user?.id) return
@@ -280,6 +282,32 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
       })
   }, [user?.id])
 
+  // Detecta compres recents (últims 30min) no mostrades encara — per si l'usuari estava dins l'app
+  useEffect(() => {
+    if (!user?.id || purchaseCheckedRef.current) return
+    purchaseCheckedRef.current = true
+    const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString()
+    supabase
+      .from('purchases')
+      .select('id, token, channels(name, invite_code), offers(name)')
+      .eq('user_id', user.id)
+      .gte('created_at', cutoff)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!data) return
+        if (!localStorage.getItem(`fyb_purchase_notified_${data.id}`)) {
+          setRecentPurchase(data)
+        }
+      })
+  }, [user?.id])
+
+  const dismissRecentPurchase = () => {
+    if (recentPurchase) localStorage.setItem(`fyb_purchase_notified_${recentPurchase.id}`, '1')
+    setRecentPurchase(null)
+  }
+
   const [preselectedChannelId, setPreselectedChannelId] = useState(null)
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -290,8 +318,8 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
     period, setPeriod
   } = useBets(user)
 
-  const unreadCount = useUnreadDMCount(user?.id)
-  const { count: unreadChannelCount, unreadCounts: unreadChannelCounts, markRead: markChannelReadInstant } = useUnreadChannelCount(user?.id)
+  const { count: unreadCount, setConvCount: setDmUnreadCount, refetch: refetchDmUnread } = useUnreadDMCount(user?.id)
+  const { count: unreadChannelCount, unreadCounts: unreadChannelCounts, setChannelCount: setChannelUnreadCount, refetch: refetchChannelUnread } = useUnreadChannelCount(user?.id)
 
   // Comptador de feines pendents per a l'admin (peticions + suggerències en estat pending)
   const [adminPendingCount, setAdminPendingCount] = useState(0)
@@ -359,6 +387,43 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
             onSave={saveShortcuts}
             onClose={() => setShowShortcutConfig(false)}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Modal de compra recent — si l'usuari estava dins l'app quan va completar el pagament */}
+      <AnimatePresence>
+        {recentPurchase && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 310, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}
+            onClick={dismissRecentPurchase}>
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+              onClick={e => e.stopPropagation()}
+              style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-xl)', padding: '32px 28px', width: '100%', maxWidth: '420px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', textAlign: 'center', fontFamily: 'var(--font-sans)' }}>
+              <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '26px', color: 'var(--color-primary)', fontWeight: 700 }}>✓</div>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: '20px', color: 'var(--color-text)', marginBottom: '6px' }}>¡Enhorabuena por tu compra! 🎉</div>
+                <div style={{ fontSize: '14px', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+                  {recentPurchase.offers?.name && <span>Compraste <strong style={{ color: 'var(--color-text)' }}>{recentPurchase.offers.name}</strong><br /></span>}
+                  Canal <strong style={{ color: 'var(--color-text)' }}>{recentPurchase.channels?.name}</strong>
+                </div>
+              </div>
+              <div style={{ width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '14px 16px', textAlign: 'left' }}>
+                <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>Tu enlace personal</div>
+                <div style={{ fontSize: '12px', color: 'var(--color-primary)', wordBreak: 'break-all', lineHeight: 1.5 }}>
+                  {`${window.location.origin}/acceso/${recentPurchase.token}`}
+                </div>
+              </div>
+              <button
+                onClick={() => { dismissRecentPurchase(); if (recentPurchase.channels?.invite_code) setPendingCanalCode(recentPurchase.channels.invite_code); setTab('canales') }}
+                style={{ width: '100%', background: 'var(--color-primary)', color: '#010906', border: 'none', padding: '14px', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 700, fontSize: '15px', fontFamily: 'var(--font-sans)' }}>
+                Entrar al canal →
+              </button>
+              <button onClick={dismissRecentPurchase}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: 'var(--color-text-muted)', fontFamily: 'var(--font-sans)' }}>
+                Cerrar
+              </button>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -567,7 +632,8 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
         </aside>
 
         {/* CONTINGUT */}
-        <div className="dash-content">
+        {/* overflow: visible per als tabs amb split view (canales, social) — els marges negatius del split s'han d'escapar sense ser retallats */}
+        <div className="dash-content" style={(tab === 'canales' || tab === 'social') ? { overflow: 'visible' } : {}}>
 
           {visited.has('estadisticas') && (
             <div style={{ display: tab === 'estadisticas' ? 'block' : 'none' }}>
@@ -600,7 +666,8 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
                 onCanalCodeUsed={() => setPendingCanalCode(null)}
                 onAddBet={handleAddBetFromCanal}
                 unreadChannelCounts={unreadChannelCounts}
-                onMarkChannelRead={markChannelReadInstant}
+                onActiveUnreadChange={setChannelUnreadCount}
+                onRefreshUnread={refetchChannelUnread}
               />
             </div>
           )}
@@ -619,13 +686,13 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
 
           {visited.has('social') && (
             <div style={{ display: tab === 'social' ? 'block' : 'none' }}>
-              <Social key={socialKey} user={user} initialDMUserId={pendingSocialDMUserId} />
+              <Social key={socialKey} user={user} initialDMUserId={pendingSocialDMUserId} onNavigateToChannel={handleNavigateToChannel} onActiveUnreadChange={setDmUnreadCount} onRefreshUnread={refetchDmUnread} />
             </div>
           )}
 
           {visited.has('ranking') && (
             <div style={{ display: tab === 'ranking' ? 'block' : 'none' }}>
-              <Ranking key={rankingKey} user={user} />
+              <Ranking key={rankingKey} user={user} onNavigateToChannel={handleNavigateToChannel} />
             </div>
           )}
 

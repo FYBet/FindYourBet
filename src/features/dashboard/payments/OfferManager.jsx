@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../../lib/supabase'
+import { MIN_ACCESS_PRICE } from '../../../lib/commission'
 
 function formatPrice(cents) {
   return (cents / 100).toFixed(2).replace('.', ',') + ' €'
@@ -77,7 +78,7 @@ export default function OfferManager({ channelId, userId }) {
   const handleSaveOffer = async () => {
     if (!form.name.trim()) return setFormError('El nombre es obligatorio')
     const priceNum = parseFloat(form.price.replace(',', '.'))
-    if (isNaN(priceNum) || priceNum < 0.50) return setFormError('El precio mínimo es 0,50 €')
+    if (isNaN(priceNum) || priceNum < MIN_ACCESS_PRICE) return setFormError(`El precio mínimo es ${MIN_ACCESS_PRICE} €`)
     setSaving(true)
     setFormError('')
     const { error } = await supabase.from('offers').insert({
@@ -171,8 +172,8 @@ export default function OfferManager({ channelId, userId }) {
           {showForm ? (
             <div style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--color-text)' }}>Nueva oferta</div>
-              <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="Nombre (ej: Pack fin de semana)" style={inputSt} />
-              <textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Descripción (opcional)" rows={2} style={{ ...inputSt, resize: 'none' }} />
+              <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="Nombre (ej: Pack fin de semana)" maxLength={60} style={inputSt} />
+              <textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="Descripción (opcional)" rows={2} maxLength={300} style={{ ...inputSt, resize: 'none' }} />
               <div style={{ position: 'relative' }}>
                 <input value={form.price} onChange={e => setForm(p => ({ ...p, price: e.target.value }))} placeholder="0,00" style={{ ...inputSt, paddingRight: '30px' }} />
                 <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', color: 'var(--color-text-muted)' }}>€</span>

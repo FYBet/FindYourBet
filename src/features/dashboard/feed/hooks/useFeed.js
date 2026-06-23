@@ -97,6 +97,8 @@ async function enrichMessages(messages, currentUserId) {
       const liveStatus = bet.id ? (liveStatusMap[bet.id] ?? bet.status) : bet.status
       // Only show pending bets
       if (liveStatus !== 'pending') return null
+      // Hide picks whose event start time has already passed
+      if (bet.date && new Date(bet.date) < new Date()) return null
       return {
         ...m,
         bet: { ...bet, status: liveStatus },
