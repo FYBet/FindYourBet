@@ -137,15 +137,20 @@ export function useMessages(channelId, userId) {
     }
     setMessages(prev => [...prev, optimistic])
 
-    await supabase.from('channel_messages').insert({
-      channel_id: channelId,
-      user_id: sendUserId,
-      content: content.trim(),
-      created_at: new Date().toISOString(),
-    })
-
-    const enriched = await fetchAndEnrich()
-    if (enriched) setMessages(enriched)
+    try {
+      const { error } = await supabase.from('channel_messages').insert({
+        channel_id: channelId,
+        user_id: sendUserId,
+        content: content.trim(),
+        created_at: new Date().toISOString(),
+      })
+      if (error) throw error
+      const enriched = await fetchAndEnrich()
+      if (enriched) setMessages(enriched)
+    } catch {
+      // Reverteix el missatge optimista si el servidor rebutja l'insert
+      setMessages(prev => prev.filter(m => m.id !== optimistic.id))
+    }
   }
 
   return { messages, loading, sendMessage, recordView, deleteMessage }
