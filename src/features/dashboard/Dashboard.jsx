@@ -6,6 +6,7 @@ import { supabase } from '../../lib/supabase'
 import { useBets } from './hooks/useBets'
 import { useUnreadDMCount } from './social/hooks/useUnreadDMCount'
 import { useUnreadChannelCount } from '../../hooks/useUnreadChannelCount'
+import { usePresence } from '../../hooks/usePresence'
 import { BetModal } from './BetModal'
 import Estadisticas from './Estadisticas'
 import Historial from './MisApuestas'
@@ -324,6 +325,8 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
 
   const { count: unreadCount, setConvCount: setDmUnreadCount, refetch: refetchDmUnread } = useUnreadDMCount(user?.id)
   const { count: unreadChannelCount, unreadCounts: unreadChannelCounts, setChannelCount: setChannelUnreadCount, refetch: refetchChannelUnread } = useUnreadChannelCount(user?.id)
+  // Heartbeat de presència: alimenta les analítiques d'usuaris actius de l'admin.
+  usePresence(user?.id)
 
   // Comptador de feines pendents per a l'admin (peticions + suggerències en estat pending)
   const [adminPendingCount, setAdminPendingCount] = useState(0)

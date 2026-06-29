@@ -191,12 +191,12 @@ export default function Estadisticas({ bets, allBets = [], loadingBets, won, los
   const totalCounted = won.length + lost.length
 
   const KPIs = [
-    { label: 'Yield', value: `${yieldVal.toFixed(2)}%`, colorClass: yieldVal >= 0 ? 'green' : 'red', sub: 'Beneficio sobre lo apostado' },
-    { label: 'W / L', value: `${won.length} / ${lost.length}`, colorClass: '', sub: 'Ganadas / Perdidas' },
-    { label: 'Total Apuestas', value: totalCounted, colorClass: '', sub: 'Resueltas (sin nulas ni pendientes)' },
-    { label: 'Cuota Media', value: avgOdds, colorClass: 'yellow', sub: 'Promedio de cuotas' },
-    { label: 'BANK', value: fmtEur(finalBank), colorClass: finalBank >= INITIAL_BANK ? 'green' : 'red', sub: 'Capital acumulado' },
-    { label: 'BENEFICIO', value: `${totalBenefit >= 0 ? '+' : ''}${fmtEur(totalBenefit)}`, colorClass: totalBenefit >= 0 ? 'green' : 'red', sub: 'Sobre el bank inicial: 1.000,00€' },
+    { label: 'Yield', value: `${yieldVal.toFixed(2)}%`, colorClass: yieldVal >= 0 ? 'green' : 'red' },
+    { label: 'W / L', value: `${won.length} / ${lost.length}`, colorClass: '' },
+    { label: 'Total Apuestas', value: totalCounted, colorClass: '' },
+    { label: 'Cuota Media', value: avgOdds, colorClass: 'yellow' },
+    { label: 'BANK', value: fmtEur(finalBank), colorClass: finalBank >= INITIAL_BANK ? 'green' : 'red' },
+    { label: 'BENEFICIO', value: `${totalBenefit >= 0 ? '+' : ''}${fmtEur(totalBenefit)}`, colorClass: totalBenefit >= 0 ? 'green' : 'red' },
   ]
 
   return (
@@ -233,7 +233,6 @@ export default function Estadisticas({ bets, allBets = [], loadingBets, won, los
           <motion.div key={i} className="kpi-card" variants={fadeUp} whileHover={{ y: -2, transition: { duration: 0.2 } }}>
             <div className="kpi-label">{k.label}</div>
             <div className={`kpi-value ${k.colorClass}`}>{k.value}</div>
-            <div className="kpi-sub">{k.sub}</div>
           </motion.div>
         ))}
       </motion.div>

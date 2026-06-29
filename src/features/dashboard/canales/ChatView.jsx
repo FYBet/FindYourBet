@@ -10,7 +10,7 @@ import { useAdminMode } from '../../../contexts/AdminModeContext'
 import { useMessages } from './hooks/useMessages'
 import { StickerPicker } from '../StickerPicker'
 import { VoiceRecordButton } from '../VoiceMessage'
-import ProfileView from '../social/ProfileView'
+import { useProfileNav } from '../../../contexts/ProfileNavContext'
 import OfferManager from '../payments/OfferManager'
 import ForwardModal from '../social/ForwardModal'
 import ForwardedChannelModal from './ForwardedChannelModal'
@@ -34,6 +34,7 @@ import ChannelBetPost from './ChannelBetPost'
 import PollCard from './PollCard'
 import PollCreatorModal from './PollCreatorModal'
 import { insertNotification } from '../notifications/useNotifications'
+import { useMentionInput } from '../../../hooks/useMentionInput'
 
 function isLinkMessage(content) { return content.startsWith('http://') || content.startsWith('https://') }
 
@@ -358,7 +359,8 @@ function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, 
   const [avatarError, setAvatarError] = useState('')
   const [memberSearch, setMemberSearch] = useState('')
   const [banModal, setBanModal] = useState(null) // { userId, username }
-  const [profileOverlay, setProfileOverlay] = useState(null) // userId
+  // Obre el perfil dels membres al modal global emergent (uniforme amb la resta).
+  const openProfile = useProfileNav()
   const avatarInputRef = useRef(null)
 
   const stats = calcChannelStats(messages, liveStatuses)
@@ -654,7 +656,7 @@ function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, 
               />
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 {(!memberSearch || (ownerProfile?.username || '').toLowerCase().includes(memberSearch.toLowerCase())) && (
-                  <MemberRow profile={ownerProfile} userId={channel.owner_id} isChannelOwner canKick={false} canPromote={false} canDemote={false} canBan={false} onViewProfile={setProfileOverlay} />
+                  <MemberRow profile={ownerProfile} userId={channel.owner_id} isChannelOwner canKick={false} canPromote={false} canDemote={false} canBan={false} onViewProfile={openProfile} />
                 )}
                 {members
                   .filter(m => !memberSearch || (m.profile?.username || '').toLowerCase().includes(memberSearch.toLowerCase()))
@@ -673,7 +675,7 @@ function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, 
                       onDemote={() => handleDemote(m.user_id)}
                       canBan={isOwner}
                       onBanClick={setBanModal}
-                      onViewProfile={setProfileOverlay}
+                      onViewProfile={openProfile}
                     />
                   ))}
                 {memberSearch && members.filter(m => (m.profile?.username || '').toLowerCase().includes(memberSearch.toLowerCase())).length === 0 && (
@@ -690,7 +692,7 @@ function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, 
               ].map(({ profile, userId, badge }) => {
                 const initial = (profile?.username || userId?.slice(0, 2) || '?')[0].toUpperCase()
                 return (
-                  <div key={userId} onClick={() => setProfileOverlay(userId)}
+                  <div key={userId} onClick={() => openProfile(userId)}
                     style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 0', borderBottom: '0.5px solid var(--color-border)', cursor: 'pointer' }}>
                     <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden', position: 'relative' }}>
                       {initial}
@@ -884,24 +886,6 @@ function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, 
         )}
       </AnimatePresence>
 
-      {/* OVERLAY PERFIL membre */}
-      <AnimatePresence>
-        {profileOverlay && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={() => setProfileOverlay(null)}
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-            <motion.div initial={{ opacity: 0, scale: 0.96, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
-              onClick={e => e.stopPropagation()}
-              style={{ width: '100%', maxWidth: '480px', maxHeight: '88vh', overflowY: 'auto', background: 'var(--color-bg)', borderRadius: 'var(--radius-xl)', padding: '20px', boxSizing: 'border-box' }}>
-              <ProfileView
-                userId={profileOverlay}
-                currentUser={currentUser}
-                onBack={() => setProfileOverlay(null)}
-              />
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </motion.div>
   )
 }
@@ -930,6 +914,14 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
   const [initialReadTs, setInitialReadTs] = useState('')
   const [liveReadTs, setLiveReadTs] = useState('')
   const [text, setText] = useState('')
+  const msgInputRef = useRef(null)
+  const mention = useMentionInput({ currentUser: user, text, setText, inputRef: msgInputRef })
+  // Perfil emergent: per a targetes [PROFILE] i mencions @usuario dels missatges.
+  const openProfile = useProfileNav()
+  const handleMention = async (username) => {
+    const { data } = await supabase.from('profiles').select('id').eq('username', username).maybeSingle()
+    if (data?.id) openProfile(data.id)
+  }
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [showMenu, setShowMenu] = useState(false)
@@ -949,7 +941,6 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
   const [liveBetStatuses, setLiveBetStatuses] = useState({})
   const [liveBetReviewStatuses, setLiveBetReviewStatuses] = useState({})
   const [deletedMessageIds, setDeletedMessageIds] = useState(new Set())
-  const [profileModal, setProfileModal] = useState(null)
   const [hoveredMsgId, setHoveredMsgId] = useState(null)
   const [pastedImage, setPastedImage] = useState(null)
   const [forwardMsg, setForwardMsg] = useState(null)
@@ -1195,6 +1186,7 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
   }
 
   const handleKey = (e) => {
+    if (mention.handleKeyDown(e)) return // el dropdown de mencions consumeix la tecla
     if (e.key === 'Escape') { setReplyTo(null); setEditingMsg(null); setText(''); return }
     if (e.key !== 'Enter') return
     e.preventDefault()
@@ -1435,7 +1427,7 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
                               </span>
                             </div>
                           )
-                        : renderMessage(displayContent, handleInternalLink, isOwn, setProfileModal, timeStr, m.view_count || 0)}
+                        : renderMessage(displayContent, handleInternalLink, isOwn, openProfile, timeStr, m.view_count || 0, handleMention)}
                       {edited && !isNobubble && !isImage && (
                         <span style={{ fontSize: '10px', opacity: 0.55, fontStyle: 'italic', marginLeft: '4px' }}>(editado)</span>
                       )}
@@ -1539,17 +1531,20 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
 
             <VoiceRecordButton userId={user.id} onSend={async content => { await sendMessage(content, user.id) }} />
 
-            <textarea value={text} onChange={e => setText(e.target.value)} onKeyDown={handleKey}
-              placeholder="Envía un mensaje" rows={2} maxLength={2000}
-              onPaste={e => {
-                const item = Array.from(e.clipboardData?.items || []).find(i => i.type.startsWith('image/'))
-                if (item) {
-                  e.preventDefault()
-                  const file = item.getAsFile()
-                  if (file) setPastedImage({ file, previewUrl: URL.createObjectURL(file) })
-                }
-              }}
-              style={{ flex: 1, minWidth: 0, background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '14px', padding: '12px 14px', borderRadius: 'var(--radius-md)', outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
+            <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+              {mention.dropdown}
+              <textarea ref={msgInputRef} value={text} onChange={e => mention.handleChange(e.target.value, e.target.selectionStart)} onKeyDown={handleKey}
+                placeholder="Envía un mensaje" rows={2} maxLength={2000}
+                onPaste={e => {
+                  const item = Array.from(e.clipboardData?.items || []).find(i => i.type.startsWith('image/'))
+                  if (item) {
+                    e.preventDefault()
+                    const file = item.getAsFile()
+                    if (file) setPastedImage({ file, previewUrl: URL.createObjectURL(file) })
+                  }
+                }}
+                style={{ width: '100%', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '14px', padding: '12px 14px', borderRadius: 'var(--radius-md)', outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
+            </div>
 
             <div style={{ position: 'relative', flexShrink: 0 }}>
               <button onClick={() => setShowStickers(v => !v)}
@@ -1678,21 +1673,6 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
             onSelect={(ms) => handlePin(pinDurationFor, ms)}
             onClose={() => setPinDurationFor(null)}
           />
-        )}
-      </AnimatePresence>
-
-      {/* Overlay perfil des de targeta [PROFILE]: */}
-      <AnimatePresence>
-        {profileModal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={() => setProfileModal(null)}
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-            <motion.div initial={{ opacity: 0, scale: 0.96, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
-              onClick={e => e.stopPropagation()}
-              style={{ width: '100%', maxWidth: '480px', maxHeight: '88vh', overflowY: 'auto', background: 'var(--color-bg)', borderRadius: 'var(--radius-xl)', padding: '20px', boxSizing: 'border-box' }}>
-              <ProfileView userId={profileModal} currentUser={user} onBack={() => setProfileModal(null)} />
-            </motion.div>
-          </motion.div>
         )}
       </AnimatePresence>
 

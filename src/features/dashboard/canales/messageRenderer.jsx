@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
 import { VoicePlayer } from '../VoiceMessage'
+import MentionText from '../../../components/ui/MentionText'
 
 export function ImageMessage({ url, isGif }) {
   const [open, setOpen] = useState(false)
@@ -169,7 +170,7 @@ export function ProfileCard({ profileId, profileUsername, onViewProfile, timeStr
   )
 }
 
-export function renderMessage(content, onInternalLink, isOwnerMsg = false, onViewProfile = null, timeStr = '', viewCount = 0) {
+export function renderMessage(content, onInternalLink, isOwnerMsg = false, onViewProfile = null, timeStr = '', viewCount = 0, onMention = null) {
   const linkColor = isOwnerMsg ? '#010906' : 'var(--color-primary)'
 
   if (content.startsWith('[CHANNEL]:')) {
@@ -227,7 +228,7 @@ export function renderMessage(content, onInternalLink, isOwnerMsg = false, onVie
     return (
       <span>
         {parts.map((part, i) => {
-          if (!/^https?:\/\//.test(part)) return part
+          if (!/^https?:\/\//.test(part)) return <MentionText key={i} text={part} onMention={onMention} color={linkColor} />
           const isCanalLink = part.includes('fyourbet.com/canal/')
           if (isCanalLink) {
             const code = part.split('/canal/')[1]?.split(/[?#\s]/)[0]
@@ -260,7 +261,7 @@ export function renderMessage(content, onInternalLink, isOwnerMsg = false, onVie
       </motion.span>
     )
   }
-  return content
+  return <MentionText text={content} onMention={onMention} color={linkColor} />
 }
 
 export function isImageMessage(content) { return content?.startsWith('[IMAGE]:') }

@@ -131,7 +131,7 @@ export default function Social({ user, initialDMUserId, onNavigateToChannel, onA
             }}
             onBlock={() => setBlockTarget({ id: activeConv.otherId, username: activeConv.otherUsername, convId: activeConv.id })}
             onReport={() => setReportTarget({ id: activeConv.otherId, username: activeConv.otherUsername })}
-            onViewProfile={(userId) => { setActiveProfile(userId); setView('profile') }}
+            onViewProfile={(userId) => { setActiveConv(null); setActiveProfile(userId); setView('profile') }}
             onAccept={async (id) => {
               await acceptConversation(id)
               setActiveConv(prev => prev ? { ...prev, isAccepted: true } : prev)

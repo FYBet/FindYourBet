@@ -238,17 +238,37 @@ function RedesSoporte({ user }) {
         <div style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '24px' }}>
           <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>📱 Redes sociales</div>
           {[
-            { icon: '𝕏', name: 'X', handle: '@fyourbet', url: '#' },
-            { icon: '📸', name: 'Instagram', handle: '@fyourbet', url: '#' },
-            { icon: '▶️', name: 'YouTube', handle: '@fyourbet', url: '#' },
+            {
+              name: 'X', handle: '@fyourbet', url: 'https://x.com/fyourbet',
+              icon: (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.66l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                </svg>
+              ),
+            },
+            {
+              name: 'Instagram', handle: '@fyourbet', url: 'https://instagram.com/fyourbet',
+              icon: (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="2" y="2" width="20" height="20" rx="5.5" />
+                  <circle cx="12" cy="12" r="4" />
+                  <circle cx="17.5" cy="6.5" r="1.1" fill="currentColor" stroke="none" />
+                </svg>
+              ),
+            },
+            {
+              name: 'TikTok', handle: '@fyourbet', url: 'https://tiktok.com/@fyourbet',
+              icon: (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M16.6 5.82A4.28 4.28 0 0 1 15.54 3h-3.09v12.4a2.59 2.59 0 0 1-2.59 2.5 2.6 2.6 0 0 1-2.6-2.6c0-1.72 1.66-3.01 3.37-2.48V9.66c-3.45-.46-6.47 2.22-6.47 5.64 0 3.33 2.76 5.7 5.69 5.7 3.14 0 5.69-2.55 5.69-5.7V9.01a7.35 7.35 0 0 0 4.3 1.38V7.3c-1.36 0-2.6-.55-3.34-1.48z" />
+                </svg>
+              ),
+            },
           ].map((s, i) => (
-            <a key={i} href={s.url}
+            <a key={i} href={s.url} target="_blank" rel="noreferrer" aria-label={s.name}
               style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 0', borderBottom: '0.5px solid var(--color-border)', textDecoration: 'none', color: 'var(--color-text)' }}>
-              <span style={{ fontSize: '20px' }}>{s.icon}</span>
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: 600 }}>{s.name}</div>
-                <div style={{ fontSize: '12px', color: 'var(--color-primary)' }}>{s.handle}</div>
-              </div>
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '24px', flexShrink: 0 }}>{s.icon}</span>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-primary)' }}>{s.handle}</div>
             </a>
           ))}
         </div>

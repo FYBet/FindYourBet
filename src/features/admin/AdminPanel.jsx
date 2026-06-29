@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '../../lib/supabase'
+import { ADMIN_USER_IDS } from '../../lib/adminUsers'
 
 // Emails amb accés al panell d'administració.
 // Afegir més si cal.
@@ -612,6 +613,227 @@ function UserReportsTab() {
   )
 }
 
+// Llista d'IDs admin per excloure'ls dels recomptes (no són usuaris "reals").
+const ADMIN_ID_LIST = [...ADMIN_USER_IDS]
+const NOT_ADMIN_IN = `(${ADMIN_ID_LIST.join(',')})`
+
+const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
+
+// Targeta KPI reutilitzable de l'analítica.
+function Kpi({ label, value, color, hint }) {
+  return (
+    <div style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '16px 18px' }}>
+      <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>{label}</div>
+      <div style={{ fontSize: '26px', fontWeight: 800, lineHeight: 1, color: color || 'var(--color-text)' }}>{value}</div>
+      {hint && <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '6px' }}>{hint}</div>}
+    </div>
+  )
+}
+
+// Mini gràfic de barres dels últims 14 dies (sense llibreries externes).
+function MiniBars({ title, days, color }) {
+  const max = Math.max(1, ...days.map(d => d.count))
+  return (
+    <div style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '18px' }}>
+      <div style={{ fontSize: '13px', fontWeight: 700, marginBottom: '14px' }}>{title}</div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: '110px' }}>
+        {days.map((d, i) => (
+          <div key={i} title={`${d.label}: ${d.count}`}
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '100%', gap: '4px' }}>
+            <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', fontWeight: 600 }}>{d.count > 0 ? d.count : ''}</span>
+            <div style={{ width: '100%', height: `${(d.count / max) * 100}%`, minHeight: d.count > 0 ? '3px' : '0', background: color || 'var(--color-primary)', borderRadius: '3px 3px 0 0', transition: 'height 0.3s' }} />
+            <span style={{ fontSize: '9px', color: 'var(--color-text-muted)' }}>{d.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const toDateInput = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+function AnalyticsTab() {
+  // Rang de dates seleccionable. Per defecte, els últims 7 dies.
+  const [from, setFrom] = useState(() => toDateInput(new Date(Date.now() - 6 * 86400000)))
+  const [to, setTo] = useState(() => toDateInput(new Date()))
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [presenceErr, setPresenceErr] = useState(false)
+
+  const fetchAnalytics = async () => {
+    setLoading(true)
+    const safetyTimer = setTimeout(() => setLoading(false), 12000)
+    try {
+      const now = new Date()
+      const startToday = startOfDay(now).toISOString()
+      const startYesterday = startOfDay(new Date(now - 86400000)).toISOString()
+      const active5 = new Date(now - 5 * 60000).toISOString()
+
+      // Rang triat: del dia "desde" 00:00 fins al final del dia "hasta" (exclusiu el dia següent).
+      const rStart = startOfDay(new Date(from + 'T00:00:00'))
+      const rEnd = startOfDay(new Date(to + 'T00:00:00')); rEnd.setDate(rEnd.getDate() + 1)
+      const rangeStart = rStart.toISOString()
+      const rangeEnd = rEnd.toISOString()
+
+      // Recompte ràpid (head:true → no baixa files). build() afegeix filtres.
+      const count = async (table, build) => {
+        let q = supabase.from(table).select('id', { count: 'exact', head: true })
+        if (build) q = build(q)
+        const { count: c, error } = await q
+        return error ? null : (c || 0)
+      }
+
+      const [
+        usersTotal, usersToday, usersYesterday, usersRange,
+        betsTotal, betsToday, betsRange, channels,
+      ] = await Promise.all([
+        count('profiles', q => q.not('id', 'in', NOT_ADMIN_IN)),
+        count('profiles', q => q.not('id', 'in', NOT_ADMIN_IN).gte('created_at', startToday)),
+        count('profiles', q => q.not('id', 'in', NOT_ADMIN_IN).gte('created_at', startYesterday).lt('created_at', startToday)),
+        count('profiles', q => q.not('id', 'in', NOT_ADMIN_IN).gte('created_at', rangeStart).lt('created_at', rangeEnd)),
+        count('bets'),
+        count('bets', q => q.gte('created_at', startToday)),
+        count('bets', q => q.gte('created_at', rangeStart).lt('created_at', rangeEnd)),
+        count('channels', q => q.is('deleted_at', null)),
+      ])
+
+      // Presència (last_seen) — pot no existir encara la columna; ho gestionem a part.
+      let activeNow = null, activeToday = null, activeYesterday = null, activeRange = null
+      try {
+        const presence = await Promise.all([
+          count('profiles', q => q.not('id', 'in', NOT_ADMIN_IN).gte('last_seen', active5)),
+          count('profiles', q => q.not('id', 'in', NOT_ADMIN_IN).gte('last_seen', startToday)),
+          count('profiles', q => q.not('id', 'in', NOT_ADMIN_IN).gte('last_seen', startYesterday).lt('last_seen', startToday)),
+          count('profiles', q => q.not('id', 'in', NOT_ADMIN_IN).gte('last_seen', rangeStart).lt('last_seen', rangeEnd)),
+        ])
+        if (presence.some(v => v === null)) setPresenceErr(true)
+        ;[activeNow, activeToday, activeYesterday, activeRange] = presence
+      } catch {
+        setPresenceErr(true)
+      }
+
+      // Sèries diàries del rang triat per a registres i apostes.
+      const buildSeries = (rows) => {
+        const buckets = []
+        for (let d = new Date(rStart); d < rEnd; d.setDate(d.getDate() + 1)) {
+          const day = startOfDay(new Date(d))
+          buckets.push({ ts: day.getTime(), label: String(day.getDate()), count: 0 })
+        }
+        for (const r of rows || []) {
+          const t = startOfDay(new Date(r.created_at)).getTime()
+          const b = buckets.find(x => x.ts === t)
+          if (b) b.count++
+        }
+        return buckets
+      }
+      const [{ data: regRows }, { data: betRows }] = await Promise.all([
+        supabase.from('profiles').select('created_at').gte('created_at', rangeStart).lt('created_at', rangeEnd).not('id', 'in', NOT_ADMIN_IN).limit(10000),
+        supabase.from('bets').select('created_at').gte('created_at', rangeStart).lt('created_at', rangeEnd).limit(30000),
+      ])
+
+      setData({
+        usersTotal, usersToday, usersYesterday, usersRange,
+        activeNow, activeToday, activeYesterday, activeRange,
+        betsTotal, betsToday, betsRange, channels,
+        regSeries: buildSeries(regRows), betSeries: buildSeries(betRows),
+      })
+    } catch {
+      setData(null)
+    } finally {
+      clearTimeout(safetyTimer)
+      setLoading(false)
+    }
+  }
+
+  // Recarrega en canviar el rang.
+  useEffect(() => { fetchAnalytics() }, [from, to]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fmt = (v) => v === null || v === undefined ? '—' : v.toLocaleString('es-ES')
+  const Section = ({ title }) => (
+    <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1px', margin: '20px 0 10px' }}>{title}</div>
+  )
+  const grid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px' }
+  const dateInput = { background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '13px', padding: '7px 10px', borderRadius: 'var(--radius-md)', outline: 'none' }
+
+  // Presets ràpids: omplen el calendari (no són comptadors fixos).
+  const setRange = (days) => {
+    setFrom(toDateInput(new Date(Date.now() - (days - 1) * 86400000)))
+    setTo(toDateInput(new Date()))
+  }
+  const today = toDateInput(new Date())
+  const rangeDays = data?.regSeries?.length || 0
+  const rangeLabel = `Del ${new Date(from + 'T00:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })} al ${new Date(to + 'T00:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })} · ${rangeDays} día${rangeDays !== 1 ? 's' : ''}`
+
+  return (
+    <div>
+      {/* Selector de rang de dates */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px', flexWrap: 'wrap', marginBottom: '8px' }}>
+        <div>
+          <label style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '4px' }}>Desde</label>
+          <input type="date" value={from} max={to || today} onChange={e => setFrom(e.target.value)} style={dateInput} />
+        </div>
+        <div>
+          <label style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '4px' }}>Hasta</label>
+          <input type="date" value={to} min={from} max={today} onChange={e => setTo(e.target.value)} style={dateInput} />
+        </div>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          {[{ l: '7d', d: 7 }, { l: '30d', d: 30 }, { l: '90d', d: 90 }].map(p => (
+            <button key={p.l} onClick={() => setRange(p.d)}
+              style={{ padding: '7px 12px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-sans)' }}>
+              {p.l}
+            </button>
+          ))}
+        </div>
+        <button onClick={fetchAnalytics} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontSize: '12px', fontFamily: 'var(--font-sans)', padding: '7px 0' }}>Actualizar</button>
+      </div>
+      <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>{rangeLabel}</div>
+
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--color-text-muted)' }}>⏳ Cargando analíticas...</div>
+      ) : !data ? (
+        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--color-text-muted)' }}>No se pudieron cargar las analíticas.</div>
+      ) : (
+        <>
+          <Section title="👥 Usuarios" />
+          <div style={grid}>
+            <Kpi label="Total registrados" value={fmt(data.usersTotal)} color="var(--color-primary)" hint="Histórico" />
+            <Kpi label="Nuevos hoy" value={fmt(data.usersToday)} />
+            <Kpi label="Nuevos ayer" value={fmt(data.usersYesterday)} />
+            <Kpi label="Nuevos en el rango" value={fmt(data.usersRange)} color="var(--color-primary)" hint={rangeLabel} />
+          </div>
+
+          <Section title="🟢 Actividad" />
+          {presenceErr && (
+            <div style={{ fontSize: '12px', color: 'var(--color-warning, #f59e0b)', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '10px 14px', marginBottom: '10px', lineHeight: 1.5 }}>
+              ⚠️ Falta la columna <strong>last_seen</strong> en la tabla profiles. Ejecuta el SQL que te ha pasado el asistente en Supabase para empezar a registrar la actividad.
+            </div>
+          )}
+          <div style={grid}>
+            <Kpi label="Activos ahora" value={fmt(data.activeNow)} color="var(--color-primary)" hint="Últimos 5 min" />
+            <Kpi label="Activos hoy" value={fmt(data.activeToday)} />
+            <Kpi label="Activos ayer" value={fmt(data.activeYesterday)} />
+            <Kpi label="Activos en el rango" value={fmt(data.activeRange)} hint={rangeLabel} />
+          </div>
+
+          <Section title="📊 Contenido y actividad" />
+          <div style={grid}>
+            <Kpi label="Total apuestas" value={fmt(data.betsTotal)} color="var(--color-primary)" hint="Histórico" />
+            <Kpi label="Apuestas hoy" value={fmt(data.betsToday)} />
+            <Kpi label="Apuestas en el rango" value={fmt(data.betsRange)} color="var(--color-primary)" hint={rangeLabel} />
+            <Kpi label="Canales activos" value={fmt(data.channels)} />
+          </div>
+
+          <Section title="📈 Evolución diaria (rango)" />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '10px' }}>
+            <MiniBars title="Nuevos registros / día" days={data.regSeries} color="var(--color-primary)" />
+            <MiniBars title="Apuestas / día" days={data.betSeries} color="var(--color-warning, #f59e0b)" />
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 export default function AdminPanel({ user }) {
   const [reviewBets, setReviewBets] = useState([])
   const [reportsByBet, setReportsByBet] = useState({})
@@ -705,6 +927,7 @@ export default function AdminPanel({ user }) {
       {/* Pestanyes del panell */}
       <div style={{ display: 'flex', gap: '4px', borderBottom: '0.5px solid var(--color-border)', marginBottom: '20px' }}>
         {[
+          { id: 'analiticas',   label: '📊 Analíticas' },
           { id: 'review',       label: `🚩 Picks en revisión${reviewBets.length > 0 ? ` (${reviewBets.length})` : ''}` },
           { id: 'problemas',    label: `🆘 Problemas${pendingTicketsCount > 0 ? ` (${pendingTicketsCount})` : ''}` },
           { id: 'sugerencias',  label: `💬 Sugerencias${suggestionsCount > 0 ? ` (${suggestionsCount})` : ''}` },
@@ -718,6 +941,7 @@ export default function AdminPanel({ user }) {
         ))}
       </div>
 
+      {activeTab === 'analiticas'  && <AnalyticsTab />}
       {activeTab === 'problemas'   && <ProblemasTab />}
       {activeTab === 'sugerencias' && <SugerenciasTab adminUserId={user?.id} />}
       {activeTab === 'verificados' && <VerificadosTab />}
