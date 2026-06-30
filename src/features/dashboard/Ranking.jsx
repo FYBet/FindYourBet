@@ -477,6 +477,7 @@ const TH = { fontSize: '10px', fontWeight: 700, color: 'var(--color-text-muted)'
 const TD = { padding: '10px 10px', verticalAlign: 'middle' }
 
 function RankingTable({ entries, user, onNavigateToChannel }) {
+  const openProfile = useProfileNav() // clic al propietari -> perfil emergent
   if (!entries.length) return (
     <div className="empty-state">
       <div className="empty-icon">📊</div>
@@ -489,8 +490,10 @@ function RankingTable({ entries, user, onNavigateToChannel }) {
 
   return (
     <div style={{ overflowX: 'auto' }}>
-      {/* <table> garanteix alineació perfecta entre capçalera i files */}
-      <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+      {/* <table> garanteix alineació perfecta entre capçalera i files.
+         minWidth: en finestres estretes el contenidor fa scroll horitzontal en comptes
+         de comprimir la columna CANAL i que el seu contingut es solapi amb YIELD. */}
+      <table style={{ width: '100%', minWidth: '800px', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
         <colgroup>
           <col style={{ width: '52px' }} />
           <col />
@@ -499,7 +502,6 @@ function RankingTable({ entries, user, onNavigateToChannel }) {
           <col style={{ width: '86px' }} />
           <col style={{ width: '104px' }} />
           <col style={{ width: '62px' }} />
-          <col style={{ width: '88px' }} />
         </colgroup>
         <thead>
           <tr>
@@ -510,7 +512,6 @@ function RankingTable({ entries, user, onNavigateToChannel }) {
             <th style={{ ...TH, textAlign: 'center' }}>ACIERTOS</th>
             <th style={{ ...TH, textAlign: 'center' }}>CUOTA MEDIA</th>
             <th style={{ ...TH, textAlign: 'center' }}>PICKS</th>
-            <th style={{ ...TH }} />
           </tr>
         </thead>
         <tbody>
@@ -534,16 +535,25 @@ function RankingTable({ entries, user, onNavigateToChannel }) {
                   }
                 </td>
 
-                {/* CANAL */}
+                {/* CANAL — clicar l'avatar o el nom porta al preview del canal */}
                 <td style={{ ...TD }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                    <ChannelAvatar avatarUrl={e.channelAvatarUrl} name={e.channelName} />
+                    <div onClick={() => e.inviteCode && onNavigateToChannel?.({ invite_code: e.inviteCode })}
+                      style={{ flexShrink: 0, cursor: e.inviteCode ? 'pointer' : 'default' }}>
+                      <ChannelAvatar avatarUrl={e.channelAvatarUrl} name={e.channelName} />
+                    </div>
                     <div style={{ minWidth: 0, display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <span onClick={() => e.inviteCode && onNavigateToChannel?.({ invite_code: e.inviteCode })}
+                        title="Ver canal"
+                        style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', cursor: e.inviteCode ? 'pointer' : 'default' }}>
                         {e.channelName}
                       </span>
                       <span style={{ fontSize: '13px', color: 'var(--color-text-muted)', fontWeight: 400, flexShrink: 0 }}>—</span>
-                      <Username username={e.ownerUsername} isVerified={e.isVerified} size="xs" />
+                      <span onClick={() => e.ownerId && openProfile?.(e.ownerId)}
+                        title="Ver perfil"
+                        style={{ flexShrink: 0, cursor: e.ownerId ? 'pointer' : 'default' }}>
+                        <Username username={e.ownerUsername} isVerified={e.isVerified} size="xs" />
+                      </span>
                       <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', flexShrink: 0 }}>· {formatCount(e.memberCount)} seguidores</span>
                       {user?.id === e.ownerId && (
                         <span style={{ fontSize: '10px', background: 'var(--color-primary-light)', color: 'var(--color-primary)', padding: '1px 6px', borderRadius: 'var(--radius-full)', border: '0.5px solid var(--color-primary-border)', fontWeight: 600, flexShrink: 0 }}>Tú</span>
@@ -568,23 +578,6 @@ function RankingTable({ entries, user, onNavigateToChannel }) {
 
                 {/* PICKS */}
                 <td style={{ ...TD, textAlign: 'center', fontSize: '13px', fontWeight: 600 }}>{e.picks}</td>
-
-                {/* VER CANAL */}
-                <td style={{ ...TD, textAlign: 'right' }}>
-                  <button
-                    onClick={() => onNavigateToChannel?.(e.inviteCode)}
-                    disabled={!e.inviteCode || !onNavigateToChannel}
-                    style={{
-                      background: 'var(--color-bg)', border: '0.5px solid var(--color-border)',
-                      color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '11px',
-                      fontWeight: 600, padding: '5px 9px', borderRadius: 'var(--radius-md)',
-                      cursor: (e.inviteCode && onNavigateToChannel) ? 'pointer' : 'default',
-                      opacity: (e.inviteCode && onNavigateToChannel) ? 1 : 0.35,
-                      whiteSpace: 'nowrap', transition: 'all 0.15s',
-                    }}>
-                    Ver canal
-                  </button>
-                </td>
               </tr>
             )
           })}

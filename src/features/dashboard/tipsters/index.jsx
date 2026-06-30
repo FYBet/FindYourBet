@@ -6,6 +6,8 @@ import ProfileView from '../social/ProfileView'
 import Username from '../../../components/ui/Username'
 import SharedAvatar from '../../../components/ui/Avatar'
 import { THEME_STYLES, THEME_LABELS } from '../../../lib/cardThemes'
+import { clampBio, MAX_BIO_LEN } from '../../../lib/bio'
+import { formatMemberSince } from '../../../lib/dates'
 
 const SORT_OPTIONS = [
   { id: 'yield',   label: 'Rendimiento' },
@@ -21,12 +23,6 @@ function Avatar({ url, name, size = 56, fontSize = 22 }) {
   )
 }
 
-function formatMemberSince(dateStr) {
-  if (!dateStr) return ''
-  return new Date(dateStr)
-    .toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })
-    .replace(/^\w/, c => c.toUpperCase())
-}
 
 // Card horitzontal del propi perfil — ample complet
 function MyProfileCard({ profile, onEdit, onSaveBio }) {
@@ -50,7 +46,7 @@ function MyProfileCard({ profile, onEdit, onSaveBio }) {
 
   return (
     <div style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-xl)', padding: '24px 28px', marginBottom: '24px' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 0.5px 1fr', gap: '0 32px' }}>
+      <div className="myprofile-grid">
 
         {/* Esquerra: avatar + nom + stats */}
         <div style={{ minWidth: 0 }}>
@@ -65,7 +61,7 @@ function MyProfileCard({ profile, onEdit, onSaveBio }) {
               </div>
               {profile?.created_at && (
                 <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
-                  Miembro desde {formatMemberSince(profile.created_at)}
+                  {formatMemberSince(profile.created_at)}
                 </div>
               )}
             </div>
@@ -92,7 +88,7 @@ function MyProfileCard({ profile, onEdit, onSaveBio }) {
         </div>
 
         {/* Separador vertical */}
-        <div style={{ background: 'var(--color-border)', alignSelf: 'stretch' }} />
+        <div className="myprofile-sep" style={{ background: 'var(--color-border)', alignSelf: 'stretch' }} />
 
         {/* Dreta: Sobre mí + bio editable + tags */}
         <div style={{ minWidth: 0 }}>
@@ -110,11 +106,12 @@ function MyProfileCard({ profile, onEdit, onSaveBio }) {
             <>
               <textarea
                 value={bioValue}
-                onChange={e => setBioValue(e.target.value)}
-                maxLength={300}
+                onChange={e => setBioValue(clampBio(e.target.value))}
+                maxLength={MAX_BIO_LEN}
                 rows={4}
                 style={{ width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-primary)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '13px', padding: '10px 12px', borderRadius: 'var(--radius-md)', outline: 'none', resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.5 }}
               />
+              <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px', textAlign: 'right' }}>{bioValue.length}/{MAX_BIO_LEN}</div>
               <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
                 <button onClick={handleCancelBio}
                   style={{ flex: 1, padding: '8px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-sans)' }}>
@@ -144,52 +141,32 @@ function MyProfileCard({ profile, onEdit, onSaveBio }) {
   )
 }
 
-// Preview minimalista per al modal d'edició de ficha
-function FichaPreview({ profile, theme }) {
-  const themeStyle = (theme && THEME_STYLES[theme]) || null
-  const statBg = themeStyle ? 'rgba(255,255,255,0.06)' : 'var(--color-bg-soft)'
-  return (
-    <div style={{ ...(themeStyle || { background: 'var(--color-bg)' }), border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
-      <div style={{ padding: '16px 16px 14px' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', marginBottom: '12px' }}>
-          <div style={{ flexShrink: 0, paddingTop: '1px' }}>
-            <Avatar url={profile?.avatar_url} name={profile?.username} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <Username username={profile?.username || '—'} isVerified={profile?.is_verified} size="md" />
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: '8px', marginBottom: profile?.bio ? '10px' : '0' }}>
-          {['yield', 'aciertos', 'picks'].map(label => (
-            <div key={label} style={{ flex: 1, padding: '8px 10px', background: statBg, borderRadius: 'var(--radius-md)', textAlign: 'center' }}>
-              <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--color-text-muted)' }}>—</div>
-              <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '2px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</div>
-            </div>
-          ))}
-        </div>
-        {profile?.bio && (
-          <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.45 }}>
-            {profile.bio}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function TipsterCard({ tipster, isFollowing, isMutual, onFollow, onUnfollow, onClick }) {
+// `preview`: mode previsualització (modal d'editar ficha) — sense botó de seguir, no
+// interactiu i amb el tema que s'està editant (themeOverride). És la MATEIXA card que
+// veuen els altres, per garantir que previsualització i ficha real són idèntiques.
+function TipsterCard({ tipster, isFollowing, isMutual, onFollow, onUnfollow, onClick, preview = false, themeOverride }) {
   const { stats } = tipster
   const hasStats = stats.total >= 3
-  const themeStyle = (tipster.card_theme && THEME_STYLES[tipster.card_theme]) || null
+  const activeTheme = preview ? themeOverride : tipster.card_theme
+  const themeStyle = (activeTheme && THEME_STYLES[activeTheme]) || null
   const statBg = themeStyle ? 'rgba(255,255,255,0.06)' : 'var(--color-bg-soft)'
+
+  // Bio plegable: 2 línies per defecte; si és més llarga, mostra "Ver más...".
+  const bioRef = useRef(null)
+  const [bioExpanded, setBioExpanded] = useState(false)
+  const [bioOverflow, setBioOverflow] = useState(false)
+  useEffect(() => {
+    const el = bioRef.current
+    if (el && !bioExpanded) setBioOverflow(el.scrollHeight > el.clientHeight + 1)
+  }, [tipster.bio, bioExpanded])
 
   return (
     <div
       style={{ ...(themeStyle || { background: 'var(--color-bg)' }), border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden', transition: 'border-color 0.15s, box-shadow 0.15s', display: 'flex', flexDirection: 'column', height: '100%' }}
-      onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.boxShadow = '0 2px 16px rgba(15,110,86,0.1)' }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.boxShadow = 'none' }}>
+      onMouseEnter={preview ? undefined : (e => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.boxShadow = '0 2px 16px rgba(15,110,86,0.1)' })}
+      onMouseLeave={preview ? undefined : (e => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.boxShadow = 'none' })}>
 
-      <div onClick={onClick} style={{ padding: '16px 16px 14px', cursor: 'pointer', flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <div onClick={preview ? undefined : onClick} style={{ padding: '16px 16px 14px', cursor: preview ? 'default' : 'pointer', flex: 1, display: 'flex', flexDirection: 'column' }}>
 
         {/* Fila: avatar + username + botó — centrats verticalment */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
@@ -199,11 +176,13 @@ function TipsterCard({ tipster, isFollowing, isMutual, onFollow, onUnfollow, onC
           <div style={{ flex: 1, minWidth: 0 }}>
             <Username username={tipster.username} isVerified={tipster.is_verified} size="md" />
           </div>
-          <button
-            onClick={e => { e.stopPropagation(); isFollowing ? onUnfollow() : onFollow() }}
-            style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 'var(--radius-md)', border: isFollowing ? '0.5px solid var(--color-border)' : 'none', background: isFollowing ? 'var(--color-bg-soft)' : 'var(--color-primary)', color: isFollowing ? 'var(--color-text-muted)' : '#010906', cursor: 'pointer', fontSize: '12px', fontWeight: 700, fontFamily: 'var(--font-sans)', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
-            {isMutual ? '👥 Amigos' : isFollowing ? '✓ Siguiendo' : '+ Seguir'}
-          </button>
+          {!preview && (
+            <button
+              onClick={e => { e.stopPropagation(); isFollowing ? onUnfollow() : onFollow() }}
+              style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 'var(--radius-md)', border: isFollowing ? '0.5px solid var(--color-border)' : 'none', background: isFollowing ? 'var(--color-bg-soft)' : 'var(--color-primary)', color: isFollowing ? 'var(--color-text-muted)' : '#010906', cursor: 'pointer', fontSize: '12px', fontWeight: 700, fontFamily: 'var(--font-sans)', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
+              {isMutual ? '👥 Amigos' : isFollowing ? '✓ Siguiendo' : '+ Seguir'}
+            </button>
+          )}
         </div>
 
         {/* Stats — SOBRE la bio */}
@@ -228,10 +207,20 @@ function TipsterCard({ tipster, isFollowing, isMutual, onFollow, onUnfollow, onC
           </div>
         </div>
 
-        {/* Bio — fins a 4 línies, amb el·lipsi si és massa llarga */}
+        {/* Bio — 2 línies per defecte; "Ver más..." expandeix la card fins al final */}
         {tipster.bio && (
-          <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', lineHeight: 1.5, marginBottom: '10px' }}>
-            {tipster.bio}
+          <div style={{ marginBottom: '10px' }}>
+            <div ref={bioRef}
+              style={{ fontSize: '12px', color: 'var(--color-text-muted)', lineHeight: 1.5,
+                ...(bioExpanded ? {} : { overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }) }}>
+              {tipster.bio}
+            </div>
+            {(bioOverflow || bioExpanded) && (
+              <span onClick={e => { e.stopPropagation(); setBioExpanded(v => !v) }}
+                style={{ display: 'inline-block', marginTop: '2px', fontSize: '12px', fontWeight: 700, color: 'var(--color-primary)', cursor: 'pointer' }}>
+                {bioExpanded ? 'Ver menos' : 'Ver más...'}
+              </span>
+            )}
           </div>
         )}
 
@@ -313,7 +302,7 @@ function enrichWithStats(profiles, bets) {
   })
 }
 
-export default function Tipsters({ user, onNavigateToChannel, onStartDM }) {
+export default function Tipsters({ user, onNavigateToChannel, onStartDM, onRefreshUser }) {
   const [activeTab, setActiveTab] = useState('sugeridos')
   const [query, setQuery]         = useState('')
 
@@ -384,9 +373,19 @@ export default function Tipsters({ user, onNavigateToChannel, onStartDM }) {
     }
   }
 
+  // Desa la bio i VERIFICA que la BD l'ha acceptat (.select() retorna la fila modificada).
+  // Si RLS o la sessió la bloquegen, abans es veia "editada" en local però es perdia en
+  // recarregar; ara surt error i no es menteix a l'usuari. En èxit, sincronitza el `user`
+  // global perquè la resta de pantalles (Perfil, etc.) ho reflecteixin igual.
   const handleSaveBio = async (newBio) => {
-    await supabase.from('profiles').update({ bio: newBio }).eq('id', user.id)
+    const { data, error } = await supabase
+      .from('profiles').update({ bio: newBio }).eq('id', user.id).select().single()
+    if (error || !data) {
+      alert('No se pudo guardar la biografía' + (error ? `: ${error.message}` : ' (sin permisos o sesión caducada).'))
+      throw new Error('save-bio-failed')
+    }
     setMyProfile(p => ({ ...p, bio: newBio }))
+    onRefreshUser?.()
   }
 
   const handleSaveTheme = async () => {
@@ -396,6 +395,7 @@ export default function Tipsters({ user, onNavigateToChannel, onStartDM }) {
       await supabase.from('profiles').update({ card_theme: editTheme }).eq('id', user.id)
       setMyProfile(p => ({ ...p, card_theme: editTheme }))
       setShowCardEdit(false)
+      onRefreshUser?.()
     } catch (e) {
       // silent
     } finally {
@@ -751,11 +751,14 @@ export default function Tipsters({ user, onNavigateToChannel, onStartDM }) {
                     </div>
                   )}
                   {(contactTipsters?.length > 0 || forYouTipsters?.length > 0) && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '32px' }}>
+                    <div className="tipsters-pair-grid">
                       <div>
                         {contactTipsters?.length > 0 && (
                           <>
-                            <SectionLabel label="👥 En común" />
+                            {/* Mateixa capçalera (alçada + centrat) que "Descubre" perquè els labels quedin alineats */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: '30px', marginTop: '4px', marginBottom: '12px' }}>
+                              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1.2px' }}>👥 En común</span>
+                            </div>
                             <TipsterGrid tipsters={contactTipsters} {...cardCallbacks} />
                           </>
                         )}
@@ -763,10 +766,10 @@ export default function Tipsters({ user, onNavigateToChannel, onStartDM }) {
                       <div>
                         {forYouTipsters?.length > 0 && (
                           <>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                              <SectionLabel label="🔥 Descubre" />
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: '30px', marginTop: '4px', marginBottom: '12px' }}>
+                              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '1.2px' }}>🔥 Descubre</span>
                               <button onClick={loadSugeridos}
-                                style={{ background: 'none', border: '0.5px solid var(--color-border)', color: 'var(--color-text-muted)', fontSize: '12px', fontWeight: 600, padding: '4px 10px', borderRadius: 'var(--radius-full)', cursor: 'pointer', fontFamily: 'var(--font-sans)', marginBottom: '12px' }}>
+                                style={{ background: 'none', border: '0.5px solid var(--color-border)', color: 'var(--color-text-muted)', fontSize: '12px', fontWeight: 600, padding: '4px 10px', borderRadius: 'var(--radius-full)', cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>
                                 🔄 Actualizar
                               </button>
                             </div>
@@ -846,7 +849,18 @@ export default function Tipsters({ user, onNavigateToChannel, onStartDM }) {
 
               <div style={{ marginBottom: '24px' }}>
                 <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '10px' }}>Vista previa</div>
-                <FichaPreview profile={myProfile} theme={editTheme} />
+                {/* Mateixa card que veuen els altres, en mode previsualització amb el tema editat */}
+                <TipsterCard
+                  tipster={{
+                    ...myProfile,
+                    stats: myProfile._stats || { total: 0, yieldVal: 0, winRate: 0 },
+                    _followerCount: myProfile._followerCount || 0,
+                    _mutualConnections: 0,
+                    _mutualAvatars: [],
+                  }}
+                  preview
+                  themeOverride={editTheme}
+                />
               </div>
 
               <div style={{ marginBottom: '28px' }}>

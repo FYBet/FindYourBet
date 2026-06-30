@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
+import { clampLines, stripEmojis, LINE_LIMIT } from '../../../lib/textLimits'
 
 const REPORT_REASONS = [
   'Spam o publicidad no deseada',
@@ -120,7 +121,7 @@ export default function ReportUserModal({ reportedId, reportedUsername, reporter
               {reason === 'Otro' && (
                 <textarea
                   value={details}
-                  onChange={e => setDetails(e.target.value)}
+                  onChange={e => setDetails(clampLines(stripEmojis(e.target.value), LINE_LIMIT.FORM))}
                   placeholder="Describe el problema..."
                   maxLength={500}
                   rows={3}

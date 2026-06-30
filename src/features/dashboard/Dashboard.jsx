@@ -7,11 +7,11 @@ import { useBets } from './hooks/useBets'
 import { useUnreadDMCount } from './social/hooks/useUnreadDMCount'
 import { useUnreadChannelCount } from '../../hooks/useUnreadChannelCount'
 import { usePresence } from '../../hooks/usePresence'
+import { useFollow } from './social/hooks/useFollow'
 import { BetModal } from './BetModal'
 import Estadisticas from './Estadisticas'
 import Historial from './MisApuestas'
 import Ranking from './Ranking'
-import RankingAmigos from './RankingAmigos'
 import Canales from './canales'
 import Contacto from './Contacto'
 import Social from './social'
@@ -44,7 +44,6 @@ const SHORTCUT_OPTIONS = [
   { id: 'feed',         label: 'Feed',              icon: '🔥' },
   { id: 'tipsters',     label: 'Tipsters',          icon: '🎯' },
   { id: 'ranking',      label: 'Ranking',           icon: '🏆' },
-  { id: 'amigos',       label: 'Amigos',            icon: '👥' },
   { id: 'faqs',         label: 'FAQs',              icon: '❓' },
   { id: 'contacto',     label: 'Contacto',          icon: '📱' },
   { id: 'sugerencias',  label: 'Sugerencias',       icon: '💡' },
@@ -72,13 +71,7 @@ const SIDEBAR = [
       { id: 'canales', label: 'Canales', icon: '📡' },
       { id: 'feed', label: 'Feed', icon: '🔥' },
       { id: 'tipsters', label: 'Tipsters', icon: '🎯' },
-    ]
-  },
-  {
-    label: 'Ranking',
-    items: [
-      { id: 'ranking', label: 'Ranking',  icon: '🏆' },
-      { id: 'amigos',  label: 'Amigos',   icon: '👥' },
+      { id: 'ranking', label: 'Ranking', icon: '🏆' },
     ]
   },
   {
@@ -204,7 +197,6 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
   const [tipstersKey, setTipstersKey] = useState(0)
   const [feedKey, setFeedKey] = useState(0)
   const [rankingKey, setRankingKey] = useState(0)
-  const [amigosKey, setAmigosKey] = useState(0)
   const [miperfilKey, setMiperfilKey] = useState(0)
   const [historialKey, setHistorialKey] = useState(0)
   const [estadisticasKey, setEstadisticasKey] = useState(0)
@@ -218,7 +210,6 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
     if (id === 'tipsters') setTipstersKey(k => k + 1)
     if (id === 'feed') setFeedKey(k => k + 1)
     if (id === 'ranking') setRankingKey(k => k + 1)
-    if (id === 'amigos') setAmigosKey(k => k + 1)
     if (id === 'miperfil') setMiperfilKey(k => k + 1)
     if (id === 'historial') setHistorialKey(k => k + 1)
     if (id === 'estadisticas') setEstadisticasKey(k => k + 1)
@@ -327,6 +318,8 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
   const { count: unreadChannelCount, unreadCounts: unreadChannelCounts, setChannelCount: setChannelUnreadCount, refetch: refetchChannelUnread } = useUnreadChannelCount(user?.id)
   // Heartbeat de presència: alimenta les analítiques d'usuaris actius de l'admin.
   usePresence(user?.id)
+  // Follow compartit per al perfil emergent global (mateixa font que Social/Tipsters).
+  const globalFollow = useFollow(user?.id)
 
   // Comptador de feines pendents per a l'admin (peticions + suggerències en estat pending)
   const [adminPendingCount, setAdminPendingCount] = useState(0)
@@ -552,7 +545,7 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
                   <ul style={{ fontSize: '14px', color: 'var(--color-text)', lineHeight: 1.6, margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <li><strong>Registra tus apuestas</strong> en el Historial para que tus estadísticas (yield, acierto, racha) sean reales.</li>
                     <li><strong>Sigue a tipsters</strong> y entra en sus canales para ver sus picks y análisis en tiempo real.</li>
-                    <li><strong>Participa</strong>: comenta, da like, comparte picks por DM y compite en los rankings con tus amigos.</li>
+                    <li><strong>Participa</strong>: comenta, da like, comparte picks por DM y compite en los rankings.</li>
                     <li>Si eres tipster, <strong>crea tu canal</strong> y comparte tu metodología con la comunidad.</li>
                   </ul>
                 </section>
@@ -565,7 +558,7 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
                     <li>Feed de picks (Siguiendo + Para ti)</li>
                     <li>Descubrimiento de tipsters y verificación</li>
                     <li>Perfiles, follows, mensajes directos y comunidad</li>
-                    <li>Rankings globales por yield y ranking entre amigos</li>
+                    <li>Rankings globales por yield</li>
                     <li>Likes, comentarios y notificaciones</li>
                   </ul>
                 </section>
@@ -779,7 +772,7 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
 
           {visited.has('tipsters') && (
             <div style={{ display: tab === 'tipsters' ? 'block' : 'none' }}>
-              <Tipsters key={tipstersKey} user={user} onNavigateToChannel={handleNavigateToChannel} onStartDM={handleStartDMExternal} />
+              <Tipsters key={tipstersKey} user={user} onNavigateToChannel={handleNavigateToChannel} onStartDM={handleStartDMExternal} onRefreshUser={onRefreshUser} />
             </div>
           )}
 
@@ -792,12 +785,6 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
           {visited.has('ranking') && (
             <div style={{ display: tab === 'ranking' ? 'block' : 'none' }}>
               <Ranking key={rankingKey} user={user} onNavigateToChannel={handleNavigateToChannel} />
-            </div>
-          )}
-
-          {visited.has('amigos') && (
-            <div style={{ display: tab === 'amigos' ? 'block' : 'none' }}>
-              <RankingAmigos key={amigosKey} user={user} />
             </div>
           )}
 
@@ -846,11 +833,22 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
       {notifProfileUserId && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           onClick={() => setNotifProfileUserId(null)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 450, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <motion.div initial={{ opacity: 0, scale: 0.96, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
             onClick={e => e.stopPropagation()}
             style={{ width: '100%', maxWidth: '480px', maxHeight: '88vh', overflowY: 'auto', background: 'var(--color-bg)', borderRadius: 'var(--radius-xl)', padding: '20px', boxSizing: 'border-box' }}>
-            <ProfileView userId={notifProfileUserId} currentUser={user} onBack={() => setNotifProfileUserId(null)} onStartDM={(userId) => { setNotifProfileUserId(null); handleStartDMExternal(userId) }} />
+            <ProfileView
+              userId={notifProfileUserId}
+              currentUser={user}
+              onBack={() => setNotifProfileUserId(null)}
+              onStartDM={(userId) => { setNotifProfileUserId(null); handleStartDMExternal(userId) }}
+              isFollowing={globalFollow.isFollowing(notifProfileUserId)}
+              isFollower={globalFollow.isFollower(notifProfileUserId)}
+              onFollow={(uid) => globalFollow.follow(uid, user?.name || 'alguien')}
+              onUnfollow={(uid) => globalFollow.unfollow(uid)}
+              onNavigateToChannel={(ch) => { setNotifProfileUserId(null); handleNavigateToChannel(ch) }}
+              onViewUser={(uid) => setNotifProfileUserId(uid)}
+            />
           </motion.div>
         </motion.div>
       )}

@@ -327,6 +327,56 @@
   }
 }
 
+/* TIPSTERS — parella de columnes "En común / Descubre".
+   Sempre 2 columnes (encara que estretes), perquè totes dues siguin visibles
+   alhora: si "En común" té molts tipsters no cal baixar molt per veure "Descubre".
+   Dins de cada columna les targetes van a 1 per fila (prop `single`). */
+.tipsters-pair-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 32px;
+}
+@media (max-width: 1024px) {
+  .tipsters-pair-grid { gap: 12px; }
+}
+
+/* TIPSTERS — card del propi perfil (avatar/stats | bio). S'apila en estret
+   perquè el botó "Editar / Ver" no quedi comprimit sobre el nom. */
+.myprofile-grid {
+  display: grid;
+  grid-template-columns: 1fr 0.5px 1fr;
+  gap: 0 32px;
+}
+@media (max-width: 1080px) {
+  .myprofile-grid { grid-template-columns: 1fr; gap: 20px; }
+  .myprofile-grid > .myprofile-sep { display: none; }
+}
+
+/* ──────────────────────────────────────────────────────────────
+   RESPONSIVE — pantalla dividida / finestres estretes (desktop)
+   Prioritat: que no es trenqui ni desbordi en horitzontal.
+   ────────────────────────────────────────────────────────────── */
+@media (max-width: 1080px) {
+  /* Les dreceres de la barra superior són redundants amb la sidebar:
+     les amaguem per evitar que la nav desbordi en horitzontal. */
+  .dash-nav-tabs { display: none; }
+  .dash-nav { padding-left: 20px; }
+  .dash-sidebar { width: 196px; }
+  .dash-content { padding: 24px 24px; }
+  /* La split de Canales/DMs compensa el padding de .dash-content amb marges
+     negatius: han d'anar en sincronia o queda un forat / scroll. */
+  .canales-split { margin: -24px -24px; }
+}
+
+@media (max-width: 900px) {
+  .dash-sidebar { width: 168px; }
+  .dash-content { padding: 18px 16px; }
+  .canales-split { margin: -18px -16px; }
+  .dash-nav { padding-right: 14px; }
+  .page-header { margin-bottom: 20px; }
+}
+
 /* EMPTY STATE */
 .empty-state { text-align: center; padding: 60px 24px; color: var(--color-text-muted); }
 .empty-icon { font-size: 48px; margin-bottom: 16px; }

@@ -5,6 +5,7 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { FormLabel } from '../../components/ui/FormLabel'
 import { supabase } from '../../lib/supabase'
+import { stripEmojis } from '../../lib/textLimits'
 import './auth.css'
 
 const NATIONALITIES = ['España', 'México', 'Argentina', 'Colombia', 'Chile', 'Perú', 'Venezuela', 'Ecuador', 'Bolivia', 'Paraguay', 'Uruguay', 'Otra']
@@ -66,11 +67,11 @@ export default function Register({ navigate, login }) {
           <motion.div className="form-row" variants={fadeUp} custom={3}>
             <div>
               <FormLabel>Nombre *</FormLabel>
-              <Input placeholder="Tu nombre" value={form.name} onChange={e => update('name', e.target.value)} />
+              <Input placeholder="Tu nombre" value={form.name} onChange={e => update('name', stripEmojis(e.target.value))} />
             </div>
             <div>
               <FormLabel>Apellidos *</FormLabel>
-              <Input placeholder="Tus apellidos" value={form.surname} onChange={e => update('surname', e.target.value)} />
+              <Input placeholder="Tus apellidos" value={form.surname} onChange={e => update('surname', stripEmojis(e.target.value))} />
             </div>
           </motion.div>
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
+import { clampLines, stripEmojis, LINE_LIMIT } from '../../../lib/textLimits'
 import PostModal from '../feed/PostModal'
 import ReportUserModal from './ReportUserModal'
 import FollowListModal from './FollowListModal'
@@ -548,7 +549,7 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
               <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
                 El usuario verá este aviso como modal la próxima vez que se conecte.
               </div>
-              <textarea value={adminWarningText} onChange={e => setAdminWarningText(e.target.value)} rows={5}
+              <textarea value={adminWarningText} onChange={e => setAdminWarningText(clampLines(stripEmojis(e.target.value), LINE_LIMIT.FORM))} rows={5}
                 placeholder="Texto del aviso..."
                 style={{ width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '13px', padding: '10px 12px', borderRadius: 'var(--radius-md)', outline: 'none', resize: 'vertical', boxSizing: 'border-box', marginBottom: '16px' }} />
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
@@ -579,7 +580,7 @@ export default function ProfileView({ userId, currentUser, onBack, onStartDM, is
               <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
                 Bloqueja el seu compte i email. No podrà entrar ni re-registrar-se.
               </div>
-              <textarea value={adminBanReason} onChange={e => setAdminBanReason(e.target.value)} rows={4}
+              <textarea value={adminBanReason} onChange={e => setAdminBanReason(clampLines(stripEmojis(e.target.value), LINE_LIMIT.FORM))} rows={4}
                 placeholder="Motivo del baneo..."
                 style={{ width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '13px', padding: '10px 12px', borderRadius: 'var(--radius-md)', outline: 'none', resize: 'vertical', boxSizing: 'border-box', marginBottom: '16px' }} />
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>

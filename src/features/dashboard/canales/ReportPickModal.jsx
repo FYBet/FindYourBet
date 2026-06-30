@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
+import { clampLines, stripEmojis, LINE_LIMIT } from '../../../lib/textLimits'
 
 // Quants reports fan falta perquè un pick entri en revisió automàtica.
 // Canviar aquest valor quan es determini el número definitiu.
@@ -117,7 +118,7 @@ export default function ReportPickModal({ bet, currentUser, onClose }) {
                 </label>
                 <textarea
                   value={details}
-                  onChange={e => setDetails(e.target.value)}
+                  onChange={e => setDetails(clampLines(stripEmojis(e.target.value), LINE_LIMIT.FORM))}
                   placeholder="Explica con más detalle qué ha pasado..."
                   rows={3}
                   maxLength={500}

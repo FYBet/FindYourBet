@@ -5,6 +5,7 @@ import { supabase } from '../../../lib/supabase'
 import { useMutes, MUTE_DURATIONS } from '../../../hooks/useMutes'
 import { useAdminMode } from '../../../contexts/AdminModeContext'
 import { formatMsgPreview as formatLastMsg } from '../../../lib/formatMsgPreview'
+import { clampLines, stripEmojis, LINE_LIMIT } from '../../../lib/textLimits'
 
 const VIP_LABELS = {
   vip_monthly: 'VIP Mensual', vip_weekly: 'VIP Semanal',
@@ -242,7 +243,7 @@ export default function ChannelCard({ channel, onClick, onLeave, onDelete, onAdm
                 Canal: <strong style={{ color: 'var(--color-text)' }}>{channel.name}</strong>
               </div>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '6px' }}>Motivo (visible al propietario)</label>
-              <textarea value={adminReason} onChange={e => setAdminReason(e.target.value)} rows={4}
+              <textarea value={adminReason} onChange={e => setAdminReason(clampLines(stripEmojis(e.target.value), LINE_LIMIT.FORM))} rows={4}
                 placeholder="Explica por qué se elimina este canal..." maxLength={500}
                 style={{ width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '13px', padding: '10px 12px', borderRadius: 'var(--radius-md)', outline: 'none', resize: 'vertical', boxSizing: 'border-box', marginBottom: '16px' }} />
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>

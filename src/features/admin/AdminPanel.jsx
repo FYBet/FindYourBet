@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '../../lib/supabase'
 import { ADMIN_USER_IDS } from '../../lib/adminUsers'
+import { clampLines, stripEmojis, LINE_LIMIT } from '../../lib/textLimits'
 
 // Emails amb accés al panell d'administració.
 // Afegir més si cal.
@@ -160,7 +161,7 @@ function SuggestionRow({ suggestion, onUpdate }) {
             </div>
             <div style={{ flex: 2, minWidth: '240px' }}>
               <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.7px', marginBottom: '6px' }}>Respuesta (opcional)</div>
-              <textarea value={response} onChange={e => setResponse(e.target.value)} rows={3}
+              <textarea value={response} onChange={e => setResponse(clampLines(stripEmojis(e.target.value), LINE_LIMIT.FORM))} rows={3}
                 placeholder="Escribe una respuesta visible para el usuario..."
                 style={{ width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '13px', padding: '9px 12px', borderRadius: 'var(--radius-md)', outline: 'none', resize: 'vertical', boxSizing: 'border-box' }} />
             </div>
@@ -321,7 +322,7 @@ function TicketRow({ ticket, onUpdate }) {
             </div>
             <div style={{ flex: 2, minWidth: '240px' }}>
               <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.7px', marginBottom: '6px' }}>Respuesta (opcional)</div>
-              <textarea value={response} onChange={e => setResponse(e.target.value)} rows={3}
+              <textarea value={response} onChange={e => setResponse(clampLines(stripEmojis(e.target.value), LINE_LIMIT.FORM))} rows={3}
                 placeholder="Escribe una respuesta visible para el usuario..."
                 style={{ width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '13px', padding: '9px 12px', borderRadius: 'var(--radius-md)', outline: 'none', resize: 'vertical', boxSizing: 'border-box' }} />
             </div>

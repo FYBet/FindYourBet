@@ -8,6 +8,9 @@ import Username from '../../../components/ui/Username'
 import SharedAvatar from '../../../components/ui/Avatar'
 import { isReservedUsername, isUsernameBanned } from '../../../lib/reservedUsernames'
 import { useAdminMode } from '../../../contexts/AdminModeContext'
+import { clampBio, MAX_BIO_LEN } from '../../../lib/bio'
+import { formatMemberSince } from '../../../lib/dates'
+import { stripEmojis } from '../../../lib/textLimits'
 
 const DM_OPTIONS = [
   { id: 'followers', icon: '🔒', label: 'Solo seguidores mutuos', desc: 'Solo quien te siga y tú le sigas puede escribirte' },
@@ -452,9 +455,14 @@ export default function MiPerfil({ user, onNavigate, onAvatarUpdated, onNavigate
             </div>
           </div>
 
-          <div style={{ fontWeight: 700, fontSize: '22px', marginBottom: profile?.bio ? '8px' : '16px' }}>
+          <div style={{ fontWeight: 700, fontSize: '22px', marginBottom: '4px' }}>
             <Username username={username} isVerified={profile?.is_verified} size="xl" />
           </div>
+          {profile?.created_at && (
+            <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: profile?.bio ? '8px' : '16px' }}>
+              {formatMemberSince(profile.created_at)}
+            </div>
+          )}
           {profile?.bio && (
             <div style={{ fontSize: '14px', color: 'var(--color-text-soft)', marginBottom: '16px', lineHeight: 1.5 }}>{profile.bio}</div>
           )}
@@ -785,7 +793,7 @@ export default function MiPerfil({ user, onNavigate, onAvatarUpdated, onNavigate
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px' }}>Nombre completo *</label>
                 <input style={inputStyle} placeholder="Tu nombre" value={editForm.name}
-                  onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} maxLength={50} />
+                  onChange={e => setEditForm(p => ({ ...p, name: stripEmojis(e.target.value) }))} maxLength={50} />
               </div>
 
               <div style={{ marginBottom: '16px' }}>
@@ -805,9 +813,9 @@ export default function MiPerfil({ user, onNavigate, onAvatarUpdated, onNavigate
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px' }}>Bio</label>
                 <textarea style={{ ...inputStyle, resize: 'vertical' }} rows={3}
                   placeholder="Cuéntale a la comunidad quién eres como tipster..."
-                  value={editForm.bio} onChange={e => setEditForm(p => ({ ...p, bio: e.target.value }))}
-                  maxLength={160} />
-                <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px', textAlign: 'right' }}>{editForm.bio.length}/160</div>
+                  value={editForm.bio} onChange={e => setEditForm(p => ({ ...p, bio: clampBio(e.target.value) }))}
+                  maxLength={MAX_BIO_LEN} />
+                <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px', textAlign: 'right' }}>{editForm.bio.length}/{MAX_BIO_LEN}</div>
               </div>
 
 

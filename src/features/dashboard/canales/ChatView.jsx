@@ -35,6 +35,7 @@ import PollCard from './PollCard'
 import PollCreatorModal from './PollCreatorModal'
 import { insertNotification } from '../notifications/useNotifications'
 import { useMentionInput } from '../../../hooks/useMentionInput'
+import { clampLines, stripEmojis, LINE_LIMIT } from '../../../lib/textLimits'
 
 function isLinkMessage(content) { return content.startsWith('http://') || content.startsWith('https://') }
 
@@ -527,7 +528,7 @@ function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, 
             <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <input value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))}
                 placeholder="Nombre del canal" maxLength={30} style={{ ...inputSt, textAlign: 'center', fontWeight: 700, fontSize: '16px' }} />
-              <textarea value={editForm.description} onChange={e => setEditForm(p => ({ ...p, description: e.target.value }))}
+              <textarea value={editForm.description} onChange={e => setEditForm(p => ({ ...p, description: clampLines(e.target.value, LINE_LIMIT.FORM) }))}
                 rows={2} maxLength={200} placeholder="Descripción del canal..."
                 style={{ ...inputSt, resize: 'none', textAlign: 'center' }} />
               {avatarError && <div style={{ fontSize: '12px', color: 'var(--color-error)', background: 'var(--color-error-light)', border: '0.5px solid var(--color-error-border)', borderRadius: 'var(--radius-md)', padding: '8px 12px' }}>{avatarError}</div>}
@@ -868,7 +869,7 @@ function InfoView({ channel, messages, liveStatuses, isOwner, isAdmin, onClose, 
                 Canal: <strong style={{ color: 'var(--color-text)' }}>{channel.name}</strong>
               </div>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '6px' }}>Motivo (visible al propietario)</label>
-              <textarea value={adminDeleteReason} onChange={e => setAdminDeleteReason(e.target.value)} rows={4}
+              <textarea value={adminDeleteReason} onChange={e => setAdminDeleteReason(clampLines(stripEmojis(e.target.value), LINE_LIMIT.FORM))} rows={4}
                 placeholder="Explica por qué se elimina este canal..." maxLength={500}
                 style={{ width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '13px', padding: '10px 12px', borderRadius: 'var(--radius-md)', outline: 'none', resize: 'vertical', boxSizing: 'border-box', marginBottom: '16px' }} />
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
@@ -1533,7 +1534,7 @@ export default function ChatView({ channel: initialChannel, user, onBack, member
 
             <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
               {mention.dropdown}
-              <textarea ref={msgInputRef} value={text} onChange={e => mention.handleChange(e.target.value, e.target.selectionStart)} onKeyDown={handleKey}
+              <textarea ref={msgInputRef} value={text} onChange={e => mention.handleChange(clampLines(e.target.value, LINE_LIMIT.MESSAGE), e.target.selectionStart)} onKeyDown={handleKey}
                 placeholder="Envía un mensaje" rows={2} maxLength={2000}
                 onPaste={e => {
                   const item = Array.from(e.clipboardData?.items || []).find(i => i.type.startsWith('image/'))

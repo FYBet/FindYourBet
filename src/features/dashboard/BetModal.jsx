@@ -4,6 +4,7 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { FormLabel } from '../../components/ui/FormLabel'
 import { supabase } from '../../lib/supabase'
+import { clampLines, stripEmojis, LINE_LIMIT } from '../../lib/textLimits'
 import './dashboard.css'
 
 const SPORTS = ['Fútbol', 'Baloncesto', 'Tenis', 'Béisbol', 'Fútbol Americano', 'eSports', 'MMA', 'Otros']
@@ -289,7 +290,7 @@ export function BetModal({ open, onClose, form, setForm, onSubmit, user, presele
                 <div className="form-group-modal">
                   <FormLabel>Evento</FormLabel>
                   <Input placeholder="ej. Real Madrid vs Barcelona"
-                    value={form.event} onChange={e => set('event', e.target.value)} maxLength={100} />
+                    value={form.event} onChange={e => set('event', stripEmojis(e.target.value))} maxLength={100} />
                 </div>
 
                 <div className="form-row-modal">
@@ -311,7 +312,7 @@ export function BetModal({ open, onClose, form, setForm, onSubmit, user, presele
                   <div>
                     <FormLabel>Selección</FormLabel>
                     <Input placeholder="ej. Real Madrid"
-                      value={form.pick} onChange={e => set('pick', e.target.value)} maxLength={100} />
+                      value={form.pick} onChange={e => set('pick', stripEmojis(e.target.value))} maxLength={100} />
                   </div>
                   <div>
                     <FormLabel>Cuota</FormLabel>
@@ -348,7 +349,7 @@ export function BetModal({ open, onClose, form, setForm, onSubmit, user, presele
                   <FormLabel>Análisis (opcional)</FormLabel>
                   <textarea className="input" rows="3" style={{ resize: 'vertical' }}
                     placeholder="Explica brevemente tu razonamiento..."
-                    value={form.analysis} onChange={e => set('analysis', e.target.value)} maxLength={500} />
+                    value={form.analysis} onChange={e => set('analysis', clampLines(e.target.value, LINE_LIMIT.FORM))} maxLength={500} />
                 </div>
               </>
             )}

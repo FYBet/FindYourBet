@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '../../lib/supabase'
+import { clampLines, stripEmojis, LINE_LIMIT } from '../../lib/textLimits'
 
 const inputStyle = { width: '100%', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', color: 'var(--color-text)', fontFamily: 'var(--font-sans)', fontSize: '14px', padding: '12px 14px', borderRadius: 'var(--radius-md)', outline: 'none', boxSizing: 'border-box' }
 
@@ -293,7 +294,7 @@ function RedesSoporte({ user }) {
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '6px' }}>Título</label>
               <input
                 value={title}
-                onChange={e => setTitle(e.target.value)}
+                onChange={e => setTitle(stripEmojis(e.target.value))}
                 placeholder="Resume tu problema en una frase..."
                 maxLength={100}
                 style={{ ...inputStyle }}
@@ -304,7 +305,7 @@ function RedesSoporte({ user }) {
               <textarea
                 rows={5}
                 value={problem}
-                onChange={e => setProblem(e.target.value)}
+                onChange={e => setProblem(clampLines(stripEmojis(e.target.value), LINE_LIMIT.FORM))}
                 placeholder="Describe paso a paso qué ha ocurrido, qué esperabas y qué ha pasado en su lugar..."
                 maxLength={3000}
                 style={{ ...inputStyle, resize: 'vertical' }}
@@ -410,7 +411,7 @@ function Sugerencias({ user }) {
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '6px' }}>Título</label>
               <input
                 value={title}
-                onChange={e => setTitle(e.target.value)}
+                onChange={e => setTitle(stripEmojis(e.target.value))}
                 placeholder="Resume tu idea en una frase..."
                 maxLength={100}
                 style={{ ...inputStyle }}
@@ -418,7 +419,7 @@ function Sugerencias({ user }) {
             </div>
             <div style={{ marginBottom: '14px' }}>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px' }}>Tu sugerencia</label>
-              <textarea style={{ ...inputStyle, resize: 'vertical' }} rows={5} placeholder="Cuéntanos tu idea con detalle..." value={message} onChange={e => setMessage(e.target.value)} maxLength={3000} />
+              <textarea style={{ ...inputStyle, resize: 'vertical' }} rows={5} placeholder="Cuéntanos tu idea con detalle..." value={message} onChange={e => setMessage(clampLines(stripEmojis(e.target.value), LINE_LIMIT.FORM))} maxLength={3000} />
             </div>
             <div style={{ marginBottom: '20px' }}>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '6px' }}>Imagen (opcional)</label>

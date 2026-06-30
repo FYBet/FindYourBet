@@ -3,8 +3,13 @@ import { motion } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
 import { insertNotification } from '../notifications/useNotifications'
 import Username from '../../../components/ui/Username'
+import { useProfileNav } from '../../../contexts/ProfileNavContext'
 
 export default function FollowListModal({ type, profileUserId, currentUser, onClose, onViewProfile, onStartDM }) {
+  // Obre el perfil emergent PER SOBRE de la llista (sense tancar-la), perquè en tornar
+  // enrere reaparegui la llista on estaves. Cau a onViewProfile si no hi ha context.
+  const openProfileNav = useProfileNav()
+  const viewProfile = (id) => { if (openProfileNav) openProfileNav(id); else { onViewProfile?.(id); onClose() } }
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [followingSet, setFollowingSet] = useState(new Set())
@@ -78,7 +83,7 @@ export default function FollowListModal({ type, profileUserId, currentUser, onCl
             const isOwn = u.id === currentUser?.id
             return (
               <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 20px', borderBottom: i < users.length - 1 ? '0.5px solid var(--color-border)' : 'none' }}>
-                <div onClick={() => { onViewProfile?.(u.id); onClose() }}
+                <div onClick={() => viewProfile(u.id)}
                   style={{ width: '44px', height: '44px', borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0, overflow: 'hidden', cursor: 'pointer', position: 'relative' }}>
                   {(u.username || '?')[0].toUpperCase()}
                   {u.avatar_url && (
@@ -86,7 +91,7 @@ export default function FollowListModal({ type, profileUserId, currentUser, onCl
                       style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
                   )}
                 </div>
-                <div onClick={() => { onViewProfile?.(u.id); onClose() }} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
+                <div onClick={() => viewProfile(u.id)} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
                   <div style={{ fontWeight: 600, fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     <Username username={u.username} isVerified={u.is_verified} size="sm" />
                   </div>

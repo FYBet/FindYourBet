@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../../../lib/supabase'
+import { clampLines, LINE_LIMIT } from '../../../lib/textLimits'
 
 export default function PollCreatorModal({ channelId, userId, onClose, onSent }) {
   const [question, setQuestion] = useState('')
@@ -71,7 +72,7 @@ export default function PollCreatorModal({ channelId, userId, onClose, onSent })
           <textarea
             autoFocus
             value={question}
-            onChange={e => setQuestion(e.target.value)}
+            onChange={e => setQuestion(clampLines(e.target.value, LINE_LIMIT.FORM))}
             placeholder="¿Cuál es tu pregunta?"
             rows={2}
             maxLength={200}

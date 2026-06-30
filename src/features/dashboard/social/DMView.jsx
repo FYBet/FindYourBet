@@ -8,6 +8,7 @@ import { usePolling } from '../../../hooks/usePolling'
 import { MUTE_DURATIONS } from '../../../hooks/useMutes'
 import { useProfileNav } from '../../../contexts/ProfileNavContext'
 import { useMentionInput } from '../../../hooks/useMentionInput'
+import { clampLines, LINE_LIMIT } from '../../../lib/textLimits'
 import MentionText from '../../../components/ui/MentionText'
 import ForwardModal from './ForwardModal'
 import ForwardedChannelModal from '../canales/ForwardedChannelModal'
@@ -873,7 +874,7 @@ export default function DMView({ conversation, currentUser, onBack, onSend, onFe
             <VoiceRecordButton userId={currentUser.id} onSend={async content => { await onSend(conversation.id, content); await refreshMessages() }} />
             <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
               {mention.dropdown}
-              <textarea ref={msgInputRef} value={text} onChange={e => mention.handleChange(e.target.value, e.target.selectionStart)} onKeyDown={handleKey}
+              <textarea ref={msgInputRef} value={text} onChange={e => mention.handleChange(clampLines(e.target.value, LINE_LIMIT.MESSAGE), e.target.selectionStart)} onKeyDown={handleKey}
                 placeholder="Envía un mensaje" rows={2} maxLength={2000}
                 onPaste={e => {
                   const item = Array.from(e.clipboardData?.items || []).find(i => i.type.startsWith('image/'))
