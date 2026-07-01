@@ -162,7 +162,7 @@ export function useBets(user) {
       : form.channelIds
 
     if (!channelIds || channelIds.length === 0) {
-      alert('Selecciona al menos un canal para publicar la apuesta'); return
+      alert('Selecciona al menos un canal para publicar el pick'); return
     }
 
     const { data: ch } = await supabase

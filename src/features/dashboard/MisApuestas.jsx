@@ -205,7 +205,7 @@ function StatsPanel({ allBets }) {
   if (resolved.length === 0) return (
     <div style={{ background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '24px', textAlign: 'center' }}>
       <div style={{ fontSize: '28px', marginBottom: '8px' }}>📊</div>
-      <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Las estadísticas aparecerán cuando tengas apuestas resueltas.</div>
+      <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>Las estadísticas aparecerán cuando tengas picks resueltos.</div>
     </div>
   )
 
@@ -224,7 +224,7 @@ function StatsPanel({ allBets }) {
             ))}
           </div>
           <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '10px' }}>
-            Últimas {recentForm.length} apuestas · más antigua → más reciente
+            Últimos {recentForm.length} picks · más antiguo → más reciente
           </div>
         </StatSection>
       )}
@@ -271,7 +271,7 @@ function StatsPanel({ allBets }) {
 
       {/* Top apostes */}
       {topBets.length > 0 && (
-        <StatSection title="💎 Mejores apuestas">
+        <StatSection title="💎 Mejores picks">
           {topBets.map((b, i) => (
             <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '7px 0', borderBottom: i < topBets.length - 1 ? '0.5px solid var(--color-border)' : 'none' }}>
               <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 700, color: 'var(--color-primary)', flexShrink: 0 }}>{i + 1}</div>
@@ -300,7 +300,7 @@ function StatsPanel({ allBets }) {
                 <div style={{ height: '100%', width: `${s.winRate}%`, background: s.winRate >= 50 ? 'var(--color-primary)' : 'var(--color-error)', borderRadius: '2px', transition: 'width 0.5s' }} />
               </div>
               <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-                {s.winRate.toFixed(0)}% win · {s.total} apuesta{s.total !== 1 ? 's' : ''}
+                {s.winRate.toFixed(0)}% win · {s.total} pick{s.total !== 1 ? 's' : ''}
               </div>
             </div>
           ))}
@@ -454,17 +454,17 @@ export default function MisApuestas({ bets: allBets, loadingBets, onNewBet, onRe
                 </span>
               )}
             </button>
-            <Button size="sm" onClick={onNewBet} style={{ alignSelf: 'flex-start' }}>+ Nueva apuesta</Button>
+            <Button size="sm" onClick={onNewBet} style={{ alignSelf: 'flex-start' }}>+ Nuevo pick</Button>
           </div>
 
           {/* Cartes */}
           {loadingBets ? (
-            <div className="empty-state"><div className="empty-icon">⏳</div><div>Cargando apuestas...</div></div>
+            <div className="empty-state"><div className="empty-icon">⏳</div><div>Cargando picks...</div></div>
           ) : bets.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon">{period === 'activas' ? '✅' : '📋'}</div>
-              <div className="empty-title">{period === 'activas' ? 'Sin apuestas activas' : 'Sin apuestas en este período'}</div>
-              <div className="empty-sub">{period === 'activas' ? 'Todas tus apuestas ya han sido resueltas.' : 'No hay apuestas registradas para el período seleccionado.'}</div>
+              <div className="empty-title">{period === 'activas' ? 'Sin picks activos' : 'Sin picks en este período'}</div>
+              <div className="empty-sub">{period === 'activas' ? 'Todos tus picks ya han sido resueltos.' : 'No hay picks registrados para el período seleccionado.'}</div>
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>

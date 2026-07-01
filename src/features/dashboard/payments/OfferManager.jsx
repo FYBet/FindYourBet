@@ -121,7 +121,7 @@ export default function OfferManager({ channelId, userId }) {
           <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '12px', lineHeight: 1.5 }}>
             {stripeStatus?.connected
               ? 'Completa el proceso de verificación de Stripe para activar los pagos.'
-              : 'Necesitas conectar tu cuenta bancaria a través de Stripe para recibir pagos de los apostadores.'}
+              : 'Necesitas conectar tu cuenta bancaria a través de Stripe para recibir pagos de los usuarios.'}
           </div>
           <button onClick={handleConnectStripe} disabled={connectingStripe} style={{ background: 'var(--color-primary)', color: '#010906', border: 'none', padding: '9px 16px', borderRadius: 'var(--radius-md)', cursor: connectingStripe ? 'default' : 'pointer', fontWeight: 700, fontSize: '12px', fontFamily: 'var(--font-sans)' }}>
             {connectingStripe ? 'Redirigiendo...' : stripeStatus?.connected ? 'Completar verificación →' : 'Conectar con Stripe →'}

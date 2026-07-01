@@ -63,7 +63,7 @@ export default function RankingAmigos({ user }) {
 
       <div className="page-header">
         <h2>👥 Amigos</h2>
-        <p>Ranking de tus amigos mutuos. Mínimo {MIN_BETS} apuestas resueltas para aparecer.</p>
+        <p>Ranking de tus amigos mutuos. Mínimo {MIN_BETS} picks resueltos para aparecer.</p>
       </div>
 
       {/* Controls */}
@@ -106,7 +106,7 @@ export default function RankingAmigos({ user }) {
         <div className="empty-state">
           <div className="empty-icon">👥</div>
           <div className="empty-title">Ningún amigo en el ranking</div>
-          <div className="empty-sub">Tus amigos necesitan mínimo {MIN_BETS} apuestas resueltas para aparecer.</div>
+          <div className="empty-sub">Tus amigos necesitan mínimo {MIN_BETS} picks resueltos para aparecer.</div>
         </div>
       ) : (
         <AnimatePresence>
@@ -131,7 +131,7 @@ export default function RankingAmigos({ user }) {
                     )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
-                    <span className="tipster-user-rank" style={{ margin: 0 }}>{t.bets} apuestas resueltas</span>
+                    <span className="tipster-user-rank" style={{ margin: 0 }}>{t.bets} picks resueltos</span>
                     {t.usedSports?.map(s => (
                       <span key={s} style={{ fontSize: '10px', background: 'var(--color-bg-soft)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-full)', padding: '1px 7px', color: 'var(--color-text-muted)', fontWeight: 500 }}>
                         {SPORT_ICONS[s]} {s}

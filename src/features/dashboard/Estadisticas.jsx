@@ -100,7 +100,7 @@ function BankLineChart({ points }) {
   if (points.length < 2) return (
     <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '40px' }}>
       <div style={{ fontSize: '28px', marginBottom: '8px' }}>📈</div>
-      <div>Sin apuestas resueltas en este período</div>
+      <div>Sin picks resueltos en este período</div>
     </div>
   )
 

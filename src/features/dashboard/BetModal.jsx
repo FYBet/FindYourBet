@@ -384,7 +384,7 @@ export function BetModal({ open, onClose, form, setForm, onSubmit, user, presele
                       ) : (
                         <>
                           <div style={{ fontSize: '36px', marginBottom: '8px' }}>📷</div>
-                          <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '4px' }}>Sube la foto de tu apuesta</div>
+                          <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '4px' }}>Sube la foto de tu pick</div>
                           <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Arrastra, toca para seleccionar o pega con Ctrl+V</div>
                         </>
                       )}
@@ -433,7 +433,7 @@ export function BetModal({ open, onClose, form, setForm, onSubmit, user, presele
 
             {preselectedChannelId && (
               <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '18px', padding: '10px 12px', background: 'var(--color-primary-light)', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-primary-border)' }}>
-                📡 Esta apuesta se publicará en este canal y se añadirá a tu historial.
+                📡 Este pick se publicará en este canal y se añadirá a tu historial.
               </div>
             )}
 

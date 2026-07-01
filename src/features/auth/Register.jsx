@@ -133,7 +133,7 @@ export default function Register({ navigate, login }) {
           <motion.div className="auth-checkboxes" variants={fadeUp} custom={8}>
             <label className="auth-checkbox-label">
               <input type="checkbox" className="auth-checkbox" checked={age} onChange={e => setAge(e.target.checked)} />
-              <span>Confirmo que tengo <strong>18 años o más</strong> y que las apuestas están permitidas en mi país de residencia.</span>
+              <span>Confirmo que tengo <strong>18 años o más</strong> y que los pronósticos deportivos están permitidos en mi país de residencia.</span>
             </label>
             <label className="auth-checkbox-label">
               <input type="checkbox" className="auth-checkbox" checked={terms} onChange={e => setTerms(e.target.checked)} />

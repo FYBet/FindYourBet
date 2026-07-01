@@ -64,7 +64,7 @@ export default function Feed({ user, onNavigateToChannel }) {
 
       <div className="page-header">
         <h2>Feed</h2>
-        <p>Picks de los tipsters que sigues y descubre nuevas apuestas.</p>
+        <p>Picks de los tipsters que sigues y descubre nuevos pronósticos.</p>
       </div>
 
       <div style={{ display: 'flex', gap: '10px', background: 'var(--color-bg)', border: '0.5px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '4px', marginBottom: '20px', width: 'fit-content' }}>

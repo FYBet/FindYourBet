@@ -8,11 +8,11 @@ const FAQS = [
     items: [
       {
         q: '¿Qué es FindYourBet?',
-        a: 'FindYourBet (FYB) es una red social de apuestas deportivas. Los tipsters crean canales donde comparten sus picks y análisis en tiempo real. Los apostadores siguen a los mejores tipsters, aprenden de su metodología y mejoran sus resultados con datos reales y verificables.'
+        a: 'FindYourBet (FYB) es una red social de pronósticos deportivos. Los tipsters crean canales donde comparten sus picks y análisis en tiempo real. Los usuarios siguen a los mejores tipsters, aprenden de su metodología y mejoran sus resultados con datos reales y verificables.'
       },
       {
         q: '¿Cuál es la misión de FYB?',
-        a: 'Queremos hacer el mundo de las apuestas más transparente y meritocrático. Cada tipster tiene un historial público e inalterable de todas sus apuestas. No hay capturas manipuladas ni resultados inventados: solo datos reales. Creemos que la transparencia es la única forma de separar a los tipsters honestos de los que no lo son.'
+        a: 'Queremos hacer el mundo de los pronósticos más transparente y meritocrático. Cada tipster tiene un historial público e inalterable de todos sus picks. No hay capturas manipuladas ni resultados inventados: solo datos reales. Creemos que la transparencia es la única forma de separar a los tipsters honestos de los que no lo son.'
       },
       {
         q: '¿Es gratis usar FindYourBet?',
@@ -26,19 +26,19 @@ const FAQS = [
     items: [
       {
         q: '¿Qué es el Yield?',
-        a: 'El Yield mide la rentabilidad de un tipster en relación al total apostado. Se calcula así: (Beneficio neto ÷ Suma de stakes) × 100. Un Yield positivo ya es buena señal. Por encima del 5% es excelente. Lo más importante es que sea consistente en el tiempo, no solo en un período puntual.'
+        a: 'El Yield mide la rentabilidad de un tipster en relación al total en stake. Se calcula así: (Beneficio neto ÷ Suma de stakes) × 100. Un Yield positivo ya es buena señal. Por encima del 5% es excelente. Lo más importante es que sea consistente en el tiempo, no solo en un período puntual.'
       },
       {
         q: '¿Qué es el Bank y cómo funciona en FYB?',
-        a: 'El Bank es el capital total destinado a las apuestas. En FYB usamos una gestión basada en el 1% del bank por apuesta: si tu bank es 1.000€, cada stake es 10€. A medida que el bank crece o decrece, el stake se ajusta proporcionalmente. Este sistema protege tu capital ante malas rachas y maximiza el crecimiento en buenas épocas.'
+        a: 'El Bank es el capital total destinado a los pronósticos. En FYB usamos una gestión basada en el 1% del bank por pick: si tu bank es 1.000€, cada stake es 10€. A medida que el bank crece o decrece, el stake se ajusta proporcionalmente. Este sistema protege tu capital ante malas rachas y maximiza el crecimiento en buenas épocas.'
       },
       {
         q: '¿Qué es la cuota media y por qué importa?',
-        a: 'La cuota media es el promedio de todas las cuotas apostadas. Cuotas más altas implican mayor varianza — es decir, más altibajos en el bankroll aunque el Yield sea positivo. Un tipster con cuota media de 1.60 será más estable que uno con 3.50, aunque ambos tengan el mismo Yield.'
+        a: 'La cuota media es el promedio de todas las cuotas de los picks. Cuotas más altas implican mayor varianza — es decir, más altibajos en el bankroll aunque el Yield sea positivo. Un tipster con cuota media de 1.60 será más estable que uno con 3.50, aunque ambos tengan el mismo Yield.'
       },
       {
         q: '¿Cómo funciona el Ranking?',
-        a: 'El Ranking clasifica a los tipsters según su Yield de los últimos 3 meses. Para aparecer, un tipster necesita un mínimo de apuestas registradas en ese período. Cuantas más apuestas con Yield positivo sostenido, más arriba en la lista. El objetivo es premiar la consistencia, no los golpes de suerte.'
+        a: 'El Ranking clasifica a los tipsters según su Yield de los últimos 3 meses. Para aparecer, un tipster necesita un mínimo de picks registrados en ese período. Cuantos más picks con Yield positivo sostenido, más arriba en la lista. El objetivo es premiar la consistencia, no los golpes de suerte.'
       },
     ]
   },
@@ -48,11 +48,11 @@ const FAQS = [
     items: [
       {
         q: '¿Cómo evitar ser estafado por un tipster?',
-        a: 'Aplica estas reglas de oro: (1) Desconfía de quien promete resultados garantizados — nadie gana siempre. (2) Comprueba que el historial es amplio: un mes de buenos picks no dice nada estadísticamente. (3) Mira el Yield a largo plazo, no solo el último período. (4) En FYB, las apuestas se registran con fecha y hora antes del partido, lo que garantiza que no se inventan a posteriori.'
+        a: 'Aplica estas reglas de oro: (1) Desconfía de quien promete resultados garantizados — nadie gana siempre. (2) Comprueba que el historial es amplio: un mes de buenos picks no dice nada estadísticamente. (3) Mira el Yield a largo plazo, no solo el último período. (4) En FYB, los picks se registran con fecha y hora antes del partido, lo que garantiza que no se inventan a posteriori.'
       },
       {
         q: '¿Qué garantiza FYB en cuanto a transparencia?',
-        a: 'En FYB, cada apuesta queda registrada con su timestamp exacto. Esto impide que los tipsters publiquen picks "a posteriori" — es decir, que anuncien apuestas ganadas que en realidad no registraron antes del partido. El historial es público, verificable y no se puede editar una vez resuelto.'
+        a: 'En FYB, cada pick queda registrado con su timestamp exacto. Esto impide que los tipsters publiquen picks "a posteriori" — es decir, que anuncien picks ganados que en realidad no registraron antes del partido. El historial es público, verificable y no se puede editar una vez resuelto.'
       },
     ]
   },
@@ -62,11 +62,11 @@ const FAQS = [
     items: [
       {
         q: '¿Cómo encontrar al mejor tipster para mí?',
-        a: 'Sigue estos criterios: (1) Yield positivo sostenido durante al menos 3 meses. (2) Número de apuestas alto — a más apuestas, más significativo es el Yield estadísticamente. (3) Cuota media acorde a tu tolerancia al riesgo. (4) Análisis detallados en sus picks: un buen tipster razona, no solo anuncia. (5) Apuestas en deportes y mercados que tú también entiendes.'
+        a: 'Sigue estos criterios: (1) Yield positivo sostenido durante al menos 3 meses. (2) Número de picks alto — a más picks, más significativo es el Yield estadísticamente. (3) Cuota media acorde a tu tolerancia al riesgo. (4) Análisis detallados en sus picks: un buen tipster razona, no solo anuncia. (5) Picks en deportes y mercados que tú también entiendes.'
       },
       {
-        q: '¿Cuántas apuestas necesita un tipster para ser fiable?',
-        a: 'Como mínimo, 50–100 apuestas resueltas son necesarias para que el Yield empiece a ser estadísticamente relevante. Con menos de 30, los resultados pueden ser puro azar. Cuanto mayor sea el histórico, más confianza puedes depositar en el rendimiento mostrado.'
+        q: '¿Cuántos picks necesita un tipster para ser fiable?',
+        a: 'Como mínimo, 50–100 picks resueltos son necesarios para que el Yield empiece a ser estadísticamente relevante. Con menos de 30, los resultados pueden ser puro azar. Cuanto mayor sea el histórico, más confianza puedes depositar en el rendimiento mostrado.'
       },
       {
         q: '¿Debo seguir a un solo tipster o a varios?',

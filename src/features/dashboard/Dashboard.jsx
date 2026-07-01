@@ -540,7 +540,7 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
                 <section>
                   <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>🎯 Qué es y qué buscamos</div>
                   <p style={{ fontSize: '14px', color: 'var(--color-text)', lineHeight: 1.65, margin: 0 }}>
-                    FindYourBet es una <strong>red social de apuestas deportivas</strong>, no un simple tracker. Nuestro objetivo es que las apuestas dejen de ser algo opaco y solitario: aquí registras tus picks, ves tu rendimiento real con datos verificables y descubres a los tipsters que de verdad ganan a largo plazo.
+                    FindYourBet es una <strong>red social de pronósticos deportivos</strong>, no un simple tracker. Nuestro objetivo es que los pronósticos dejen de ser algo opaco y solitario: aquí registras tus picks, ves tu rendimiento real con datos verificables y descubres a los tipsters que de verdad ganan a largo plazo.
                   </p>
                   <p style={{ fontSize: '14px', color: 'var(--color-text)', lineHeight: 1.65, margin: '10px 0 0' }}>
                     Queremos construir una comunidad <strong>transparente y honesta</strong>, donde el rendimiento se demuestre con números y no con promesas. Apuesta siempre con responsabilidad.
@@ -550,7 +550,7 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
                 <section>
                   <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>🧭 Cómo usarla</div>
                   <ul style={{ fontSize: '14px', color: 'var(--color-text)', lineHeight: 1.6, margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <li><strong>Registra tus apuestas</strong> en el Historial para que tus estadísticas (yield, acierto, racha) sean reales.</li>
+                    <li><strong>Registra tus picks</strong> en el Historial para que tus estadísticas (yield, acierto, racha) sean reales.</li>
                     <li><strong>Sigue a tipsters</strong> y entra en sus canales para ver sus picks y análisis en tiempo real.</li>
                     <li><strong>Participa</strong>: comenta, da like, comparte picks por DM y compite en los rankings.</li>
                     <li>Si eres tipster, <strong>crea tu canal</strong> y comparte tu metodología con la comunidad.</li>
@@ -560,7 +560,7 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
                 <section>
                   <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>✅ Qué incluye ahora</div>
                   <ul style={{ fontSize: '14px', color: 'var(--color-text)', lineHeight: 1.6, margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <li>Registro de apuestas con estadísticas e historial completo</li>
+                    <li>Registro de picks con estadísticas e historial completo</li>
                     <li>Canales públicos con chat, picks y encuestas</li>
                     <li>Feed de picks (Siguiendo + Para ti)</li>
                     <li>Descubrimiento de tipsters y verificación</li>
@@ -683,7 +683,7 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
           <div className="sidebar-section">
             <button className="sidebar-item" onClick={() => setShowModal(true)}>
               <span className="sidebar-icon">✏️</span>
-              Nueva Apuesta
+              Nuevo pick
             </button>
           </div>
           {SIDEBAR.map(section => (
