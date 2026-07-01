@@ -12,9 +12,14 @@ export default function BlockUserModal({ username, onConfirm, onReport, onClose 
   const handleBlock = async () => {
     if (working) return
     setWorking(true)
-    await onConfirm()
-    setWorking(false)
-    setBlocked(true)
+    try {
+      await onConfirm()
+      setBlocked(true)
+    } catch {
+      // silent — el pare ja gestiona l'error
+    } finally {
+      setWorking(false)
+    }
   }
 
   return (
