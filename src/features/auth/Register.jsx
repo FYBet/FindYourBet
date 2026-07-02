@@ -139,9 +139,9 @@ export default function Register({ navigate, login }) {
               <input type="checkbox" className="auth-checkbox" checked={terms} onChange={e => setTerms(e.target.checked)} />
               <span>
                 He leído y acepto los{' '}
-                <a href="#" style={{ color: 'var(--color-primary)', fontWeight: 500 }}>Términos y Condiciones</a>
+                <a href="/legal/terminos" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)', fontWeight: 500 }}>Términos y Condiciones</a>
                 {' '}y la{' '}
-                <a href="#" style={{ color: 'var(--color-primary)', fontWeight: 500 }}>Política de Privacidad</a>.
+                <a href="/legal/privacidad" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)', fontWeight: 500 }}>Política de Privacidad</a>.
               </span>
             </label>
           </motion.div>

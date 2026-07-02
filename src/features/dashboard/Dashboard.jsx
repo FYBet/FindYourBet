@@ -670,8 +670,8 @@ export default function Dashboard({ user, logout, onRefreshUser }) {
             <Avatar url={navAvatar} name={user?.username || 'U'} size={28} bg="var(--color-primary)" fg="var(--color-primary-light)" />
             <span><Username username={user?.username || 'Usuario'} isVerified={user?.is_verified} size="sm" /></span>
           </div>
-          <motion.button className="dash-tab" whileTap={{ scale: 0.98 }} onClick={() => { if (window.confirm('¿Cerrar sesión?')) logout() }}>
-            Cerrar sesión
+          <motion.button className="dash-tab" whileTap={{ scale: 0.98 }} onClick={() => { if (window.confirm('¿Cerrar Sesión?')) logout() }}>
+            Cerrar Sesión
           </motion.button>
         </div>
       </motion.nav>

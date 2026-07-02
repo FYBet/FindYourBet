@@ -322,6 +322,8 @@ function NavLinks() {
 }
 
 export default function Landing({ navigate, user }) {
+  const rrNavigate = useNavigate()
+  const goLegal = (slug) => rrNavigate(`/legal/${slug}`)
   return (
     <div className="landing">
 
@@ -510,17 +512,18 @@ export default function Landing({ navigate, user }) {
           </div>
           <div className="footer-col">
             <h4>Legal</h4>
-            <a href="#">Términos</a>
-            <a href="#">Privacidad</a>
-            <a href="#">Cookies</a>
-            <a href="#">Juego responsable</a>
+            <a onClick={() => goLegal('aviso-legal')} style={{ cursor: 'pointer' }}>Aviso legal</a>
+            <a onClick={() => goLegal('terminos')} style={{ cursor: 'pointer' }}>Términos</a>
+            <a onClick={() => goLegal('privacidad')} style={{ cursor: 'pointer' }}>Privacidad</a>
+            <a onClick={() => goLegal('cookies')} style={{ cursor: 'pointer' }}>Cookies</a>
+            <a onClick={() => goLegal('juego-responsable')} style={{ cursor: 'pointer' }}>Juego responsable</a>
           </div>
         </div>
 
         <div className="footer-wordmark">FindYour<em>Bet</em></div>
 
         <div className="footer-bottom">
-          <span>© 2025 FindYourBet · Apuesta con responsabilidad</span>
+          <span>© {new Date().getFullYear()} FindYourBet · Juega con responsabilidad</span>
           <span className="footer-bottom-tag">+18</span>
         </div>
       </footer>

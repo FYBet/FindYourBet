@@ -9,6 +9,8 @@ import CanalPage from './features/dashboard/canales/CanalPage'
 import OfferPage from './features/dashboard/payments/OfferPage'
 import PaymentSuccess from './features/dashboard/payments/PaymentSuccess'
 import AccesoPage from './features/dashboard/payments/AccesoPage'
+import LegalPage from './features/legal/LegalPage'
+import CookieConsent from './components/CookieConsent'
 import { supabase } from './lib/supabase'
 
 const SECRET_CODE = 'FYBM67'
@@ -248,10 +250,15 @@ function AppRoutes() {
     </div>
   )
 
-  const isPublicRoute = window.location.pathname.startsWith('/oferta/') || window.location.pathname.startsWith('/payment/') || window.location.pathname.startsWith('/acceso/')
+  // Rutes públiques (excloses del gate beta): compres, accessos post-pagament i
+  // pàgines legals. Les legals han de ser accessibles sempre (obligació LSSI/RGPD i
+  // s'enllacen des del registre), fins i tot sense el codi d'accés beta.
+  const path = window.location.pathname
+  const isPublicRoute = path.startsWith('/oferta/') || path.startsWith('/payment/') || path.startsWith('/acceso/') || path.startsWith('/legal')
   if (!unlocked && !isPublicRoute) return <GateScreen onUnlock={() => setUnlocked(true)} />
 
   return (
+    <>
     <Routes>
       <Route path="/" element={<Landing navigate={(page) => navigate(`/${page === 'landing' ? '' : page}`)} user={user} />} />
       <Route path="/login" element={<Login navigate={(page) => navigate(`/${page === 'landing' ? '' : page}`)} login={login} />} />
@@ -262,8 +269,13 @@ function AppRoutes() {
       <Route path="/oferta/:id" element={<OfferPage user={user} />} />
       <Route path="/payment/success" element={<PaymentSuccess user={user} />} />
       <Route path="/acceso/:token" element={<AccesoPage user={user} />} />
+      <Route path="/legal" element={<Navigate to="/legal/aviso-legal" replace />} />
+      <Route path="/legal/:doc" element={<LegalPage />} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
+    {/* Banner de cookies — no cal a les pàgines legals (ja informen elles mateixes) */}
+    {!path.startsWith('/legal') && <CookieConsent />}
+    </>
   )
 }
 

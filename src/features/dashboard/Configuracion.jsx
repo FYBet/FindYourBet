@@ -159,15 +159,39 @@ export default function Configuracion({ user, logout }) {
         </ActionBtn>
       </Card>
 
+      {/* LEGAL I PRIVACITAT */}
+      <SectionTitle>Legal y privacidad</SectionTitle>
+
+      <Card>
+        <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '14px' }}>
+          Consulta los documentos legales de FindYourBet.
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          {[
+            { slug: 'aviso-legal', label: 'Aviso legal' },
+            { slug: 'terminos', label: 'Términos y Condiciones' },
+            { slug: 'privacidad', label: 'Política de Privacidad' },
+            { slug: 'cookies', label: 'Política de Cookies' },
+            { slug: 'juego-responsable', label: 'Juego responsable' },
+          ].map(l => (
+            <a key={l.slug} href={`/legal/${l.slug}`} target="_blank" rel="noopener noreferrer"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 4px', fontSize: '14px', color: 'var(--color-text)', textDecoration: 'none', borderBottom: '0.5px solid var(--color-border)' }}>
+              <span>{l.label}</span>
+              <span style={{ color: 'var(--color-text-muted)', fontSize: '13px' }}>↗</span>
+            </a>
+          ))}
+        </div>
+      </Card>
+
       {/* SESSIÓ */}
       <SectionTitle>Sesión</SectionTitle>
 
       <Card>
-        <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '4px' }}>Cerrar sesión</div>
+        <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '4px' }}>Cerrar Sesión</div>
         <div style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '14px' }}>Saldrás de tu cuenta en este dispositivo.</div>
         <motion.button whileTap={{ scale: 0.97 }} onClick={logout}
           style={{ padding: '10px 20px', borderRadius: 'var(--radius-md)', border: '0.5px solid var(--color-border)', background: 'var(--color-bg-soft)', color: 'var(--color-text)', cursor: 'pointer', fontSize: '13px', fontWeight: 600, fontFamily: 'var(--font-sans)' }}>
-          Cerrar sesión
+          Cerrar Sesión
         </motion.button>
       </Card>
 
