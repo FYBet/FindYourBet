@@ -111,13 +111,30 @@ export function useSignUp({ onLogin }) {
         10000, 'signUp'
       )
       if (authError) {
-        setError(authError.message || 'Error al crear la cuenta')
+        // Cas 1: Supabase torna error explícit de correu ja existent.
+        const msg = (authError.message || '').toLowerCase()
+        if (msg.includes('already registered') || msg.includes('already exists') || msg.includes('user already')) {
+          setError('Este correo ya está registrado. Inicia sesión o recupera tu contraseña.')
+        } else {
+          setError(authError.message || 'Error al crear la cuenta')
+        }
         setLoading(false)
         return
       }
 
       if (!data.user?.id) {
         setError('No se pudo crear la cuenta. Inténtalo de nuevo.')
+        setLoading(false)
+        return
+      }
+
+      // Cas 2: per no revelar quins correus existeixen, Supabase NO dona error quan el
+      // correu ja està registrat (Google o email): retorna un "usuari" amb `identities`
+      // buides. Ho detectem i mostrem el missatge clar en comptes de fer veure que
+      // s'ha creat el compte (que enviaria l'usuari a una pantalla de "revisa el correo"
+      // sense que arribi cap email).
+      if (Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        setError('Este correo ya está registrado. Inicia sesión o recupera tu contraseña.')
         setLoading(false)
         return
       }
