@@ -87,12 +87,16 @@ export function useSignUp({ onLogin }) {
     }
 
     try {
-      const { data: existingUser, error: checkErr } = await withTimeout(
-        supabase.from('profiles').select('id').ilike('username', desiredUsername).maybeSingle(),
+      // Comprovació d'username via RPC SECURITY DEFINER: funciona encara que l'usuari
+      // NO estigui loguejat (durant el registre ets `anon`). Una lectura directa de
+      // `profiles` no veuria els usernames existents si l'RLS no ho permet als `anon`,
+      // i deixaria passar duplicats → xoc al trigger → onboarding no desitjat.
+      const { data: available, error: checkErr } = await withTimeout(
+        supabase.rpc('username_available', { check_username: desiredUsername }),
         8000, 'username-check'
       )
       if (checkErr) throw checkErr
-      if (existingUser) {
+      if (available === false) {
         setError('Este username ya está en uso. Elige otro.')
         setLoading(false)
         return
