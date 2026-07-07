@@ -28,7 +28,7 @@ export default function Login({ navigate, login }) {
   const {
     email, setEmail, pass, setPass, showPass, setShowPass,
     error, loading, resetSent, resetMode,
-    handleLogin, handleResetPassword, skipDev,
+    handleLogin, handleResetPassword,
     enterReset, exitReset, exitResetSent,
     isLocked, secondsLeft,
   } = useSignIn({ onLogin: login })
@@ -38,7 +38,6 @@ export default function Login({ navigate, login }) {
       <motion.nav className="auth-nav"
         initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
         <div className="auth-logo" onClick={() => navigate('landing')}>FindYour<span>Bet</span></div>
-        <Button variant="outline" size="sm" onClick={skipDev}><AppIcon name="zap" size={13} style={{ marginRight: 5, verticalAlign: 'middle' }} />Saltar (dev)</Button>
       </motion.nav>
 
       <div className="auth-wrapper">

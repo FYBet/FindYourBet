@@ -28,9 +28,12 @@ export default function CanalPage() {
       try {
         // Els invite_code es desen en lowercase; .ilike fa match case-insensitive
         // perquè funcioni tant amb codis antics (UPPER) com nous (lower).
+        // invite_code és alfanumèric: eliminem qualsevol altre caràcter perquè un comodí
+        // d'ILIKE (`%`, `_`) a la URL no permeti enumerar codis de canals privats.
+        const safeCode = (code || '').replace(/[^a-zA-Z0-9]/g, '')
         const { data } = await supabase
           .from('channels').select('*')
-          .ilike('invite_code', code).maybeSingle()
+          .ilike('invite_code', safeCode).maybeSingle()
         if (!data) { setNotFound(true); return }
         setChannel(data)
       } catch {

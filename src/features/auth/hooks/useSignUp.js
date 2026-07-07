@@ -38,22 +38,22 @@ export function useSignUp({ onLogin }) {
     const desiredUsername = form.user.trim().toLowerCase()
     const poll = async () => {
       if (cancelled) return
+      // No sondegem si la pestanya no és visible: estalvia crides d'auth (evita 429 de
+      // Supabase) quan l'usuari té la pantalla de "revisa el correu" en segon pla.
+      if (document.visibilityState !== 'visible') return
       attempts++
       const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass })
       if (cancelled) return
       if (!error && data?.session) {
         clearInterval(iv)
         onLogin({ id: data.user.id, name: form.name.trim(), username: desiredUsername, email, avatar_url: null, needsOnboarding: false })
-      } else if (attempts >= 60) {
-        clearInterval(iv) // ~5 min sense confirmar: parem de sondejar (l'usuari pot entrar manualment)
+      } else if (attempts >= 40) {
+        clearInterval(iv) // ~4,5 min de sondeig actiu: parem (l'usuari pot entrar manualment)
       }
     }
-    const iv = setInterval(poll, 5000)
+    const iv = setInterval(poll, 7000)
     return () => { cancelled = true; clearInterval(iv) }
   }, [registered]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const skipDev = () =>
-    onLogin({ name: 'Dev', surname: 'Test', user: 'devtest', email: 'dev@test.com', id: 'dev-skip' })
 
   const handleRegister = async () => {
     const { name, surname, birthdate, user: username, email, pass, passConfirm, nationality } = form
@@ -154,6 +154,6 @@ export function useSignUp({ onLogin }) {
   return {
     form, update, terms, setTerms, age, setAge,
     showPass, setShowPass, showPassConfirm, setShowPassConfirm,
-    error, loading, registered, handleRegister, skipDev
+    error, loading, registered, handleRegister
   }
 }

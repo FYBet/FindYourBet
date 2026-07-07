@@ -133,13 +133,10 @@ export function useSignIn({ onLogin }) {
     setResetSent(true)
   }
 
-  const skipDev = () =>
-    onLogin({ name: 'Dev', surname: 'Test', user: 'devtest', email: 'dev@test.com', id: 'dev-skip' })
-
   return {
     email, setEmail, pass, setPass, showPass, setShowPass,
     error, loading, resetSent, resetMode,
-    handleLogin, handleResetPassword, skipDev,
+    handleLogin, handleResetPassword,
     enterReset: () => { setResetMode(true); setError('') },
     exitReset: () => { setResetMode(false); setError('') },
     exitResetSent: () => { setResetMode(false); setResetSent(false); setError('') },

@@ -5,8 +5,19 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 
 // Valida que un token de compra pertany a l'usuari que el reclama.
 // Retorna la info del canal per mostrar la preview.
+// Orígens permesos: només els dominis reals de l'app (sense comodí obert).
+const ALLOWED_ORIGINS = [
+  'https://www.fyourbet.com',
+  'https://fyourbet.com',
+  'http://localhost:5173',
+]
+
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*')
+  const origin = req.headers.origin
+  if (ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin)
+    res.setHeader('Vary', 'Origin')
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
   if (req.method === 'OPTIONS') return res.status(200).end()

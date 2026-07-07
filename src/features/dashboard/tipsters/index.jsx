@@ -9,6 +9,7 @@ import SharedAvatar from '../../../components/ui/Avatar'
 import { THEME_STYLES, THEME_LABELS } from '../../../lib/cardThemes'
 import { clampBio, MAX_BIO_LEN } from '../../../lib/bio'
 import { formatMemberSince } from '../../../lib/dates'
+import { sanitizeSearchTerm } from '../../../lib/searchSanitize'
 
 const SORT_OPTIONS = [
   { id: 'yield',   label: 'Rendimiento' },
@@ -669,9 +670,12 @@ export default function Tipsters({ user, onNavigateToChannel, onStartDM, onRefre
 
   const runSearch = async (q) => {
     setSearching(true)
+    const term = sanitizeSearchTerm(q)
+    // Terme buit després de netejar → no fem `ilike.%%` (matejaria tots els perfils).
+    if (!term) { setSearchResults([]); setSearching(false); return }
     const { data: profiles } = await supabase
       .from('profiles').select('id, username, name, avatar_url, bio, is_verified, card_theme')
-      .or(`username.ilike.%${q}%,name.ilike.%${q}%`)
+      .or(`username.ilike.%${term}%,name.ilike.%${term}%`)
       .neq('id', user?.id || '').limit(20)
 
     if (!profiles?.length) { setSearchResults([]); setSearching(false); return }

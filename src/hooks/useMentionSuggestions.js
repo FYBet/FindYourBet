@@ -20,7 +20,7 @@ export function useMentionSuggestions(currentUser) {
         if (ids.length) {
           const { data } = await supabase
             .from('profiles').select('id, username, avatar_url, is_verified').in('id', ids).limit(200)
-          profiles = (data || [])
+          profiles = data || []
         }
         if (cancelled) return
         const self = { id: currentUser.id, username: currentUser.username, avatar_url: currentUser.avatar_url, is_verified: currentUser.is_verified, _self: true }

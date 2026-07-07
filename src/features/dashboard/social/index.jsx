@@ -14,6 +14,7 @@ import ReportUserModal from './ReportUserModal'
 import BlockUserModal from './BlockUserModal'
 import Username from '../../../components/ui/Username'
 import { formatMsgPreview } from '../../../lib/formatMsgPreview'
+import { sanitizeSearchTerm } from '../../../lib/searchSanitize'
 import '../dashboard.css'
 
 function miniTimeAgo(ts) {
@@ -104,8 +105,12 @@ export default function Social({ user, initialDMUserId, onNavigateToChannel, onA
     setSearchQuery(q)
     if (!q.trim()) { setSearchResults([]); return }
     setSearching(true)
+    const term = sanitizeSearchTerm(q)
+    // Si la cerca queda buida després de netejar (p.ex. només signes de puntuació),
+    // no llancem `ilike.%%` (que faria match amb TOTS els perfils).
+    if (!term) { setSearchResults([]); setSearching(false); return }
     const [{ data }, { data: myBlocks }, { data: blockedByOthers }] = await Promise.all([
-      supabase.from('profiles').select('id, username, name, is_verified').or(`username.ilike.%${q}%,name.ilike.%${q}%`).neq('id', user.id).limit(20),
+      supabase.from('profiles').select('id, username, name, is_verified').or(`username.ilike.%${term}%,name.ilike.%${term}%`).neq('id', user.id).limit(20),
       supabase.from('blocks').select('blocked_id').eq('blocker_id', user.id),
       supabase.from('blocks').select('blocker_id').eq('blocked_id', user.id),
     ])

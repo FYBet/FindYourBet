@@ -25,7 +25,7 @@ export const COMPANY = {
   domain: 'fyourbet.com',
 }
 
-export const LAST_UPDATED = '2 de julio de 2026'
+export const LAST_UPDATED = '7 de julio de 2026'
 
 // Ordre en què es mostren al footer / índexs.
 export const LEGAL_ORDER = ['aviso-legal', 'terminos', 'privacidad', 'cookies', 'juego-responsable']
@@ -118,6 +118,12 @@ export const LEGAL_DOCS = {
       { p: `Los importes correspondientes serán gestionados conforme a las condiciones establecidas por dicho proveedor de servicios de pago.` },
       { p: `FYB podrá retener una comisión de servicio sobre las transacciones realizadas en la Plataforma. Con carácter general, dicha comisión se situará entre el 15% y el 20%, pudiendo variar según el tipo de cuenta, servicio o plan contratado.` },
       { p: `Los precios aplicables se mostrarán de forma previa a la compra correspondiente. Al completar una transacción, el usuario acepta expresamente el cargo asociado al servicio contratado.` },
+      { h3: 'Canales VIP y suscripciones' },
+      { p: `Determinados tipsters ofrecen canales VIP o de pago mediante suscripción (semanal o mensual) o mediante un acceso puntual a un contenido concreto. Antes de completar la compra se mostrarán de forma clara el precio, la modalidad y la duración del acceso contratado.` },
+      { p: `Renovaciones: las suscripciones a canales VIP no se renuevan de forma automática. El acceso tiene la duración contratada y, una vez finalizado, el usuario deberá renovarlo manualmente si desea continuar. FYB no realiza cargos recurrentes automáticos sin una nueva acción de compra por parte del usuario.` },
+      { p: `Cancelación: al no existir renovación automática, el usuario no necesita cancelar ninguna suscripción para evitar cargos futuros; el acceso expira por sí mismo al finalizar el periodo contratado.` },
+      { p: `Responsabilidad del tipster: el tipster titular del canal es el único responsable del contenido, la frecuencia, la calidad y las condiciones particulares que anuncie para su canal. FYB actúa exclusivamente como intermediario tecnológico y de pago, y no garantiza el contenido, la actividad ni los resultados de ningún canal.` },
+      { p: `Ausencia de garantía de resultados: la contratación de un canal VIP o de cualquier contenido de pago no garantiza beneficios ni resultados concretos. Los pronósticos son opiniones y los resultados pasados no aseguran rendimientos futuros (véanse los apartados 6 y 7).` },
 
       { h3: '6. Política de reembolsos' },
       { p: `Debido a la naturaleza digital del contenido ofrecido y al acceso inmediato al mismo, y de conformidad con el artículo 103 del Real Decreto Legislativo 1/2007, por el que se aprueba la Ley General para la Defensa de los Consumidores y Usuarios, el usuario acepta que el derecho de desistimiento no resultará aplicable una vez iniciado el acceso al contenido digital adquirido.` },
@@ -201,9 +207,10 @@ export const LEGAL_DOCS = {
       { h3: '4. Destinatarios y encargados del tratamiento' },
       { p: `Para prestar el servicio, compartimos datos con proveedores que actúan como encargados del tratamiento, bajo contrato y garantías adecuadas:` },
       { ul: [
-        `Supabase — base de datos y autenticación.`,
-        `Stripe — procesamiento de pagos.`,
-        `Brevo (Sendinblue) — envío de correos transaccionales.`,
+        `Supabase — base de datos, autenticación y envío de correos transaccionales de la cuenta (confirmación de email y recuperación de contraseña).`,
+        `Google — proveedor de inicio de sesión (OAuth) cuando el usuario elige registrarse o acceder con su cuenta de Google.`,
+        `Stripe — procesamiento de pagos de suscripciones y accesos premium.`,
+        `Resend — envío de correos transaccionales relacionados con las compras.`,
         `Vercel — alojamiento e infraestructura web.`,
       ] },
       { p: `No vendemos tus datos personales a terceros.` },
@@ -262,6 +269,11 @@ export const LEGAL_DOCS = {
         `Garantizar la integridad de las transacciones.`,
       ] },
       { p: `Estas cookies son gestionadas directamente por Stripe y se encuentran sujetas a sus propias políticas de privacidad y cookies.` },
+      { h3: 'Google (inicio de sesión con Google)' },
+      { p: `Si el usuario elige registrarse o iniciar sesión mediante Google, Google puede establecer cookies propias durante el proceso de autenticación con la finalidad de verificar la identidad del usuario, mantener la sesión durante el proceso de autorización y prevenir accesos fraudulentos.` },
+      { p: `Estas cookies son gestionadas directamente por Google y están sujetas a sus propias políticas de privacidad y cookies. FYB no controla ni accede a dichas cookies.` },
+      { h3: 'Supabase (autenticación)' },
+      { p: `La autenticación y el mantenimiento de la sesión se gestionan mediante tecnologías de almacenamiento de Supabase (proveedor de base de datos y autenticación), necesarias para identificar de forma segura al usuario que ha iniciado sesión.` },
 
       { h3: '4. Qué no hacemos' },
       { p: `Con el objetivo de ofrecer una experiencia transparente y respetuosa con la privacidad, actualmente FindYourBet:` },
